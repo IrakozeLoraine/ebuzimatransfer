@@ -7,14 +7,17 @@ from app.core.config import settings
 
 ph = PasswordHasher()
 
+
 def hash_password(plain: str) -> str:
     return ph.hash(plain)
+
 
 def verify_password(plain: str, hashed: str) -> bool:
     try:
         return ph.verify(hashed, plain)
     except (VerifyMismatchError, VerificationError, InvalidHashError):
         return False
+
 
 def _create_token(data: Dict[str, Any], expires_delta: timedelta) -> str:
     payload = data.copy()
