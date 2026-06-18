@@ -1,0 +1,51 @@
+# Version control
+.git
+.gitignore
+.hg
+.svn
+
+# Node / JS
+node_modules
+npm-debug.log*
+yarn-error.log*
+pnpm-lock.yaml
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.venv
+env
+venv
+
+# Build artifacts
+dist
+build
+out
+coverage
+.cache
+*.log
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+.idea
+.vscode
+
+# Local environment / secrets
+.env
+.env.*
+*.local
+*.secret
+*.key
+*.pem
+*.crt
+*.p12
+
+# Docker
+Dockerfile*
+.dockerignore
