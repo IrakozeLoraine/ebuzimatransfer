@@ -1,12 +1,4 @@
 #!/usr/bin/env bash
-#
-# deploy.sh — build and (re)start the ebuzimatransfer stack while keeping
-# disk usage stable on the small (8.7GB) server.
-#
-# Use this instead of `docker compose up --build` directly. It prunes
-# dangling images before building and cleans the build cache afterwards so
-# old layers and unbounded build cache don't fill the disk.
-#
 set -euo pipefail
 
 cd "$(dirname "$0")"
