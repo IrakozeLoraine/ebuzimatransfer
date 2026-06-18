@@ -232,7 +232,7 @@ export const LoginPage = () => {
 
               {loginMutation.error && (
                 <Alert variant="destructive" className="mb-5">
-                  <AlertDescription>Incorrect password. Please try again.</AlertDescription>
+                  <AlertDescription>Incorrect credentials!</AlertDescription>
                 </Alert>
               )}
 

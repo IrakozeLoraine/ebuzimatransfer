@@ -1,6 +1,10 @@
-from pydantic_settings import BaseSettings
+from typing import List
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
     DATABASE_URL: str
     SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
@@ -9,6 +13,8 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: str = "http://localhost:5173"
     ENVIRONMENT: str = "development"
 
-    model_config = {"env_file": ".env"}
+    @property
+    def origins(self) -> List[str]:
+        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",")]
 
 settings = Settings()
