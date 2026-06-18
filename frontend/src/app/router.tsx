@@ -1,12 +1,24 @@
-import { createBrowserRouter } from "react-router-dom";
+/* eslint-disable react-refresh/only-export-components */
+import { lazy, Suspense } from "react";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
-import { LoginPage } from "@/pages/login/LoginPage";
-import { DashboardPage } from "@/pages/dashboard/DashboardPage";
-import { Navigate } from "react-router-dom";
+
+const LoginPage = lazy(() =>
+  import("@/pages/login/LoginPage").then((m) => ({ default: m.LoginPage }))
+);
+const DashboardPage = lazy(() =>
+  import("@/pages/dashboard/DashboardPage").then((m) => ({
+    default: m.DashboardPage,
+  }))
+);
+
+const withSuspense = (element: React.ReactNode) => (
+  <Suspense fallback={null}>{element}</Suspense>
+);
 
 export const router = createBrowserRouter([
-  { path: "/login", element: <LoginPage /> },
+  { path: "/login", element: withSuspense(<LoginPage />) },
   {
     element: <ProtectedRoute />,
     children: [
@@ -14,7 +26,7 @@ export const router = createBrowserRouter([
         element: <AppLayout />,
         children: [
           { index: true, element: <Navigate to="/dashboard" replace /> },
-          { path: "/dashboard", element: <DashboardPage /> },
+          { path: "/dashboard", element: withSuspense(<DashboardPage />) },
         ],
       },
     ],

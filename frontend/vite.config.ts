@@ -10,6 +10,22 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: (id: string) => {
+          if (!id.includes("node_modules")) return;
+          if (/[\\/](react|react-dom|react-router|react-router-dom)[\\/]/.test(id))
+            return "react-vendor";
+          if (id.includes("@tanstack")) return "query-vendor";
+          if (id.includes("@radix-ui")) return "radix-vendor";
+          if (/[\\/](react-hook-form|@hookform|zod)[\\/]/.test(id))
+            return "form-vendor";
+          return "vendor";
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {
