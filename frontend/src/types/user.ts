@@ -15,7 +15,7 @@ export interface User {
 }
 
 export interface CreateUserPayload {
-  email: string;
+  email?: string;
   medical_id: string;
   first_name: string;
   last_name: string;
@@ -28,6 +28,7 @@ export interface UpdateUserPayload {
   first_name?: string;
   last_name?: string;
   phone?: string;
+  email?: string;
   roles?: string[];
 }
 

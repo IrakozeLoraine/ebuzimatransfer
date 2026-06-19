@@ -16,9 +16,10 @@ class UserService:
         self.session = session
 
     async def create_user(self, data: UserCreate) -> User:
-        existing = await self.repo.get_by_email(data.email)
-        if existing:
-            raise ConflictError("Email already registered", "EMAIL_EXISTS")
+        if data.email:
+            existing = await self.repo.get_by_email(data.email)
+            if existing:
+                raise ConflictError("Email already registered", "EMAIL_EXISTS")
 
         existing_mid = await self.repo.get_by_medical_id(data.medical_id)
         if existing_mid:
@@ -81,12 +82,20 @@ class UserService:
 
     async def update_user(self, user_id: uuid.UUID, data: UserUpdate) -> User:
         user = await self.get_user(user_id)
+        fields_set = data.model_fields_set
+        if "email" in fields_set:
+            if data.email and data.email != user.email:
+                existing = await self.repo.get_by_email(data.email)
+                if existing and existing.id != user_id:
+                    raise ConflictError("Email already registered", "EMAIL_EXISTS")
+            user.email = data.email
+        if "phone" in fields_set:
+            user.phone = data.phone
+        # Required fields are only overwritten when a value is actually provided.
         if data.first_name is not None:
             user.first_name = data.first_name
         if data.last_name is not None:
             user.last_name = data.last_name
-        if data.phone is not None:
-            user.phone = data.phone
         if data.roles is not None:
             user.roles = [await self.repo.get_or_create_role(r) for r in data.roles]
         await self.session.flush()

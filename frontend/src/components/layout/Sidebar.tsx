@@ -74,8 +74,7 @@ export const Sidebar = () => {
     <aside
       className={cn(
         "fixed inset-y-0 left-0 z-20 w-64 flex flex-col",
-        "bg-white/85 dark:bg-card/85 backdrop-blur-xl",
-        "border-r border-border/60"
+        "bg-white/85 dark:bg-card/85 backdrop-blur-xl"
       )}
     >
       {/* Logo */}
@@ -90,7 +89,7 @@ export const Sidebar = () => {
       </div>
 
       {/* Main nav */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5 border-r border-border/60">
         {mainLinks.map((link) => (
           <NavLink key={link.to} {...link} />
         ))}
@@ -110,7 +109,7 @@ export const Sidebar = () => {
       </nav>
 
       {/* Bottom section */}
-      <div className="border-t border-border/60 px-3 py-3 space-y-0.5">
+      <div className="border-t border-r border-border/60 px-3 py-3 space-y-0.5">
         {bottomLinks.map((link) => (
           <NavLink key={link.to} {...link} />
         ))}

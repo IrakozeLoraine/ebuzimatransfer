@@ -1,9 +1,16 @@
+export interface AuditUser {
+    id: string;
+    name: string;
+    email: string;
+}
+
 export interface AuditLog {
     id: string;
-    user_id: string | null;
+    user: AuditUser | null;
     action: string;
     entity_type: string;
     entity_id: string | null;
+    entity: string | null;
     ip_address: string | null;
     extra: Record<string, unknown> | null;
     created_at: string;

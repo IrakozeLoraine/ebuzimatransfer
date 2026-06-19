@@ -29,11 +29,18 @@ class FacilityRef(BaseModel):
 
 
 class UserBase(BaseModel):
-    email: EmailStr
+    email: Optional[EmailStr] = None
     first_name: str
     last_name: str
     phone: Optional[str] = None
     medical_id: str
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def empty_email_to_none(cls, v):
+        if v == "":
+            return None
+        return v
 
 
 class UserCreate(UserBase):
@@ -53,7 +60,15 @@ class UserUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     phone: Optional[str] = None
+    email: Optional[EmailStr] = None
     roles: Optional[List[str]] = None
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def empty_email_to_none(cls, v):
+        if v == "":
+            return None
+        return v
 
     @field_validator("roles")
     @classmethod
@@ -94,7 +109,7 @@ class UserOut(UserBase):
 
 class UserMe(BaseModel):
     id: uuid.UUID
-    email: str
+    email: Optional[EmailStr] = None
     medical_id: str
     first_name: str
     last_name: str

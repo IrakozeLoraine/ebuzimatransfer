@@ -1,6 +1,8 @@
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getAuditLogs } from "@/api/audit.api";
 import { DataTable } from "@/components/organisms/DataTable";
+import { TableToolbar, ALL_FILTER } from "@/components/molecules/TableToolbar";
 import { formatDateTime } from "@/utils/format";
 import { cn } from "@/utils/cn";
 import { AuditLog } from "@/types/audit";
@@ -21,10 +23,52 @@ const getActionColor = (action: string): string => {
 };
 
 export const AuditLogsPage = () => {
+  const [search, setSearch] = useState("");
+  const [actionFilter, setActionFilter] = useState(ALL_FILTER);
+  const [entityTypeFilter, setEntityTypeFilter] = useState(ALL_FILTER);
+
   const { data: logs = [], isLoading } = useQuery({
     queryKey: ["audit-logs"],
     queryFn: () => getAuditLogs(),
   });
+
+  const actionOptions = useMemo(
+    () =>
+      Array.from(new Set(logs.map((l) => l.action)))
+        .sort()
+        .map((a) => ({ value: a, label: a.replace(/_/g, " ") })),
+    [logs]
+  );
+
+  const entityTypeOptions = useMemo(
+    () =>
+      Array.from(new Set(logs.map((l) => l.entity_type)))
+        .sort()
+        .map((t) => ({ value: t, label: t.replace(/_/g, " ") })),
+    [logs]
+  );
+
+  const filteredLogs = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return logs.filter((l) => {
+      const matchesSearch =
+        !q ||
+        (l.entity?.toLowerCase().includes(q) ?? false) ||
+        (l.user?.name.toLowerCase().includes(q) ?? false) ||
+        (l.user?.email.toLowerCase().includes(q) ?? false) ||
+        (l.ip_address?.toLowerCase().includes(q) ?? false);
+      const matchesAction = actionFilter === ALL_FILTER || l.action === actionFilter;
+      const matchesEntityType =
+        entityTypeFilter === ALL_FILTER || l.entity_type === entityTypeFilter;
+      return matchesSearch && matchesAction && matchesEntityType;
+    });
+  }, [logs, search, actionFilter, entityTypeFilter]);
+
+  const resetFilters = () => {
+    setSearch("");
+    setActionFilter(ALL_FILTER);
+    setEntityTypeFilter(ALL_FILTER);
+  };
 
   const columns = [
     {
@@ -36,25 +80,23 @@ export const AuditLogsPage = () => {
             getActionColor(l.action)
           )}
         >
-          {l.action}
+          {l.action?.replace(/_/g, " ")}
         </span>
       ),
     },
     {
       header: "Entity Type",
       accessor: (l: AuditLog) => (
-        <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
-          {l.entity_type}
+        <span className="rounded-md bg-muted px-2 py-0.5 text-xs uppercase font-medium">
+          {l.entity_type?.replace(/_/g, " ")}
         </span>
       ),
     },
     {
-      header: "Entity ID",
+      header: "Entity",
       accessor: (l: AuditLog) =>
-        l.entity_id ? (
-          <span className="font-mono text-xs text-muted-foreground">
-            {l.entity_id.slice(0, 8)}…
-          </span>
+        l.entity ? (
+          <span className="text-xs">{l.entity}</span>
         ) : (
           <span className="text-muted-foreground/40">—</span>
         ),
@@ -62,10 +104,11 @@ export const AuditLogsPage = () => {
     {
       header: "User",
       accessor: (l: AuditLog) =>
-        l.user_id ? (
-          <span className="font-mono text-xs text-muted-foreground">
-            {l.user_id.slice(0, 8)}…
-          </span>
+        l.user ? (
+          <div className="flex flex-col">
+            <span className="text-xs font-medium">{l.user.name}</span>
+            <span className="text-xs text-muted-foreground">{l.user.email}</span>
+          </div>
         ) : (
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
             System
@@ -96,12 +139,37 @@ export const AuditLogsPage = () => {
           Complete record of system activity
         </p>
       </div>
+
+      <TableToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by entity, user, or IP address…"
+        onReset={resetFilters}
+        filters={[
+          {
+            key: "action",
+            value: actionFilter,
+            onChange: setActionFilter,
+            allLabel: "All actions",
+            options: actionOptions,
+          },
+          {
+            key: "entity-type",
+            value: entityTypeFilter,
+            onChange: setEntityTypeFilter,
+            allLabel: "All entities",
+            options: entityTypeOptions,
+          },
+        ]}
+      />
+
       <DataTable
         columns={columns}
-        data={logs}
+        data={filteredLogs}
         isLoading={isLoading}
         keyExtractor={(l) => l.id}
-        emptyMessage="No audit logs found"
+        emptyMessage="No audit logs match your filters"
+        pageSize={10}
       />
     </div>
   );

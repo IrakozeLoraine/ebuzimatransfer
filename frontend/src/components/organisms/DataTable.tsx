@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import {
   Table,
   TableBody,
@@ -6,6 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Pagination } from "@/components/molecules/Pagination";
 import { cn } from "@/utils/cn";
 import { FileSearch } from "lucide-react";
 
@@ -22,6 +24,10 @@ interface Props<T> {
   isLoading?: boolean;
   emptyMessage?: string;
   keyExtractor: (row: T) => string;
+  /** Initial rows per page. Omit to disable pagination. */
+  pageSize?: number;
+  /** Page-size options shown in the rows-per-page selector. */
+  pageSizeOptions?: number[];
 }
 
 const SkeletonRow = ({ cols }: { cols: number }) => (
@@ -41,7 +47,29 @@ export const DataTable = <T,>({
   isLoading,
   emptyMessage = "No data found",
   keyExtractor,
+  pageSize,
+  pageSizeOptions,
 }: Props<T>) => {
+  const [page, setPage] = useState(1);
+  const [size, setSize] = useState(pageSize ?? 0);
+
+  const totalPages = size ? Math.max(1, Math.ceil(data.length / size)) : 1;
+  // Clamp the page to valid bounds without an effect (e.g. when filters shrink the data).
+  const currentPage = Math.min(page, totalPages);
+
+  const pageData = useMemo(() => {
+    if (!size) return data;
+    const start = (currentPage - 1) * size;
+    return data.slice(start, start + size);
+  }, [data, currentPage, size]);
+
+  const handlePageSizeChange = (next: number) => {
+    setSize(next);
+    setPage(1);
+  };
+
+  const showPagination = !!pageSize && !isLoading && data.length > 0;
+
   return (
     <div className="rounded-xl border border-border/60 bg-card shadow-card overflow-hidden">
       <Table>
@@ -71,7 +99,7 @@ export const DataTable = <T,>({
               </TableCell>
             </TableRow>
           ) : (
-            data.map((row) => (
+            pageData.map((row) => (
               <TableRow
                 key={keyExtractor(row)}
                 onClick={() => onRowClick?.(row)}
@@ -89,6 +117,17 @@ export const DataTable = <T,>({
           )}
         </TableBody>
       </Table>
+
+      {showPagination && (
+        <Pagination
+          page={currentPage}
+          pageSize={size}
+          total={data.length}
+          onPageChange={setPage}
+          onPageSizeChange={handlePageSizeChange}
+          pageSizeOptions={pageSizeOptions}
+        />
+      )}
     </div>
   );
 };
