@@ -25,7 +25,7 @@ $COMPOSE up -d
 
 # 4. Clean up after the build so the build cache doesn't grow unbounded.
 log "Cleaning build cache and dangling images..."
-docker builder prune -f >/dev/null
+docker builder prune -af >/dev/null
 docker image prune -f >/dev/null
 
 log "Disk after:  $(disk_free)"
