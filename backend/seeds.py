@@ -1,11 +1,13 @@
 """
 Seed script — populates the database with realistic test data.
 Run from the backend/ directory:
-    python seeds.py
+    python seeds.py           # seeds only if the database is empty (first time only)
+    python seeds.py --force   # wipes existing data and re-seeds
 """
 import asyncio
+import sys
 
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal
@@ -208,9 +210,19 @@ async def seed_users(
 # Entry point
 # ---------------------------------------------------------------------------
 
+async def already_seeded(session: AsyncSession) -> bool:
+    count = await session.scalar(select(func.count()).select_from(User))
+    return bool(count)
+
+
 async def main() -> None:
+    force = "--force" in sys.argv
+
     print("\n🌱 Seeding eBuzimaTransfer database...\n")
     async with AsyncSessionLocal() as session:
+        if not force and await already_seeded(session):
+            print("  ↪ Data already present — skipping seed (use --force to reset).\n")
+            return
         await clear_data(session)
         roles = await seed_roles(session)
         facilities = await seed_facilities(session)
