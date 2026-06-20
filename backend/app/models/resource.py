@@ -1,0 +1,79 @@
+import uuid
+from datetime import datetime
+from enum import Enum as PyEnum
+from sqlalchemy import String, Integer, ForeignKey, Enum as SAEnum, DateTime
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.db.base import Base, UUIDMixin, TimestampMixin
+
+
+class ResourceStatus(str, PyEnum):
+    AVAILABLE = "AVAILABLE"
+    OCCUPIED = "OCCUPIED"
+    RESERVED = "RESERVED"
+    OUT_OF_SERVICE = "OUT_OF_SERVICE"
+
+
+class ResourceType(str, PyEnum):
+    MECHANICAL_VENTILATION = "Mechanical Ventilation"
+    ADVANCED_RESPIRATORY_SUPPORT = "Advanced Respiratory Support"
+    VASOPRESSOR_INOTROPE_INFUSIONS = "Vasopressor/Inotrope Infusions"
+    INVASIVE_HEMODYNAMIC_MONITORING = "Invasive Hemodynamic Monitoring"
+    EMERGENCY_SURGERY = "Emergency Surgery"
+    ACUTE_RENAL_REPLACEMENT_THERAPY = "Acute Renal Replacement Therapy"
+    NEUROLOGICAL_EMERGENCIES = "Neurological Emergencies"
+    CT_SCANS_MRI = "CT Scans/MRI"
+    ADVANCED_BLOOD_ANALYSIS = "Advanced Blood Analysis"
+
+
+class Resource(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "resources"
+
+    unit_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("units.id", ondelete="CASCADE"), nullable=False
+    )
+    resource_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    resource_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    status: Mapped[ResourceStatus | None] = mapped_column(
+        SAEnum(ResourceStatus, name="resource_status", create_type=False), nullable=True
+    )
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Equipment fields
+    resource_type: Mapped[ResourceType | None] = mapped_column(
+        SAEnum(
+            ResourceType,
+            name="resource_type",
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+    quantity: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    unit: Mapped["Unit"] = relationship("Unit", back_populates="resources")
+    reservations: Mapped[list["ResourceReservation"]] = relationship(
+        "ResourceReservation", back_populates="resource"
+    )
+
+
+class ResourceReservation(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "resource_reservations"
+
+    referral_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("referrals.id", ondelete="CASCADE"), nullable=False
+    )
+    resource_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("resources.id"), nullable=False
+    )
+    reserved_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    planned_admission_time: Mapped["datetime | None"] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    resource: Mapped[Resource] = relationship("Resource", back_populates="reservations")
+    referral: Mapped["Referral"] = relationship("Referral", back_populates="resource_reservation")
+
+
+from app.models.unit import Unit
+from app.models.referral import Referral

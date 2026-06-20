@@ -4,7 +4,8 @@ from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundError
 from app.models.facility import Facility
-from app.repositories.facility_repository import FacilityRepository
+from app.models.unit import Unit, Resource
+from app.repositories.facility_repository import FacilityRepository, UnitRepository
 from app.schemas.facility import FacilityCreate, FacilityUpdate, UnitCreate, UnitUpdate
 
 
