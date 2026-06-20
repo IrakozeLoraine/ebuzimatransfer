@@ -6,6 +6,11 @@ export const getUsers = async (): Promise<User[]> => {
   return data;
 };
 
+export const getUser = async (id: string): Promise<User> => {
+  const { data } = await api.get<User>(`/users/${id}`);
+  return data;
+};
+
 export const createUser = async (payload: CreateUserPayload): Promise<User> => {
   const { data } = await api.post<User>("/users", payload);
   return data;
@@ -22,6 +27,22 @@ export const deactivateUser = async (id: string): Promise<void> => {
 
 export const assignUserToFacility = async (payload: AssignUserPayload): Promise<User> => {
   const { data } = await api.post<User>("/users/assign", payload);
+  return data;
+};
+
+export const assignUserToSpecificFacility = async (
+  facilityId: string,
+  payload: AssignUserPayload,
+): Promise<User> => {
+  const { data } = await api.post<User>(`/users/assign/${facilityId}`, payload);
+  return data;
+};
+
+export const removeUserFromFacility = async (
+  userId: string,
+  facilityId: string,
+): Promise<User> => {
+  const { data } = await api.delete<User>(`/users/${userId}/facilities/${facilityId}`);
   return data;
 };
 

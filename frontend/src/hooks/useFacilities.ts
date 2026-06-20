@@ -1,11 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getFacilities, createFacility, updateFacility, deleteFacility } from "@/api/facilities.api";
+import { getFacilities, getFacility, getFacilityUsers, createFacility, updateFacility, deleteFacility } from "@/api/facilities.api";
 import type { Facility } from "@/types/facility";
 import { toast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/utils/apiError";
 
 export const useFacilities = () =>
   useQuery({ queryKey: ["facilities"], queryFn: getFacilities });
+
+export const useFacility = (id: string | undefined) =>
+  useQuery({ queryKey: ["facility", id], queryFn: () => getFacility(id!), enabled: !!id });
+
+export const useFacilityUsers = (id: string | undefined) =>
+  useQuery({ queryKey: ["facility", id, "users"], queryFn: () => getFacilityUsers(id!), enabled: !!id });
 
 export const useCreateFacility = () => {
   const qc = useQueryClient();

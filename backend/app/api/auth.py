@@ -4,7 +4,7 @@ from app.db.session import get_session
 from app.core.permissions import get_current_user
 from app.services.auth_service import AuthService
 from app.services.audit_service import AuditService
-from app.schemas.auth import LoginRequest, TokenResponse, RefreshRequest, ChangePasswordRequest, SetPasswordRequest
+from app.schemas.auth import LoginRequest, TokenResponse, RefreshRequest, ChangePasswordRequest, SetPasswordRequest, SwitchFacilityRequest
 from app.schemas.user import UserMe
 from app.dependencies import get_client_ip
 
@@ -42,6 +42,21 @@ async def set_password(
 async def refresh(payload: RefreshRequest, session: AsyncSession = Depends(get_session)):
     service = AuthService(session)
     return await service.refresh(payload.refresh_token)
+
+
+@router.post("/switch-facility", response_model=TokenResponse)
+async def switch_facility(
+    payload: SwitchFacilityRequest,
+    current_user=Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = AuthService(session)
+    tokens = await service.switch_facility(str(current_user.id), payload.facility_id)
+    await AuditService(session).log(
+        "SWITCH_FACILITY", "user", user_id=current_user.id, entity_id=payload.facility_id
+    )
+    await session.commit()
+    return tokens
 
 
 @router.post("/logout")

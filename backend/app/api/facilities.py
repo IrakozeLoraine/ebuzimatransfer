@@ -3,8 +3,11 @@ from typing import List
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_session
-from app.core.permissions import require_role, get_current_user
+from app.core.permissions import require_role, require_roles, get_current_user
+from app.core.exceptions import ForbiddenError
 from app.services.facility_service import FacilityService
+from app.services.user_service import UserService
+from app.schemas.user import UserOut
 from app.services.audit_service import AuditService
 from app.schemas.facility import FacilityCreate, FacilityUpdate, FacilityOut
 
@@ -17,6 +20,19 @@ async def list_facilities(
     current_user=Depends(get_current_user),
 ):
     return await FacilityService(session).list_all()
+
+
+@router.get("/{facility_id}/users", response_model=List[UserOut])
+async def list_facility_users(
+    facility_id: uuid.UUID,
+    current_user=Depends(require_roles("SUPER_ADMIN", "FACILITY_ADMIN")),
+    session: AsyncSession = Depends(get_session),
+):
+    # Facility admins may only view users within their own active facility.
+    if "SUPER_ADMIN" not in current_user.effective_roles and current_user.active_facility_id != facility_id:
+        raise ForbiddenError()
+    users = await UserService(session).list_users_for_facility(facility_id)
+    return [UserOut.from_user(u) for u in users]
 
 
 @router.post("", response_model=FacilityOut, status_code=201)

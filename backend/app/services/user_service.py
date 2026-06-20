@@ -4,7 +4,7 @@ from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password
 from app.core.exceptions import ConflictError, NotFoundError, ForbiddenError
-from app.models.user import User, AccountStatus
+from app.models.user import User, AccountStatus, UserFacilityRole
 from app.models.facility import Facility
 from app.repositories.user_repository import UserRepository
 from app.schemas.user import UserCreate, UserUpdate
@@ -25,7 +25,7 @@ class UserService:
         if existing_mid:
             raise ConflictError("Medical ID already registered", "MEDICAL_ID_EXISTS")
 
-        roles = [await self.repo.get_or_create_role(r) for r in data.roles]
+        # Identity only — roles are granted per-facility afterwards via assign_roles.
         user = User(
             email=data.email,
             medical_id=data.medical_id,
@@ -34,7 +34,6 @@ class UserService:
             phone=data.phone,
             password_hash=hash_password(data.password),
             account_status=AccountStatus.ACTIVE.value,
-            roles=roles,
         )
         return await self.repo.create(user)
 
@@ -50,7 +49,8 @@ class UserService:
     async def list_users_for_facility(self, facility_id: uuid.UUID) -> List[User]:
         return await self.repo.list_by_facility(facility_id)
 
-    async def assign_to_facility(self, medical_id: str, facility_id: uuid.UUID) -> User:
+    async def assign_roles(self, medical_id: str, facility_id: uuid.UUID, roles: List[str]) -> User:
+        """Grant the given roles to a user at a facility, replacing that facility's existing grants."""
         user = await self.repo.get_by_medical_id(medical_id)
         if not user:
             raise NotFoundError("User with that medical ID")
@@ -59,9 +59,22 @@ class UserService:
         if not facility:
             raise NotFoundError("Facility")
 
-        if facility not in user.facilities:
-            user.facilities.append(facility)
-            await self.session.flush()
+        # Drop the user's current grants for this facility, then re-add the requested ones.
+        user.facility_roles = [fr for fr in user.facility_roles if fr.facility_id != facility_id]
+        for role_name in dict.fromkeys(roles):
+            role = await self.repo.get_or_create_role(role_name)
+            # Populate the role/facility relationships in-memory so serialization
+            # does not trigger an async lazy-load on the freshly-created grant.
+            user.facility_roles.append(
+                UserFacilityRole(facility=facility, role=role)
+            )
+        await self.session.flush()
+        return user
+
+    async def remove_from_facility(self, user_id: uuid.UUID, facility_id: uuid.UUID) -> User:
+        user = await self.get_user(user_id)
+        user.facility_roles = [fr for fr in user.facility_roles if fr.facility_id != facility_id]
+        await self.session.flush()
         return user
 
     async def set_account_status(self, user_id: uuid.UUID, status: str, acting_facility_id: uuid.UUID | None) -> User:
@@ -96,8 +109,7 @@ class UserService:
             user.first_name = data.first_name
         if data.last_name is not None:
             user.last_name = data.last_name
-        if data.roles is not None:
-            user.roles = [await self.repo.get_or_create_role(r) for r in data.roles]
+        # Roles are managed per-facility via assign_roles, not here.
         await self.session.flush()
         return user
 

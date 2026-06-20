@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import type { Column } from "@/components/organisms/DataTable";
 import type { User } from "@/types/user";
 import { formatDate } from "@/utils/format";
-import { getRoleColor, ACCOUNT_STATUS_LABELS } from "./constants";
+import { ACCOUNT_STATUS_LABELS } from "./constants";
 
 interface ColumnActions {
   isSuperAdmin: boolean;
@@ -34,24 +34,26 @@ export const getUserColumns = ({
   },
   { header: "Email", accessor: (u: User) => <span className="text-muted-foreground text-sm">{u.email}</span> },
   {
-    header: "Roles",
-    accessor: (u: User) => (
-      <div className="flex gap-1.5 flex-wrap">
-        {u.roles.map((r) => (
-          <span key={r.id} className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${getRoleColor(r.name)}`}>
-            {r.name.replace(/_/g, " ")}
-          </span>
-        ))}
-      </div>
-    ),
-  },
-  {
     header: "Facilities",
-    accessor: (u: User) => (
-      <span className="text-xs text-muted-foreground">
-        {u.facilities.length > 0 ? u.facilities.map((f) => f.name).join(", ") : "—"}
-      </span>
-    ),
+    accessor: (u: User) => {
+      const names = u.facilities.map((f) => f.name);
+      const hasGlobal = u.global_roles.length > 0;
+      if (names.length === 0 && !hasGlobal) {
+        return <span className="text-xs text-muted-foreground">—</span>;
+      }
+      return (
+        <div className="flex flex-wrap items-center gap-1.5 max-w-xs">
+          {hasGlobal && (
+            <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-teal-50 text-teal-700 ring-1 ring-teal-200">
+              Global
+            </span>
+          )}
+          {names.length > 0 ? (
+            <span className="text-xs text-muted-foreground">{names.join(", ")}</span>
+          ) : null}
+        </div>
+      );
+    },
   },
   {
     header: "Status",
@@ -78,7 +80,7 @@ export const getUserColumns = ({
   {
     header: "",
     accessor: (u: User) => (
-      <div className="flex items-center justify-end gap-1">
+      <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
         <Button
           size="sm"
           variant="ghost"

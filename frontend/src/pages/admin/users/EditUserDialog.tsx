@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { User } from "@/types/user";
 import { editUserSchema, type EditUserFormValues } from "@/schemas/user.schema";
-import { SUPER_ADMIN_ROLES, getRoleColor } from "./constants";
 import { useUpdateUser } from "@/hooks/useUser";
 
 interface Props {
@@ -25,7 +24,6 @@ export const EditUserDialog = ({ user, onClose }: Props) => {
         last_name: user.last_name,
         phone: user.phone ?? "",
         email: user.email ?? "",
-        roles: user.roles.map((r) => r.name),
       });
     }
   }, [user, form]);
@@ -67,38 +65,9 @@ export const EditUserDialog = ({ user, onClose }: Props) => {
               <Label>Email <span className="text-muted-foreground text-xs">(optional)</span></Label>
               <Input placeholder="user@example.com" {...form.register("email")} />
             </div>
-            <div className="space-y-1.5">
-              <Label>Roles</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {SUPER_ADMIN_ROLES.map((r) => {
-                  const selected = (form.watch("roles") ?? []).includes(r);
-                  return (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => {
-                        const current = form.getValues("roles") ?? [];
-                        form.setValue(
-                          "roles",
-                          selected ? current.filter((x) => x !== r) : [...current, r],
-                          { shouldValidate: true }
-                        );
-                      }}
-                      className={`rounded-full px-2.5 py-1 text-xs font-medium transition-all ${
-                        selected
-                          ? getRoleColor(r)
-                          : "bg-muted text-muted-foreground ring-1 ring-transparent hover:ring-border"
-                      }`}
-                    >
-                      {r.replace(/_/g, " ")}
-                    </button>
-                  );
-                })}
-              </div>
-              {form.formState.errors.roles && (
-                <p className="text-xs text-destructive">{form.formState.errors.roles.message}</p>
-              )}
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Roles are managed per facility via “Assign to Facility”, not here.
+            </p>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
               <Button type="submit" disabled={updating}>{updating ? "Saving…" : "Save Changes"}</Button>

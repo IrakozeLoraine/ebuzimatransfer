@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal
 from app.core.security import hash_password
-from app.models.user import Role, User, UserRole, AccountStatus
+from app.models.user import Role, User, UserRole, UserFacilityRole, AccountStatus
 from app.models.facility import Facility
 
 
@@ -149,8 +149,7 @@ USERS = [
 
 async def clear_data(session: AsyncSession) -> None:
     for table in [
-        "user_facilities",
-        "user_roles",
+        "user_facility_roles",
         "users",
         "facilities",
         "roles",
@@ -188,6 +187,17 @@ async def seed_users(
 ) -> list[User]:
     users: list[User] = []
     for data in USERS:
+        # Build per-facility role grants. An empty facility_indices list means the
+        # role is granted globally (facility_id is NULL) — e.g. SUPER_ADMIN.
+        grants: list[UserFacilityRole] = []
+        for role_name in data["roles"]:
+            role = roles_map[role_name]
+            if data["facility_indices"]:
+                for i in data["facility_indices"]:
+                    grants.append(UserFacilityRole(role=role, facility=facilities[i]))
+            else:
+                grants.append(UserFacilityRole(role=role, facility=None))
+
         user = User(
             email=data["email"],
             medical_id=data["medical_id"],
@@ -197,8 +207,7 @@ async def seed_users(
             password_hash=hash_password(data["password"]),
             is_active=True,
             account_status=AccountStatus.ACTIVE.value,
-            roles=[roles_map[r] for r in data["roles"]],
-            facilities=[facilities[i] for i in data["facility_indices"]],
+            facility_roles=grants,
         )
         session.add(user)
         users.append(user)

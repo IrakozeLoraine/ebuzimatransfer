@@ -21,14 +21,22 @@ export interface FacilityRef {
   name: string;
 }
 
+export interface FacilityRoles {
+  facility: FacilityRef;
+  roles: string[];
+}
+
 export interface UserMe {
   id: string;
   email: string;
   medical_id: string;
   first_name: string;
   last_name: string;
+  /** Roles effective in the active facility (global grants + active-facility grants). */
   roles: string[];
+  active_facility_id: string | null;
   facilities: FacilityRef[];
+  facility_roles: FacilityRoles[];
   account_status: string;
 }
 

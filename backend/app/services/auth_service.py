@@ -9,8 +9,8 @@ from app.core.security import (
     create_password_reset_token,
     decode_token,
 )
-from app.core.exceptions import UnauthorizedError
-from app.models.user import AccountStatus
+from app.core.exceptions import UnauthorizedError, ForbiddenError
+from app.models.user import AccountStatus, User
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import LoginRequest, TokenResponse, SetPasswordRequest
 
@@ -19,6 +19,19 @@ class AuthService:
     def __init__(self, session: AsyncSession):
         self.repo = UserRepository(session)
         self.session = session
+
+    def _issue_tokens(self, user: User, active_facility_id: uuid.UUID | None) -> TokenResponse:
+        roles = user.effective_role_names(active_facility_id)
+        access = create_access_token(
+            str(user.id), roles, str(active_facility_id) if active_facility_id else None
+        )
+        refresh = create_refresh_token(str(user.id))
+        return TokenResponse(access_token=access, refresh_token=refresh)
+
+    @staticmethod
+    def _default_facility_id(user: User) -> uuid.UUID | None:
+        facilities = user.facilities
+        return facilities[0].id if facilities else None
 
     async def login(self, payload: LoginRequest) -> TokenResponse:
         user = await self.repo.get_by_medical_id(payload.medical_id)
@@ -36,9 +49,7 @@ class AuthService:
         if not verify_password(payload.password, user.password_hash):
             raise UnauthorizedError("Invalid credentials")
 
-        access = create_access_token(str(user.id), user.role_names)
-        refresh = create_refresh_token(str(user.id))
-        return TokenResponse(access_token=access, refresh_token=refresh)
+        return self._issue_tokens(user, self._default_facility_id(user))
 
     async def set_password(self, payload: SetPasswordRequest) -> TokenResponse:
         token_data = decode_token(payload.reset_token)
@@ -53,9 +64,7 @@ class AuthService:
         user.account_status = AccountStatus.ACTIVE.value
         await self.session.flush()
 
-        access = create_access_token(str(user.id), user.role_names)
-        refresh = create_refresh_token(str(user.id))
-        return TokenResponse(access_token=access, refresh_token=refresh)
+        return self._issue_tokens(user, self._default_facility_id(user))
 
     async def refresh(self, refresh_token: str) -> TokenResponse:
         payload = decode_token(refresh_token)
@@ -66,9 +75,19 @@ class AuthService:
         if not user or not user.is_active:
             raise UnauthorizedError("User not found or inactive")
 
-        access = create_access_token(str(user.id), user.role_names)
-        new_refresh = create_refresh_token(str(user.id))
-        return TokenResponse(access_token=access, refresh_token=new_refresh)
+        return self._issue_tokens(user, self._default_facility_id(user))
+
+    async def switch_facility(self, user_id: str, facility_id: uuid.UUID) -> TokenResponse:
+        user = await self.repo.get_by_id(uuid.UUID(user_id))
+        if not user or not user.is_active:
+            raise UnauthorizedError("User not found or inactive")
+
+        member_facility_ids = {f.id for f in user.facilities}
+        is_global = bool(user.global_role_names)
+        if facility_id not in member_facility_ids and not is_global:
+            raise ForbiddenError("You do not have access to this facility")
+
+        return self._issue_tokens(user, facility_id)
 
     async def change_password(self, user_id: str, current: str, new: str) -> None:
         user = await self.repo.get_by_id(uuid.UUID(user_id))

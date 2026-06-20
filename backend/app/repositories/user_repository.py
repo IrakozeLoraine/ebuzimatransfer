@@ -4,7 +4,7 @@ from typing import Optional, List
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.user import User, Role
+from app.models.user import User, Role, UserFacilityRole
 from app.repositories.base import BaseRepository
 
 
@@ -13,7 +13,10 @@ class UserRepository(BaseRepository[User]):
         super().__init__(User, session)
 
     def _with_relations(self):
-        return [selectinload(User.roles), selectinload(User.facilities)]
+        return [
+            selectinload(User.facility_roles).joinedload(UserFacilityRole.role),
+            selectinload(User.facility_roles).joinedload(UserFacilityRole.facility),
+        ]
 
     async def get_by_id(self, id: uuid.UUID) -> Optional[User]:
         result = await self.session.execute(
@@ -40,11 +43,11 @@ class UserRepository(BaseRepository[User]):
         return list(result.scalars().all())
 
     async def list_by_facility(self, facility_id: uuid.UUID) -> List[User]:
-        from app.models.user import user_facilities_table
         result = await self.session.execute(
             select(User)
-            .join(user_facilities_table, user_facilities_table.c.user_id == User.id)
-            .where(user_facilities_table.c.facility_id == facility_id)
+            .join(UserFacilityRole, UserFacilityRole.user_id == User.id)
+            .where(UserFacilityRole.facility_id == facility_id)
+            .distinct()
             .options(*self._with_relations())
         )
         return list(result.scalars().all())

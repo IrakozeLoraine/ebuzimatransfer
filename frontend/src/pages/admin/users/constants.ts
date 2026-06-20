@@ -6,6 +6,9 @@ export const SUPER_ADMIN_ROLES = [
   "SUPER_ADMIN",
 ];
 
+/** Roles that can be granted to a user within a facility (SUPER_ADMIN is global-only). */
+export const FACILITY_ASSIGNABLE_ROLES = SUPER_ADMIN_ROLES.filter((r) => r !== "SUPER_ADMIN");
+
 const ROLE_COLORS: Record<string, string> = {
   SUPER_ADMIN: "bg-teal-50 text-teal-700 ring-1 ring-teal-200",
   FACILITY_ADMIN: "bg-violet-50 text-violet-700 ring-1 ring-violet-200",

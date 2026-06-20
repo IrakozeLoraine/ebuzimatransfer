@@ -6,7 +6,6 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PasswordInput } from "@/components/atoms/PasswordInput";
 import { userSchema, type UserFormValues } from "@/schemas/user.schema";
-import { getRoleColor, SUPER_ADMIN_ROLES } from "./constants";
 import { useCreateUser } from "@/hooks/useUser";
 
 interface Props {
@@ -67,37 +66,9 @@ export const CreateUserDialog = ({ open, onOpenChange }: Props) => {
               <p className="text-xs text-destructive">{form.formState.errors.password.message}</p>
             )}
           </div>
-          <div className="space-y-1.5">
-            <Label>Roles</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {SUPER_ADMIN_ROLES.map((r) => {
-                const selected = (form.watch("roles") ?? []).includes(r);
-                return (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => {
-                      const current = form.getValues("roles") ?? [];
-                      form.setValue(
-                        "roles",
-                        selected ? current.filter((x) => x !== r) : [...current, r],
-                        { shouldValidate: true }
-                      );
-                    }}
-                    className={`rounded-full px-2.5 py-1 text-xs font-medium transition-all ${selected
-                        ? getRoleColor(r)
-                        : "bg-muted text-muted-foreground ring-1 ring-transparent hover:ring-border"
-                      }`}
-                  >
-                    {r.replace(/_/g, " ")}
-                  </button>
-                );
-              })}
-            </div>
-            {form.formState.errors.roles && (
-              <p className="text-xs text-destructive">{form.formState.errors.roles.message}</p>
-            )}
-          </div>
+          <p className="text-xs text-muted-foreground">
+            Roles are assigned per facility after the account is created, via “Assign to Facility”.
+          </p>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={creating}>{creating ? "Creating…" : "Create User"}</Button>

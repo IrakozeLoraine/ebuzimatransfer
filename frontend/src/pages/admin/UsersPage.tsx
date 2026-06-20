@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getUsers, deactivateUser, updateUserAccountStatus } from "@/api/users.api";
 import { DataTable } from "@/components/organisms/DataTable";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/molecules/ConfirmDialog";
 import { TableToolbar, ALL_FILTER } from "@/components/molecules/TableToolbar";
-import { Plus } from "lucide-react";
+import { Plus, UserPlus } from "lucide-react";
 import type { User } from "@/types/user";
 import { usePermissions } from "@/hooks/usePermissions";
 import { SUPER_ADMIN_ROLES, ACCOUNT_STATUS_LABELS } from "./users/constants";
@@ -15,16 +16,15 @@ import { getApiErrorMessage } from "@/utils/apiError";
 import { CreateUserDialog } from "./users/CreateUserDialog";
 import { AssignUserDialog } from "./users/AssignUserDialog";
 import { EditUserDialog } from "./users/EditUserDialog";
-import { UserDetailsDialog } from "./users/UserDetailsDialog";
 
 export const UsersPage = () => {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { isSuperAdmin } = usePermissions();
   const [showCreate, setShowCreate] = useState(false);
   const [showAssign, setShowAssign] = useState(false);
   const [toDeactivate, setToDeactivate] = useState<User | null>(null);
   const [statusTarget, setStatusTarget] = useState<User | null>(null);
-  const [toView, setToView] = useState<User | null>(null);
   const [editing, setEditing] = useState<User | null>(null);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState(ALL_FILTER);
@@ -43,8 +43,12 @@ export const UsersPage = () => {
         `${u.first_name} ${u.last_name}`.toLowerCase().includes(q) ||
         u.email.toLowerCase().includes(q) ||
         u.medical_id.toLowerCase().includes(q);
+      const userRoleNames = [
+        ...u.global_roles,
+        ...u.facility_roles.flatMap((fr) => fr.roles),
+      ];
       const matchesRole =
-        roleFilter === ALL_FILTER || u.roles.some((r) => r.name === roleFilter);
+        roleFilter === ALL_FILTER || userRoleNames.includes(roleFilter);
       const matchesStatus =
         statusFilter === ALL_FILTER || u.account_status === statusFilter;
       return matchesSearch && matchesRole && matchesStatus;
@@ -92,7 +96,7 @@ export const UsersPage = () => {
 
   const columns = getUserColumns({
     isSuperAdmin,
-    onView: setToView,
+    onView: (u) => navigate(`/admin/users/${u.id}`),
     onEdit: setEditing,
     onDeactivate: setToDeactivate,
   });
@@ -109,6 +113,14 @@ export const UsersPage = () => {
           </p>
         </div>
         <div className="flex gap-2">
+          {/* Facility admins add a registered user to their own facility here;
+              super admins assign from a user's or facility's detail page. */}
+          {!isSuperAdmin && (
+            <Button variant="outline" onClick={() => setShowAssign(true)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Assign to Facility
+            </Button>
+          )}
           {isSuperAdmin && (
             <Button onClick={() => setShowCreate(true)}>
               <Plus className="mr-2 h-4 w-4" />
@@ -152,15 +164,14 @@ export const UsersPage = () => {
         data={filteredUsers}
         isLoading={isLoading}
         keyExtractor={(u) => u.id}
+        onRowClick={(u) => navigate(`/admin/users/${u.id}`)}
         emptyMessage="No users match your filters"
         pageSize={10}
       />
 
       <CreateUserDialog open={showCreate} onOpenChange={setShowCreate} />
 
-      <AssignUserDialog open={showAssign} onOpenChange={setShowAssign} />
-
-      <UserDetailsDialog user={toView} onClose={() => setToView(null)} />
+      <AssignUserDialog open={showAssign} onOpenChange={setShowAssign} isSuperAdmin={isSuperAdmin} />
 
       <EditUserDialog user={editing} onClose={() => setEditing(null)} />
 

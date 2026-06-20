@@ -29,13 +29,19 @@ async def get_current_user(
     if not user or not user.is_active:
         raise UnauthorizedError("User not found or inactive")
 
+    # Resolve the active facility from the token and attach request-scoped
+    # authorization context onto the user instance.
+    raw_facility = payload.get("active_facility_id")
+    active_facility_id = uuid.UUID(raw_facility) if raw_facility else None
+    user.active_facility_id = active_facility_id
+    user.effective_roles = user.effective_role_names(active_facility_id)
+
     return user
 
 
 def require_roles(*roles: str):
     async def dependency(current_user=Depends(get_current_user)):
-        user_roles = {r.name for r in current_user.roles}
-        if not user_roles.intersection(roles):
+        if not set(current_user.effective_roles).intersection(roles):
             raise ForbiddenError()
         return current_user
     return dependency

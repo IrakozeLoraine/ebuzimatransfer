@@ -1,8 +1,19 @@
 import { api } from "./axios";
 import type { Facility } from "@/types/facility";
+import type { User } from "@/types/user";
 
 export const getFacilities = async (): Promise<Facility[]> => {
   const { data } = await api.get<Facility[]>("/facilities");
+  return data;
+};
+
+export const getFacility = async (id: string): Promise<Facility> => {
+  const { data } = await api.get<Facility>(`/facilities/${id}`);
+  return data;
+};
+
+export const getFacilityUsers = async (id: string): Promise<User[]> => {
+  const { data } = await api.get<User[]>(`/facilities/${id}/users`);
   return data;
 };
 

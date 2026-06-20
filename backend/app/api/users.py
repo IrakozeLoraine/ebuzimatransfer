@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_session
 from app.core.permissions import require_roles, get_current_user
+from app.core.exceptions import ForbiddenError
 from app.services.user_service import UserService
 from app.services.audit_service import AuditService
 from app.schemas.user import UserCreate, UserUpdate, UserOut, UserStatusUpdate, UserAssignRequest
@@ -19,13 +20,12 @@ async def list_users(
     session: AsyncSession = Depends(get_session),
 ):
     svc = UserService(session)
-    user_roles = {r.name for r in current_user.roles}
-    if "SUPER_ADMIN" in user_roles:
-        return await svc.list_users(limit=limit, offset=offset)
-    primary = current_user.primary_facility_id
-    if primary is None:
-        return []
-    return await svc.list_users_for_facility(primary)
+    if "SUPER_ADMIN" in current_user.effective_roles:
+        users = await svc.list_users(limit=limit, offset=offset)
+    else:
+        active = current_user.active_facility_id
+        users = await svc.list_users_for_facility(active) if active else []
+    return [UserOut.from_user(u) for u in users]
 
 
 @router.post("", response_model=UserOut, status_code=201)
@@ -38,8 +38,7 @@ async def create_user(
     user = await svc.create_user(payload)
     await AuditService(session).log("CREATE_USER", "user", user_id=current_user.id, entity_id=user.id)
     await session.commit()
-    await session.refresh(user)
-    return user
+    return UserOut.from_user(user)
 
 
 @router.post("/assign", response_model=UserOut)
@@ -48,23 +47,21 @@ async def assign_user_to_facility(
     current_user=Depends(require_roles("FACILITY_ADMIN", "SUPER_ADMIN")),
     session: AsyncSession = Depends(get_session),
 ):
+    """Facility admins assign roles within their active facility."""
     svc = UserService(session)
-    user_roles = {r.name for r in current_user.roles}
-    facility_id = (
-        None if "SUPER_ADMIN" in user_roles else current_user.primary_facility_id
-    )
-    if facility_id is None and "SUPER_ADMIN" not in user_roles:
-        from app.core.exceptions import ForbiddenError
-        raise ForbiddenError("No facility associated with this admin")
-
-    if "SUPER_ADMIN" in user_roles:
+    if "SUPER_ADMIN" in current_user.effective_roles:
         from app.core.exceptions import ValidationError
         raise ValidationError("SUPER_ADMIN must provide facility_id via /assign/{facility_id}")
 
-    user = await svc.assign_to_facility(payload.medical_id, facility_id)
+    facility_id = current_user.active_facility_id
+    if facility_id is None:
+        from app.core.exceptions import ForbiddenError
+        raise ForbiddenError("No facility associated with this admin")
+
+    user = await svc.assign_roles(payload.medical_id, facility_id, payload.roles)
     await AuditService(session).log("ASSIGN_USER", "user", user_id=current_user.id, entity_id=user.id)
     await session.commit()
-    return user
+    return UserOut.from_user(user)
 
 
 @router.post("/assign/{facility_id}", response_model=UserOut)
@@ -75,10 +72,28 @@ async def assign_user_to_specific_facility(
     session: AsyncSession = Depends(get_session),
 ):
     svc = UserService(session)
-    user = await svc.assign_to_facility(payload.medical_id, facility_id)
+    user = await svc.assign_roles(payload.medical_id, facility_id, payload.roles)
     await AuditService(session).log("ASSIGN_USER", "user", user_id=current_user.id, entity_id=user.id)
     await session.commit()
-    return user
+    return UserOut.from_user(user)
+
+
+@router.delete("/{user_id}/facilities/{facility_id}", response_model=UserOut)
+async def remove_user_from_facility(
+    user_id: uuid.UUID,
+    facility_id: uuid.UUID,
+    current_user=Depends(require_roles("SUPER_ADMIN", "FACILITY_ADMIN")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Remove all of a user's role grants at a facility. Facility admins may only
+    act within their own active facility; super admins on any facility."""
+    if "SUPER_ADMIN" not in current_user.effective_roles and current_user.active_facility_id != facility_id:
+        raise ForbiddenError()
+    svc = UserService(session)
+    user = await svc.remove_from_facility(user_id, facility_id)
+    await AuditService(session).log("UNASSIGN_USER", "user", user_id=current_user.id, entity_id=user.id)
+    await session.commit()
+    return UserOut.from_user(user)
 
 
 @router.patch("/{user_id}/status", response_model=UserOut)
@@ -89,12 +104,13 @@ async def set_user_status(
     session: AsyncSession = Depends(get_session),
 ):
     svc = UserService(session)
-    user_roles = {r.name for r in current_user.roles}
-    acting_facility_id = None if "SUPER_ADMIN" in user_roles else current_user.primary_facility_id
+    acting_facility_id = (
+        None if "SUPER_ADMIN" in current_user.effective_roles else current_user.active_facility_id
+    )
     user = await svc.set_account_status(user_id, payload.account_status, acting_facility_id)
     await AuditService(session).log("SET_USER_STATUS", "user", user_id=current_user.id, entity_id=user_id)
     await session.commit()
-    return user
+    return UserOut.from_user(user)
 
 
 @router.get("/{user_id}", response_model=UserOut)
@@ -103,7 +119,8 @@ async def get_user(
     current_user=Depends(require_roles("SUPER_ADMIN", "FACILITY_ADMIN")),
     session: AsyncSession = Depends(get_session),
 ):
-    return await UserService(session).get_user(user_id)
+    user = await UserService(session).get_user(user_id)
+    return UserOut.from_user(user)
 
 
 @router.put("/{user_id}", response_model=UserOut)
@@ -117,7 +134,7 @@ async def update_user(
     user = await svc.update_user(user_id, payload)
     await AuditService(session).log("UPDATE_USER", "user", user_id=current_user.id, entity_id=user_id)
     await session.commit()
-    return user
+    return UserOut.from_user(user)
 
 
 @router.delete("/{user_id}")

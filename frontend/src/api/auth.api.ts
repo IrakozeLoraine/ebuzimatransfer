@@ -16,6 +16,11 @@ export const refreshToken = async (token: string): Promise<TokenResponse> => {
   return data;
 };
 
+export const switchFacility = async (facility_id: string): Promise<TokenResponse> => {
+  const { data } = await api.post<TokenResponse>("/auth/switch-facility", { facility_id });
+  return data;
+};
+
 export const logout = async (): Promise<void> => {
   await api.post("/auth/logout");
 };

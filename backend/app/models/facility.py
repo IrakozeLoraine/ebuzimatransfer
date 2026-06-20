@@ -14,7 +14,11 @@ class Facility(Base, UUIDMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     users: Mapped[list["User"]] = relationship(
-        "User", secondary="user_facilities", back_populates="facilities"
+        "User",
+        secondary="user_facility_roles",
+        primaryjoin="Facility.id == UserFacilityRole.facility_id",
+        secondaryjoin="User.id == UserFacilityRole.user_id",
+        viewonly=True,
     )
 
 

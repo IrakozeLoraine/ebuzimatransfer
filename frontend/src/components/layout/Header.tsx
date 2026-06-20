@@ -1,5 +1,5 @@
 import { useAuthStore } from "@/store/auth.store";
-import { useLogout } from "@/hooks/useAuth";
+import { useLogout, useSwitchFacility } from "@/hooks/useAuth";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -7,12 +7,16 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, Settings } from "lucide-react";
+import { Check, ChevronsUpDown, LogOut, Settings } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export const Header = () => {
     const user = useAuthStore((s) => s.user);
     const { mutate: doLogout } = useLogout();
+    const { mutate: doSwitch, isPending: switching } = useSwitchFacility();
+
+    const facilities = user?.facilities ?? [];
+    const activeFacility = facilities.find((f) => f.id === user?.active_facility_id);
 
     return (
         <header
@@ -22,7 +26,45 @@ export const Header = () => {
                 "border-b border-border/60",
             ].join(" ")}
         >
-            <div />
+            {facilities.length > 1 ? (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <button
+                            type="button"
+                            disabled={switching}
+                            className={[
+                                "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium",
+                                "transition-all duration-200 hover:bg-muted outline-none disabled:opacity-60",
+                            ].join(" ")}
+                        >
+                            <span className="text-muted-foreground">Facility:</span>
+                            <span className="text-foreground max-w-[18rem] truncate">
+                                {activeFacility?.name ?? "Select facility"}
+                            </span>
+                            <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
+                        </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-72">
+                        {facilities.map((f) => (
+                            <DropdownMenuItem
+                                key={f.id}
+                                className="flex items-center gap-2"
+                                onClick={() => f.id !== user?.active_facility_id && doSwitch(f.id)}
+                            >
+                                <Check
+                                    className={[
+                                        "h-4 w-4",
+                                        f.id === user?.active_facility_id ? "opacity-100" : "opacity-0",
+                                    ].join(" ")}
+                                />
+                                <span className="truncate">{f.name}</span>
+                            </DropdownMenuItem>
+                        ))}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            ) : (
+                <div />
+            )}
 
             <div className="flex items-center gap-1">
                 {/* <NotificationBell /> */}

@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/auth.store";
 import {
@@ -6,7 +6,10 @@ import {
   setPassword as apiSetPassword,
   getMe,
   logout as apiLogout,
+  switchFacility as apiSwitchFacility,
 } from "@/api/auth.api";
+import { toast } from "@/components/ui/toaster";
+import { getApiErrorMessage } from "@/utils/apiError";
 import type { LoginRequest, SetPasswordRequest } from "@/types/auth";
 
 export const useCompleteAuth = () => {
@@ -49,6 +52,36 @@ export const useLogout = () => {
     onSettled: () => {
       logout();
       navigate("/login");
+    },
+  });
+};
+
+export const useSwitchFacility = () => {
+  const { setTokens, setUser } = useAuthStore();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (facilityId: string) => {
+      const tokens = await apiSwitchFacility(facilityId);
+      if (tokens.access_token && tokens.refresh_token) {
+        setTokens(tokens.access_token, tokens.refresh_token);
+      }
+      const user = await getMe();
+      setUser(user);
+      return user;
+    },
+    onSuccess: (user) => {
+      // Data is facility-scoped — refetch everything for the new active facility.
+      qc.invalidateQueries();
+      const active = user.facilities.find((f) => f.id === user.active_facility_id);
+      toast({ variant: "success", title: `Switched to ${active?.name ?? "facility"}` });
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to switch facility",
+        description: getApiErrorMessage(error),
+      });
     },
   });
 };

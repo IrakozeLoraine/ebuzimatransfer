@@ -1,24 +1,9 @@
 import uuid
 import enum
-from sqlalchemy import Boolean, String, Table, Column, ForeignKey, Enum as SAEnum
+from sqlalchemy import Boolean, String, ForeignKey, UniqueConstraint, Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, UUIDMixin, TimestampMixin
-
-
-user_roles_table = Table(
-    "user_roles",
-    Base.metadata,
-    Column("user_id", UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
-    Column("role_id", UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
-)
-
-user_facilities_table = Table(
-    "user_facilities",
-    Base.metadata,
-    Column("user_id", UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
-    Column("facility_id", UUID(as_uuid=True), ForeignKey("facilities.id", ondelete="CASCADE"), primary_key=True),
-)
 
 
 class AccountStatus(str, enum.Enum):
@@ -31,7 +16,34 @@ class Role(Base, UUIDMixin):
     __tablename__ = "roles"
 
     name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
-    users: Mapped[list["User"]] = relationship("User", secondary=user_roles_table, back_populates="roles")
+
+
+class UserFacilityRole(Base, UUIDMixin):
+    """A grant of a single role to a user, scoped to a facility.
+
+    ``facility_id`` is nullable: a NULL facility represents a *global* grant
+    (e.g. SUPER_ADMIN, ambulance coordinator) that applies regardless of the
+    facility the user is acting in.
+    """
+
+    __tablename__ = "user_facility_roles"
+    __table_args__ = (
+        UniqueConstraint("user_id", "facility_id", "role_id", name="uq_user_facility_role"),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    facility_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("facilities.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    role_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), nullable=False
+    )
+
+    user: Mapped["User"] = relationship("User", back_populates="facility_roles")
+    role: Mapped[Role] = relationship("Role", lazy="joined")
+    facility: Mapped["Facility | None"] = relationship("Facility", lazy="joined")
 
 
 class User(Base, UUIDMixin, TimestampMixin):
@@ -48,11 +60,11 @@ class User(Base, UUIDMixin, TimestampMixin):
         String(30), nullable=False, default=AccountStatus.ACTIVE.value
     )
 
-    roles: Mapped[list[Role]] = relationship(
-        "Role", secondary=user_roles_table, back_populates="users", lazy="selectin"
-    )
-    facilities: Mapped[list["Facility"]] = relationship(
-        "Facility", secondary=user_facilities_table, back_populates="users", lazy="selectin"
+    facility_roles: Mapped[list[UserFacilityRole]] = relationship(
+        "UserFacilityRole",
+        back_populates="user",
+        lazy="selectin",
+        cascade="all, delete-orphan",
     )
     audit_logs: Mapped[list["AuditLog"]] = relationship("AuditLog", back_populates="user")
 
@@ -61,12 +73,28 @@ class User(Base, UUIDMixin, TimestampMixin):
         return f"{self.first_name} {self.last_name}"
 
     @property
-    def role_names(self) -> list[str]:
-        return [r.name for r in self.roles]
+    def facilities(self) -> list["Facility"]:
+        """Distinct facilities the user is a member of (has at least one role at)."""
+        seen: dict[uuid.UUID, "Facility"] = {}
+        for fr in self.facility_roles:
+            if fr.facility is not None and fr.facility.id not in seen:
+                seen[fr.facility.id] = fr.facility
+        return list(seen.values())
 
     @property
-    def primary_facility_id(self) -> uuid.UUID | None:
-        return self.facilities[0].id if self.facilities else None
+    def global_role_names(self) -> list[str]:
+        return sorted({fr.role.name for fr in self.facility_roles if fr.facility_id is None})
+
+    def roles_for_facility(self, facility_id: uuid.UUID | None) -> list[str]:
+        if facility_id is None:
+            return []
+        return sorted(
+            {fr.role.name for fr in self.facility_roles if fr.facility_id == facility_id}
+        )
+
+    def effective_role_names(self, active_facility_id: uuid.UUID | None) -> list[str]:
+        """Roles in effect for the active facility: global grants plus that facility's grants."""
+        return sorted(set(self.global_role_names) | set(self.roles_for_facility(active_facility_id)))
 
 
 # Avoid circular imports

@@ -6,8 +6,10 @@ import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { RoleGuard } from "@/components/layout/RoleGuard";
 import { AuditLogsPage } from "@/pages/admin/AuditLogsPage";
 import { FacilitiesPage } from "@/pages/admin/FacilitiesPage";
+import { FacilityDetailPage } from "@/pages/admin/facilities/FacilityDetailPage";
 import { ReportsPage } from "@/pages/reports/ReportsPage";
 import { UsersPage } from "@/pages/admin/UsersPage";
+import { UserDetailPage } from "@/pages/admin/users/UserDetailPage";
 
 const LoginPage = lazy(() =>
   import("@/pages/login/LoginPage").then((m) => ({ default: m.LoginPage }))
@@ -34,7 +36,9 @@ export const router = createBrowserRouter([
           { path: "/dashboard", element: withSuspense(<DashboardPage />) },
           { path: "/reports",          element: <RoleGuard roles={["SUPER_ADMIN"]}><ReportsPage /></RoleGuard> },
           { path: "/admin/users",      element: <RoleGuard roles={["SUPER_ADMIN","FACILITY_ADMIN"]}><UsersPage /></RoleGuard> },
+          { path: "/admin/users/:id",  element: <RoleGuard roles={["SUPER_ADMIN","FACILITY_ADMIN"]}><UserDetailPage /></RoleGuard> },
           { path: "/admin/facilities", element: <RoleGuard roles={["SUPER_ADMIN"]}><FacilitiesPage /></RoleGuard> },
+          { path: "/admin/facilities/:id", element: <RoleGuard roles={["SUPER_ADMIN"]}><FacilityDetailPage /></RoleGuard> },
           { path: "/admin/audit",      element: <RoleGuard roles={["SUPER_ADMIN"]}><AuditLogsPage /></RoleGuard> },
         ],
       },

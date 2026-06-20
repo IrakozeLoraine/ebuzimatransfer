@@ -126,7 +126,7 @@ export const ReportsPage = () => {
                   domain={[0, 100]}
                 />
                 <Tooltip
-                  formatter={(v: number) => [`${v.toFixed(1)}%`, "Occupancy"]}
+                  formatter={(v) => [`${Number(v).toFixed(1)}%`, "Occupancy"]}
                   contentStyle={{
                     background: "hsl(0 0% 100%)",
                     border: "1px solid hsl(210 20% 88%)",

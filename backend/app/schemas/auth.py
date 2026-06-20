@@ -1,3 +1,4 @@
+import uuid
 from typing import Optional
 from pydantic import BaseModel
 
@@ -5,6 +6,10 @@ from pydantic import BaseModel
 class LoginRequest(BaseModel):
     medical_id: str
     password: Optional[str] = None
+
+
+class SwitchFacilityRequest(BaseModel):
+    facility_id: uuid.UUID
 
 
 class TokenResponse(BaseModel):
