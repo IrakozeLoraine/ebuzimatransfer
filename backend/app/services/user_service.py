@@ -1,5 +1,6 @@
 from __future__ import annotations
 import uuid
+import secrets
 from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password
@@ -26,14 +27,17 @@ class UserService:
             raise ConflictError("Medical ID already registered", "MEDICAL_ID_EXISTS")
 
         # Identity only — roles are granted per-facility afterwards via assign_roles.
+        # New accounts have no admin-set password: they start in PASSWORD_RESET_ENABLED
+        # and the user sets their own password on first login. The placeholder hash is
+        # a random secret so the account can never be logged into until that happens.
         user = User(
             email=data.email,
             medical_id=data.medical_id,
             first_name=data.first_name,
             last_name=data.last_name,
             phone=data.phone,
-            password_hash=hash_password(data.password),
-            account_status=AccountStatus.ACTIVE.value,
+            password_hash=hash_password(secrets.token_urlsafe(32)),
+            account_status=AccountStatus.PASSWORD_RESET_ENABLED.value,
         )
         return await self.repo.create(user)
 
@@ -71,6 +75,11 @@ class UserService:
         await self.session.flush()
         return user
 
+    async def create_and_assign(self, data: UserCreate, facility_id: uuid.UUID, roles: List[str]) -> User:
+        """Create a new identity, then grant the given roles at the facility."""
+        user = await self.create_user(data)
+        return await self.assign_roles(user.medical_id, facility_id, roles)
+
     async def remove_from_facility(self, user_id: uuid.UUID, facility_id: uuid.UUID) -> User:
         user = await self.get_user(user_id)
         user.facility_roles = [fr for fr in user.facility_roles if fr.facility_id != facility_id]
@@ -93,8 +102,14 @@ class UserService:
         await self.session.flush()
         return user
 
-    async def update_user(self, user_id: uuid.UUID, data: UserUpdate) -> User:
+    async def update_user(self, user_id: uuid.UUID, data: UserUpdate, acting_facility_id: uuid.UUID | None = None) -> User:
         user = await self.get_user(user_id)
+
+        # Facility admins may only edit users who belong to their own facility.
+        if acting_facility_id is not None:
+            if acting_facility_id not in {f.id for f in user.facilities}:
+                raise ForbiddenError()
+
         fields_set = data.model_fields_set
         if "email" in fields_set:
             if data.email and data.email != user.email:

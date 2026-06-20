@@ -39,7 +39,7 @@ export const router = createBrowserRouter([
           { path: "/admin/users/:id",  element: <RoleGuard roles={["SUPER_ADMIN","FACILITY_ADMIN"]}><UserDetailPage /></RoleGuard> },
           { path: "/admin/facilities", element: <RoleGuard roles={["SUPER_ADMIN"]}><FacilitiesPage /></RoleGuard> },
           { path: "/admin/facilities/:id", element: <RoleGuard roles={["SUPER_ADMIN"]}><FacilityDetailPage /></RoleGuard> },
-          { path: "/admin/audit",      element: <RoleGuard roles={["SUPER_ADMIN"]}><AuditLogsPage /></RoleGuard> },
+          { path: "/admin/audit",      element: <RoleGuard roles={["SUPER_ADMIN","FACILITY_ADMIN"]}><AuditLogsPage /></RoleGuard> },
         ],
       },
     ],

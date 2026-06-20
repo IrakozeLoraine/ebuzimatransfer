@@ -23,7 +23,6 @@ export interface CreateUserPayload {
   first_name: string;
   last_name: string;
   phone?: string;
-  password: string;
 }
 
 export interface UpdateUserPayload {
@@ -36,6 +35,12 @@ export interface UpdateUserPayload {
 export interface AssignUserPayload {
   medical_id: string;
   roles: string[];
+}
+
+export interface CreateAssignPayload extends CreateUserPayload {
+  roles: string[];
+  /** Required for super admins; facility admins use their own active facility. */
+  facility_id?: string;
 }
 
 export interface UserStatusPayload {

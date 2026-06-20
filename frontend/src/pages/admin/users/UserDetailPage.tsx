@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Pencil, UserPlus, Trash2, ChevronRight, X } from "lucide-react";
+import { ArrowLeft, Pencil, UserPlus, Trash2, ChevronRight, X, KeyRound } from "lucide-react";
 import { useUser, useRemoveUserFromFacility } from "@/hooks/useUser";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuthStore } from "@/store/auth.store";
-import { deactivateUser } from "@/api/users.api";
+import { deactivateUser, updateUserAccountStatus } from "@/api/users.api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/molecules/ConfirmDialog";
@@ -20,19 +20,18 @@ export const UserDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { isSuperAdmin } = usePermissions();
+  const { isSuperAdmin, isFacilityAdmin } = usePermissions();
   const activeFacilityId = useAuthStore((s) => s.user?.active_facility_id);
   const { data: user, isLoading } = useUser(id);
   const [editing, setEditing] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const [toRemove, setToRemove] = useState<{ id: string; name: string } | null>(null);
 
   const { mutate: removeFromFacility } = useRemoveUserFromFacility({
     onSuccess: () => setToRemove(null),
   });
-  // Super admins can unassign from any facility; facility admins only their own.
-  const canRemoveFacility = (facilityId: string) => isSuperAdmin || activeFacilityId === facilityId;
 
   const { mutate: deactivate } = useMutation({
     mutationFn: () => deactivateUser(id!),
@@ -45,6 +44,23 @@ export const UserDetailPage = () => {
     onError: (error) =>
       toast({ variant: "destructive", title: "Failed to deactivate user", description: getApiErrorMessage(error) }),
   });
+
+  const { mutate: requestReset } = useMutation({
+    mutationFn: () => updateUserAccountStatus(id!, { account_status: "PASSWORD_RESET_ENABLED" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["user", id] });
+      qc.invalidateQueries({ queryKey: ["users"] });
+      toast({ variant: "success", title: "Password reset enabled" });
+      setConfirmReset(false);
+    },
+    onError: (error) =>
+      toast({ variant: "destructive", title: "Failed to enable password reset", description: getApiErrorMessage(error) }),
+  });
+
+  const canRequestReset = !isSuperAdmin && user?.is_active && user?.account_status !== "PASSWORD_RESET_ENABLED";
+  // Facility admins may edit identity of users in their own facility; super admins, anyone.
+  const userInActiveFacility = !!activeFacilityId && !!user?.facilities.some((f) => f.id === activeFacilityId);
+  const canEdit = isSuperAdmin || (isFacilityAdmin && userInActiveFacility);
 
   if (!isLoading && !user) {
     return (
@@ -87,7 +103,12 @@ export const UserDetailPage = () => {
             <Button variant="outline" onClick={() => setAssigning(true)}>
               <UserPlus className="mr-2 h-4 w-4" /> Assign to Facility
             </Button>
-            {isSuperAdmin && (
+            {canRequestReset && (
+              <Button variant="outline" onClick={() => setConfirmReset(true)}>
+                <KeyRound className="mr-2 h-4 w-4" /> Request Password Reset
+              </Button>
+            )}
+            {canEdit && (
               <Button variant="outline" onClick={() => setEditing(true)}>
                 <Pencil className="mr-2 h-4 w-4" /> Edit
               </Button>
@@ -105,7 +126,7 @@ export const UserDetailPage = () => {
         )}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className={`grid gap-6 ${isSuperAdmin ? 'lg:grid-cols-2' : 'lg:grid-cols-1'}`}>
         <Card className="p-6">
           <h2 className="text-sm font-semibold mb-4">Account</h2>
           <dl className="grid gap-5 sm:grid-cols-2">
@@ -117,58 +138,59 @@ export const UserDetailPage = () => {
             ))}
           </dl>
         </Card>
-
-        <Card className="p-6">
-          <h2 className="text-sm font-semibold mb-4">Roles by facility</h2>
-          {user && user.global_roles.length === 0 && user.facility_roles.length === 0 && (
-            <p className="text-sm text-muted-foreground">No roles assigned yet.</p>
-          )}
-          <div className="space-y-4">
-            {user && user.global_roles.length > 0 && (
-              <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Global</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {user.global_roles.map((name) => (
-                    <span key={name} className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${getRoleColor(name)}`}>
-                      {name.replace(/_/g, " ")}
-                    </span>
-                  ))}
-                </div>
-              </div>
+        {isSuperAdmin && (
+          <Card className="p-6">
+            <h2 className="text-sm font-semibold mb-4">Roles by facility</h2>
+            {user && user.global_roles.length === 0 && user.facility_roles.length === 0 && (
+              <p className="text-sm text-muted-foreground">No roles assigned yet.</p>
             )}
-            {user?.facility_roles.map((fr) => (
-              <div key={fr.facility.id}>
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <Link
-                    to={`/admin/facilities/${fr.facility.id}`}
-                    className="group inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                  >
-                    {fr.facility.name}
-                    <ChevronRight className="h-3 w-3 opacity-70 group-hover:translate-x-0.5 transition-transform" />
-                  </Link>
-                  {canRemoveFacility(fr.facility.id) && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 px-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => setToRemove({ id: fr.facility.id, name: fr.facility.name })}
+            <div className="space-y-4">
+              {user && user.global_roles.length > 0 && (
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Global</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {user.global_roles.map((name) => (
+                      <span key={name} className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${getRoleColor(name)}`}>
+                        {name.replace(/_/g, " ")}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {user?.facility_roles.map((fr) => (
+                <div key={fr.facility.id}>
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <Link
+                      to={`/admin/facilities/${fr.facility.id}`}
+                      className="group inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                     >
-                      <X className="h-3.5 w-3.5" />
-                      <span className="ml-1 text-xs">Remove</span>
-                    </Button>
-                  )}
+                      {fr.facility.name}
+                      <ChevronRight className="h-3 w-3 opacity-70 group-hover:translate-x-0.5 transition-transform" />
+                    </Link>
+                    {isSuperAdmin && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => setToRemove({ id: fr.facility.id, name: fr.facility.name })}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        <span className="ml-1 text-xs">Remove</span>
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {fr.roles.map((name) => (
+                      <span key={name} className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${getRoleColor(name)}`}>
+                        {name.replace(/_/g, " ")}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {fr.roles.map((name) => (
-                    <span key={name} className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${getRoleColor(name)}`}>
-                      {name.replace(/_/g, " ")}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
+              ))}
+            </div>
+          </Card>
+        )}
       </div>
 
       <EditUserDialog user={editing ? user ?? null : null} onClose={() => setEditing(false)} />
@@ -187,6 +209,15 @@ export const UserDetailPage = () => {
         destructive
         onConfirm={() => deactivate()}
         onCancel={() => setConfirmDeactivate(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmReset}
+        title="Request Password Reset"
+        description={`Allow ${user?.first_name} ${user?.last_name} to set a new password on next login?`}
+        confirmLabel="Enable Reset"
+        onConfirm={() => requestReset()}
+        onCancel={() => setConfirmReset(false)}
       />
 
       <ConfirmDialog

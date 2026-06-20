@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { isAxiosError } from "axios";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { UserPlus } from "lucide-react";
 import { assignUserToFacility, assignUserToSpecificFacility } from "@/api/users.api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +21,7 @@ import { toast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/utils/apiError";
 import { useFacilities } from "@/hooks/useFacilities";
 import { FACILITY_ASSIGNABLE_ROLES, getRoleColor } from "./constants";
+import { CreateAssignUserDialog } from "./CreateAssignUserDialog";
 
 interface Props {
   open: boolean;
@@ -42,6 +46,9 @@ export const AssignUserDialog = ({
   // Only the super-admin facility picker needs the list; skip the query otherwise.
   const needsFacilityPicker = isSuperAdmin && !fixedFacility;
   const { data: facilities = [], isLoading: loadingFacilities } = useFacilities();
+  // When the entered Medical ID doesn't match anyone, offer to create them.
+  const [notFound, setNotFound] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
 
   const { mutate: assign, isPending: assigning } = useMutation({
     mutationFn: (data: AssignUserFormValues) => {
@@ -62,6 +69,11 @@ export const AssignUserDialog = ({
       form.reset();
     },
     onError: (error) => {
+      // A 404 means no user has that Medical ID — surface the "create" path instead of an error toast.
+      if (isAxiosError(error) && error.response?.status === 404) {
+        setNotFound(true);
+        return;
+      }
       toast({
         variant: "destructive",
         title: "Failed to assign user",
@@ -71,6 +83,7 @@ export const AssignUserDialog = ({
   });
 
   const onSubmit = (data: AssignUserFormValues) => {
+    setNotFound(false);
     if (!fixedUser && (!data.medical_id || data.medical_id.trim().length < 3)) {
       form.setError("medical_id", { message: "Medical ID is required" });
       return;
@@ -80,6 +93,11 @@ export const AssignUserDialog = ({
       return;
     }
     assign(data);
+  };
+
+  const openCreate = () => {
+    setShowCreate(true);
+    onOpenChange(false);
   };
 
   const title = fixedFacility
@@ -97,7 +115,8 @@ export const AssignUserDialog = ({
     : "Enter the Medical ID of a registered user to add them to your facility.";
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) form.reset(); }}>
+    <>
+    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) { form.reset(); setNotFound(false); } }}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
@@ -172,6 +191,21 @@ export const AssignUserDialog = ({
             )}
           </div>
 
+          {notFound && !fixedUser && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
+              <p className="text-amber-800">No registered user has that Medical ID.</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2 border-amber-300 text-amber-800 hover:bg-amber-100"
+                onClick={openCreate}
+              >
+                <UserPlus className="mr-2 h-4 w-4" /> Create new user & assign
+              </Button>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={assigning}>{assigning ? "Assigning…" : "Assign User"}</Button>
@@ -179,5 +213,15 @@ export const AssignUserDialog = ({
         </form>
       </DialogContent>
     </Dialog>
+
+    <CreateAssignUserDialog
+      open={showCreate}
+      onOpenChange={setShowCreate}
+      isSuperAdmin={isSuperAdmin}
+      fixedFacility={fixedFacility}
+      initialMedicalId={form.getValues("medical_id") ?? ""}
+      initialRoles={form.getValues("roles") ?? []}
+    />
+    </>
   );
 };

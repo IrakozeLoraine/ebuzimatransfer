@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PasswordInput } from "@/components/atoms/PasswordInput";
 import { userSchema, type UserFormValues } from "@/schemas/user.schema";
 import { useCreateUser } from "@/hooks/useUser";
 
@@ -59,15 +58,9 @@ export const CreateUserDialog = ({ open, onOpenChange }: Props) => {
               <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>
             )}
           </div>
-          <div className="space-y-1.5">
-            <Label>Password</Label>
-            <PasswordInput {...form.register("password")} />
-            {form.formState.errors.password && (
-              <p className="text-xs text-destructive">{form.formState.errors.password.message}</p>
-            )}
-          </div>
           <p className="text-xs text-muted-foreground">
-            Roles are assigned per facility after the account is created, via “Assign to Facility”.
+            Roles are assigned per facility
+            afterwards via “Assign to Facility”.
           </p>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

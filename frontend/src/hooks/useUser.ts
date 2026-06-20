@@ -64,7 +64,6 @@ export const useCreateUser = ({ onClose }: { onClose: () => void }) => {
                 first_name: data.first_name,
                 last_name: data.last_name,
                 phone: data.phone,
-                password: data.password,
             }),
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ["users"] });

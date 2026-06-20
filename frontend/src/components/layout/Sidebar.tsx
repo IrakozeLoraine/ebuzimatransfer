@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Package,
   FileText,
+  Truck,
   BarChart3,
   Users,
   Building2,
@@ -20,6 +21,7 @@ export const Sidebar = () => {
   const { pathname } = useLocation();
   const {
     isSuperAdmin,
+    isFacilityAdmin,
     canViewReports,
     canManageFacilities,
     canViewAudit,
@@ -28,15 +30,16 @@ export const Sidebar = () => {
 
   const mainLinks = [
     navItem("/dashboard", "Dashboard", LayoutDashboard),
-    ...(isSuperAdmin
+    ...(isSuperAdmin || isFacilityAdmin
       ? [navItem("/capacity", "Capacity", Package)]
       : []),
     navItem("/referrals", "Referrals", FileText),
+    ...(isSuperAdmin ? [navItem("/transport", "Transport", Truck)] : []),
     ...(canViewReports ? [navItem("/reports", "Reports", BarChart3)] : []),
   ];
 
   const adminLinks = [
-    ...(isSuperAdmin ? [navItem("/admin/users", "Users", Users)] : []),
+    ...(isSuperAdmin || isFacilityAdmin ? [navItem("/admin/users", "Users", Users)] : []),
     ...(canManageFacilities ? [navItem("/admin/facilities", "Facilities", Building2)] : []),
     ...(canViewAudit ? [navItem("/admin/audit", "Audit Logs", ClipboardList)] : []),
   ];

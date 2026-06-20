@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Pencil, Building2, Users, UserPlus, X } from "lucide-react";
+import { ArrowLeft, Pencil, Building2, Users, UserPlus, X, UserX, UserCheck } from "lucide-react";
 import { useFacility, useFacilityUsers } from "@/hooks/useFacilities";
 import { useRemoveUserFromFacility } from "@/hooks/useUser";
 import { Button } from "@/components/ui/button";
@@ -69,11 +69,21 @@ export const FacilityDetailPage = () => {
     },
     {
       header: "Status",
-      accessor: (u: User) => (
-        <span className={`text-xs font-medium ${u.is_active ? "text-emerald-600" : "text-muted-foreground"}`}>
-          {ACCOUNT_STATUS_LABELS[u.account_status] ?? u.account_status}
-        </span>
-      ),
+      accessor: (u: User) => {
+        const label = ACCOUNT_STATUS_LABELS[u.account_status] ?? u.account_status;
+        const colorClass =
+          u.account_status === "ACTIVE"
+            ? "text-emerald-600"
+            : u.account_status === "PASSWORD_RESET_ENABLED"
+              ? "text-amber-600"
+              : "text-muted-foreground";
+        return (
+          <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${colorClass}`}>
+            {u.is_active ? <UserCheck className="h-3.5 w-3.5" /> : <UserX className="h-3.5 w-3.5" />}
+            {label}
+          </span>
+        );
+      },
     },
     {
       header: "",
@@ -105,26 +115,26 @@ export const FacilityDetailPage = () => {
 
   const infoRows: { label: string; value: React.ReactNode }[] = facility
     ? [
-        {
-          label: "Type",
-          value: (
-            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${TYPE_BADGES[facility.type] ?? "bg-muted text-muted-foreground"}`}>
-              {facilityTypeLabel(facility.type)}
-            </span>
-          ),
-        },
-        { label: "Province", value: facility.province ?? "—" },
-        { label: "District", value: facility.district ?? "—" },
-        { label: "Location", value: facility.location ?? "—" },
-        {
-          label: "Status",
-          value: (
-            <span className={facility.is_active ? "text-emerald-600 font-medium" : "text-muted-foreground font-medium"}>
-              {facility.is_active ? "Active" : "Inactive"}
-            </span>
-          ),
-        },
-      ]
+      {
+        label: "Type",
+        value: (
+          <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${TYPE_BADGES[facility.type] ?? "bg-muted text-muted-foreground"}`}>
+            {facilityTypeLabel(facility.type)}
+          </span>
+        ),
+      },
+      { label: "Province", value: facility.province ?? "—" },
+      { label: "District", value: facility.district ?? "—" },
+      { label: "Location", value: facility.location ?? "—" },
+      {
+        label: "Status",
+        value: (
+          <span className={facility.is_active ? "text-emerald-600 font-medium" : "text-muted-foreground font-medium"}>
+            {facility.is_active ? "Active" : "Inactive"}
+          </span>
+        ),
+      },
+    ]
     : [];
 
   return (

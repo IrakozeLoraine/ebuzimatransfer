@@ -99,6 +99,7 @@ export const UsersPage = () => {
     onView: (u) => navigate(`/admin/users/${u.id}`),
     onEdit: setEditing,
     onDeactivate: setToDeactivate,
+    onResetPassword: setStatusTarget,
   });
 
   return (

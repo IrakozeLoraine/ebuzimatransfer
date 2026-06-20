@@ -1,12 +1,12 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import select, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.db.session import get_session
-from app.core.permissions import require_role
+from app.core.permissions import require_roles
 from app.models.audit_log import AuditLog
-from app.models.user import User
+from app.models.user import User, UserFacilityRole
 from app.models.facility import Facility
 import uuid
 
@@ -30,7 +30,7 @@ async def list_audit_logs(
     user_id: Optional[uuid.UUID] = Query(None),
     limit: int = Query(100, le=500),
     offset: int = Query(0),
-    current_user=Depends(require_role("SUPER_ADMIN")),
+    current_user=Depends(require_roles("SUPER_ADMIN", "FACILITY_ADMIN")),
     session: AsyncSession = Depends(get_session),
 ):
     stmt = (
@@ -38,6 +38,24 @@ async def list_audit_logs(
         .options(selectinload(AuditLog.user))
         .order_by(AuditLog.created_at.desc())
     )
+
+    # Facility admins only see activity tied to their own facility: actions performed
+    # by its members, actions on those members, or on the facility itself.
+    if "SUPER_ADMIN" not in current_user.effective_roles:
+        facility_id = current_user.active_facility_id
+        if facility_id is None:
+            return []
+        member_ids = select(UserFacilityRole.user_id).where(
+            UserFacilityRole.facility_id == facility_id
+        )
+        stmt = stmt.where(
+            or_(
+                AuditLog.user_id.in_(member_ids),
+                and_(AuditLog.entity_type == "user", AuditLog.entity_id.in_(member_ids)),
+                and_(AuditLog.entity_type == "facility", AuditLog.entity_id == facility_id),
+            )
+        )
+
     if entity_type:
         stmt = stmt.where(AuditLog.entity_type == entity_type)
     if action:

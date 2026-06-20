@@ -5,6 +5,7 @@ import { DataTable } from "@/components/organisms/DataTable";
 import { TableToolbar, ALL_FILTER } from "@/components/molecules/TableToolbar";
 import { formatDateTime } from "@/utils/format";
 import { cn } from "@/utils/cn";
+import { usePermissions } from "@/hooks/usePermissions";
 import { AuditLog } from "@/types/audit";
 
 const ACTION_COLORS: Record<string, string> = {
@@ -23,6 +24,7 @@ const getActionColor = (action: string): string => {
 };
 
 export const AuditLogsPage = () => {
+  const { isSuperAdmin } = usePermissions();
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState(ALL_FILTER);
   const [entityTypeFilter, setEntityTypeFilter] = useState(ALL_FILTER);
@@ -136,7 +138,7 @@ export const AuditLogsPage = () => {
       <div>
         <h1 className="text-2xl font-bold">Audit Logs</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Complete record of system activity
+          {isSuperAdmin ? "Complete record of system activity" : "Activity at your facility"}
         </p>
       </div>
 

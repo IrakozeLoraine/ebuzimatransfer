@@ -1,5 +1,5 @@
 import { api } from "./axios";
-import type { User, CreateUserPayload, UpdateUserPayload, AssignUserPayload, UserStatusPayload } from "@/types/user";
+import type { User, CreateUserPayload, UpdateUserPayload, AssignUserPayload, CreateAssignPayload, UserStatusPayload } from "@/types/user";
 
 export const getUsers = async (): Promise<User[]> => {
   const { data } = await api.get<User[]>("/users");
@@ -13,6 +13,11 @@ export const getUser = async (id: string): Promise<User> => {
 
 export const createUser = async (payload: CreateUserPayload): Promise<User> => {
   const { data } = await api.post<User>("/users", payload);
+  return data;
+};
+
+export const createAndAssignUser = async (payload: CreateAssignPayload): Promise<User> => {
+  const { data } = await api.post<User>("/users/create-and-assign", payload);
   return data;
 };
 

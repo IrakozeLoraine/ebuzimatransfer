@@ -1,4 +1,4 @@
-import { Eye, Pencil, Trash2, UserCheck, UserX } from "lucide-react";
+import { Eye, Pencil, Trash2, UserCheck, UserX, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Column } from "@/components/organisms/DataTable";
 import type { User } from "@/types/user";
@@ -10,6 +10,7 @@ interface ColumnActions {
   onView: (user: User) => void;
   onEdit: (user: User) => void;
   onDeactivate: (user: User) => void;
+  onResetPassword: (user: User) => void;
 }
 
 export const getUserColumns = ({
@@ -17,6 +18,7 @@ export const getUserColumns = ({
   onView,
   onEdit,
   onDeactivate,
+  onResetPassword,
 }: ColumnActions): Column<User>[] => [
   {
     header: "Name",
@@ -97,6 +99,17 @@ export const getUserColumns = ({
             onClick={() => onEdit(u)}
           >
             <Pencil className="h-4 w-4" />
+          </Button>
+        )}
+        {!isSuperAdmin && u.is_active && u.account_status !== "PASSWORD_RESET_ENABLED" && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-muted-foreground hover:text-foreground"
+            title="Request password reset"
+            onClick={() => onResetPassword(u)}
+          >
+            <KeyRound className="h-4 w-4" />
           </Button>
         )}
         {isSuperAdmin && u.is_active && (

@@ -50,8 +50,29 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    """Identity only — roles are granted per-facility via the assign endpoints."""
-    password: str
+    """Identity only. No password — new users start in PASSWORD_RESET_ENABLED and
+    set their own password on first login. Roles are granted per-facility via assign."""
+    pass
+
+
+class UserCreateAssign(UserCreate):
+    """Create a new user and grant them roles at a facility in one step.
+
+    Used when an admin tries to assign someone who isn't registered yet.
+    ``facility_id`` is required for super admins; facility admins use their own.
+    """
+    roles: List[str]
+    facility_id: Optional[uuid.UUID] = None
+
+    @field_validator("roles")
+    @classmethod
+    def validate_roles(cls, v: List[str]) -> List[str]:
+        if not v:
+            raise ValueError("At least one role is required")
+        for role in v:
+            if role not in VALID_ROLES:
+                raise ValueError(f"Invalid role: {role}")
+        return v
 
 
 class UserUpdate(BaseModel):
