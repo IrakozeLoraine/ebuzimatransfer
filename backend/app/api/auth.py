@@ -4,8 +4,9 @@ from app.db.session import get_session
 from app.core.permissions import get_current_user
 from app.services.auth_service import AuthService
 from app.services.audit_service import AuditService
+from app.services.user_service import UserService
 from app.schemas.auth import LoginRequest, TokenResponse, RefreshRequest, ChangePasswordRequest, SetPasswordRequest, SwitchFacilityRequest
-from app.schemas.user import UserMe
+from app.schemas.user import UserMe, ProfileUpdate, UserUpdate
 from app.dependencies import get_client_ip
 
 router = APIRouter()
@@ -81,4 +82,23 @@ async def change_password(
 
 @router.get("/me", response_model=UserMe)
 async def me(current_user=Depends(get_current_user)):
+    return UserMe.from_user(current_user)
+
+
+@router.put("/me", response_model=UserMe)
+async def update_me(
+    payload: ProfileUpdate,
+    current_user=Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Self-service update of the signed-in user's own contact details."""
+    svc = UserService(session)
+    # Only the fields actually sent are applied; reuse update_user with no
+    # facility restriction since a user is editing themselves.
+    update = UserUpdate(**payload.model_dump(exclude_unset=True))
+    await svc.update_user(current_user.id, update, acting_facility_id=None)
+    await AuditService(session).log(
+        "UPDATE_PROFILE", "user", user_id=current_user.id, entity_id=current_user.id
+    )
+    await session.commit()
     return UserMe.from_user(current_user)

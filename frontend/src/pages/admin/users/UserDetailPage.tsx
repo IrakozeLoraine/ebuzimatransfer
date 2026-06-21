@@ -72,7 +72,7 @@ export const UserDetailPage = () => {
 
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-primary text-lg font-bold text-primary">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-r-0 border-primary text-lg font-bold text-primary">
             {user?.first_name?.[0]}{user?.last_name?.[0]}
           </div>
           <div>

@@ -39,6 +39,7 @@ class UserBase(BaseModel):
     first_name: str
     last_name: str
     phone: Optional[str] = None
+    location: Optional[str] = None
     medical_id: str
 
     @field_validator("email", mode="before")
@@ -79,7 +80,22 @@ class UserUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     phone: Optional[str] = None
+    location: Optional[str] = None
     email: Optional[EmailStr] = None
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def empty_email_to_none(cls, v):
+        if v == "":
+            return None
+        return v
+
+
+class ProfileUpdate(BaseModel):
+    """Self-service profile update: a user may change their own contact details."""
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    location: Optional[str] = None
 
     @field_validator("email", mode="before")
     @classmethod
@@ -153,6 +169,7 @@ class UserOut(UserBase):
             first_name=user.first_name,
             last_name=user.last_name,
             phone=user.phone,
+            location=user.location,
             is_active=user.is_active,
             account_status=user.account_status,
             facility_roles=_facility_roles(user),
@@ -168,6 +185,8 @@ class UserMe(BaseModel):
     medical_id: str
     first_name: str
     last_name: str
+    phone: Optional[str] = None
+    location: Optional[str] = None
     roles: List[str]
     active_facility_id: Optional[uuid.UUID] = None
     facilities: List[FacilityRef] = []
@@ -188,6 +207,8 @@ class UserMe(BaseModel):
             medical_id=user.medical_id,
             first_name=user.first_name,
             last_name=user.last_name,
+            phone=user.phone,
+            location=user.location,
             roles=roles,
             active_facility_id=active_facility_id,
             facilities=[FacilityRef(id=f.id, name=f.name) for f in user.facilities],

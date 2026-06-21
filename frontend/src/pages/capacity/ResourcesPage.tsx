@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -38,8 +39,12 @@ export const ResourcesPage = () => {
   const { isSuperAdmin, isFacilityAdmin, canManageResources, canAssignResources } = usePermissions();
   const user = useAuthStore((s) => s.user);
 
+  const [searchParams] = useSearchParams();
+  const initialStatus = searchParams.get("status");
   const [scope, setScope] = useState<"ALL" | "UNASSIGNED">("ALL");
-  const [filter, setFilter] = useState<string>("ALL");
+  const [filter, setFilter] = useState<string>(
+    initialStatus && STATUS_OPTIONS.includes(initialStatus as ResourceStatus) ? initialStatus : "ALL"
+  );
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [assignTarget, setAssignTarget] = useState<Resource | null>(null);

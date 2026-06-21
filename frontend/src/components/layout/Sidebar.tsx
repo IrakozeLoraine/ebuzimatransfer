@@ -33,7 +33,7 @@ export const Sidebar = () => {
 
   const mainLinks = [
     navItem("/dashboard", "Dashboard", LayoutDashboard),
-    ...(canViewResources ? [navItem("/find-resources", "Clinical Resource Lookup", Search)] : []),
+    ...(canViewResources ? [navItem("/find-resources", "Resource Lookup", Search)] : []),
     ...(canViewResources ? [navItem("/resources", "Resources", Boxes)] : []),
     navItem("/referrals", "Referrals", FileText),
     ...(isSuperAdmin ? [navItem("/transport", "Transport", Truck)] : []),

@@ -58,6 +58,11 @@ const FindResourcesPage = lazy(() =>
     default: m.FindResourcesPage,
   }))
 );
+const ProfilePage = lazy(() =>
+  import("@/pages/profile/ProfilePage").then((m) => ({
+    default: m.ProfilePage,
+  }))
+);
 
 const withSuspense = (element: React.ReactNode) => (
   <Suspense fallback={null}>{element}</Suspense>
@@ -73,6 +78,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="/dashboard" replace /> },
           { path: "/dashboard", element: withSuspense(<DashboardPage />) },
+          { path: "/profile", element: withSuspense(<ProfilePage />) },
           {
             path: "/resources",
             element: (

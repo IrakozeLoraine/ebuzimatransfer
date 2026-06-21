@@ -120,7 +120,7 @@ export const FindResourcesPage = () => {
               </div>
               <ul>
                 {group.rows.map((r) => (
-                  <li key={r.id} className="flex items-center justify-between py-2 border-b border-b-neutral-200 last:border-0">
+                  <li key={r.id} className="flex items-center justify-between py-2 border-b border-b-neutral-100 last:border-0">
                     <div>
                       <p className="text-sm font-medium">{r.resource_name}</p>
                       <p className="font-mono text-xs text-muted-foreground">

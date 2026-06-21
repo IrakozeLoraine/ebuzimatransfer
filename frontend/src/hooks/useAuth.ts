@@ -7,10 +7,12 @@ import {
   getMe,
   logout as apiLogout,
   switchFacility as apiSwitchFacility,
+  updateProfile as apiUpdateProfile,
+  changePassword as apiChangePassword,
 } from "@/api/auth.api";
 import { toast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/utils/apiError";
-import type { LoginRequest, SetPasswordRequest } from "@/types/auth";
+import type { LoginRequest, SetPasswordRequest, UpdateProfilePayload } from "@/types/auth";
 
 export const useCompleteAuth = () => {
   const { setTokens, setUser } = useAuthStore();
@@ -85,6 +87,28 @@ export const useSwitchFacility = () => {
     },
   });
 };
+
+export const useUpdateProfile = () => {
+  const { setUser } = useAuthStore();
+  return useMutation({
+    mutationFn: (payload: UpdateProfilePayload) => apiUpdateProfile(payload),
+    onSuccess: (user) => {
+      setUser(user);
+      toast({ variant: "success", title: "Profile updated" });
+    },
+    onError: (error) =>
+      toast({ variant: "destructive", title: "Could not update profile", description: getApiErrorMessage(error) }),
+  });
+};
+
+export const useChangePassword = () =>
+  useMutation({
+    mutationFn: ({ currentPassword, newPassword }: { currentPassword: string; newPassword: string }) =>
+      apiChangePassword(currentPassword, newPassword),
+    onSuccess: () => toast({ variant: "success", title: "Password updated" }),
+    onError: (error) =>
+      toast({ variant: "destructive", title: "Could not change password", description: getApiErrorMessage(error) }),
+  });
 
 export const useCurrentUser = () => {
   const { isAuthenticated, setUser } = useAuthStore();
