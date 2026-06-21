@@ -1,6 +1,6 @@
 export const FACILITY_TYPES: { value: string; label: string }[] = [
   { value: "NRH_UTH", label: "National Referral and University Teaching Hospitals" },
-  { value: "LEVEL_TWO", label: "Level Two Teaching Hospitals" },
+  { value: "LEVEL_TWO", label: "Provincial & Referral Hospitals" },
   { value: "DISTRICT", label: "District Hospitals" },
   { value: "HEALTH_CENTER_POST", label: "Health Centers & Health Posts" },
 ];

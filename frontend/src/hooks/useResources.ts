@@ -6,6 +6,8 @@ import {
   assignResource,
   importResources,
   getResourceUsage,
+  reserveResource,
+  getAvailableResources,
 } from "@/api/resources.api";
 import { getCapacity } from "@/api/reports.api";
 import {
@@ -23,7 +25,9 @@ export const useCapacity = () =>
 
 const invalidateResourceData = (qc: ReturnType<typeof useQueryClient>) => {
   qc.invalidateQueries({ queryKey: ["resources"] });
+  qc.invalidateQueries({ queryKey: ["resources-available"] });
   qc.invalidateQueries({ queryKey: ["capacity"] });
+  qc.invalidateQueries({ queryKey: ["dashboard-activity"] });
 };
 
 export const useCreateResource = () => {
@@ -66,3 +70,18 @@ export const useResourceUsage = (id: string | null) =>
     queryFn: () => getResourceUsage(id as string),
     enabled: !!id,
   });
+
+export const useAvailableResources = (unitId: string | null) =>
+  useQuery({
+    queryKey: ["resources-available", unitId],
+    queryFn: () => getAvailableResources(unitId ?? undefined),
+  });
+
+export const useReserveResource = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, plannedAdmissionTime }: { id: string; plannedAdmissionTime?: string }) =>
+      reserveResource(id, plannedAdmissionTime),
+    onSuccess: () => invalidateResourceData(qc),
+  });
+};

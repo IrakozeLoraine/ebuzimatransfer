@@ -52,6 +52,20 @@ class ResourceRepository(BaseRepository[Resource]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_available(self, unit_id: Optional[uuid.UUID] = None) -> List[Resource]:
+        """Available resources that belong to a facility, across all facilities
+        (for the inter-facility transfer search). Optionally filtered by unit."""
+        stmt = (
+            select(Resource)
+            .options(selectinload(Resource.unit), selectinload(Resource.facility))
+            .where(Resource.status == ResourceStatus.AVAILABLE, Resource.facility_id.isnot(None))
+            .order_by(Resource.resource_name)
+        )
+        if unit_id is not None:
+            stmt = stmt.where(Resource.unit_id == unit_id)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def reservations_for(self, resource_id: uuid.UUID) -> List[tuple[ResourceReservation, User]]:
         result = await self.session.execute(
             select(ResourceReservation, User)
@@ -61,14 +75,18 @@ class ResourceRepository(BaseRepository[Resource]):
         )
         return [(row[0], row[1]) for row in result.all()]
 
-    async def capacity_summary_raw(self) -> List[dict]:
-        """Aggregate assigned resources by facility + unit type with per-status counts."""
+    async def capacity_summary_raw(
+        self, facility_ids: Optional[Sequence[uuid.UUID]] = None
+    ) -> List[dict]:
+        """Aggregate assigned resources by facility + clinical unit with per-status
+        counts. ``facility_ids`` restricts the summary to those facilities (used to
+        scope a facility admin to their own facility)."""
         s = ResourceStatus
         stmt = (
             select(
                 Facility.id.label("facility_id"),
                 Facility.name.label("facility"),
-                Unit.type.label("unit_type"),
+                Unit.name.label("unit_type"),
                 func.coalesce(func.sum(Resource.quantity), 0).label("total"),
                 func.coalesce(
                     func.sum(Resource.quantity).filter(Resource.status == s.AVAILABLE), 0
@@ -84,9 +102,39 @@ class ResourceRepository(BaseRepository[Resource]):
                 ).label("out_of_service"),
             )
             .join(Unit, Resource.unit_id == Unit.id)
-            .join(Facility, Unit.facility_id == Facility.id)
-            .group_by(Facility.id, Facility.name, Unit.type)
-            .order_by(Facility.name, Unit.type)
+            .join(Facility, Resource.facility_id == Facility.id)
+            .group_by(Facility.id, Facility.name, Unit.name)
+            .order_by(Facility.name, Unit.name)
         )
+        if facility_ids is not None:
+            stmt = stmt.where(Resource.facility_id.in_(list(facility_ids)))
+        result = await self.session.execute(stmt)
+        return [dict(row._mapping) for row in result.all()]
+
+    async def recent_reservations(
+        self, facility_ids: Optional[Sequence[uuid.UUID]] = None, limit: int = 20
+    ) -> List[dict]:
+        """Recent reservation/transfer interactions, newest first. ``facility_ids``
+        restricts to interactions on resources owned by those facilities."""
+        stmt = (
+            select(
+                ResourceReservation.id.label("id"),
+                ResourceReservation.created_at.label("created_at"),
+                ResourceReservation.planned_admission_time.label("planned_admission_time"),
+                Resource.resource_name.label("resource_name"),
+                Facility.name.label("facility_name"),
+                Unit.name.label("unit_name"),
+                User.first_name.label("first_name"),
+                User.last_name.label("last_name"),
+            )
+            .join(Resource, ResourceReservation.resource_id == Resource.id)
+            .join(User, ResourceReservation.reserved_by == User.id)
+            .outerjoin(Facility, Resource.facility_id == Facility.id)
+            .outerjoin(Unit, Resource.unit_id == Unit.id)
+            .order_by(ResourceReservation.created_at.desc())
+            .limit(limit)
+        )
+        if facility_ids is not None:
+            stmt = stmt.where(Resource.facility_id.in_(list(facility_ids)))
         result = await self.session.execute(stmt)
         return [dict(row._mapping) for row in result.all()]

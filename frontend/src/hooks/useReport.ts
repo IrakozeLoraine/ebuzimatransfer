@@ -1,9 +1,9 @@
-import { getDashboard, getOccupancyReport } from "@/api/reports.api";
+import { getOccupancyReport, getDashboardActivity } from "@/api/reports.api";
 import { useQuery } from "@tanstack/react-query";
 
-export const useGetDashboard = () => useQuery({
-    queryKey: ["dashboard"],
-    queryFn: getDashboard,
+export const useDashboardActivity = () => useQuery({
+    queryKey: ["dashboard-activity"],
+    queryFn: getDashboardActivity,
     refetchInterval: 30_000,
 });
 

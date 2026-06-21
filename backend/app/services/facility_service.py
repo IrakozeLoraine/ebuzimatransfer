@@ -4,9 +4,8 @@ from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundError
 from app.models.facility import Facility
-from app.models.unit import Unit, Resource
-from app.repositories.facility_repository import FacilityRepository, UnitRepository
-from app.schemas.facility import FacilityCreate, FacilityUpdate, UnitCreate, UnitUpdate
+from app.repositories.facility_repository import FacilityRepository
+from app.schemas.facility import FacilityCreate, FacilityUpdate
 
 
 class FacilityService:
@@ -38,42 +37,3 @@ class FacilityService:
         f = await self.get(facility_id)
         f.is_active = False
         await self.session.flush()
-
-
-class UnitService:
-    def __init__(self, session: AsyncSession):
-        self.repo = UnitRepository(session)
-        self.session = session
-
-    async def create(self, data: UnitCreate) -> Unit:
-        unit = Unit(**data.model_dump())
-        return await self.repo.create(unit)
-
-    async def get(self, unit_id: uuid.UUID) -> Unit:
-        u = await self.repo.get_by_id(unit_id)
-        if not u:
-            raise NotFoundError("Unit")
-        return u
-
-    async def update(self, unit_id: uuid.UUID, data: UnitUpdate) -> Unit:
-        unit = await self.get(unit_id)
-        for field, value in data.model_dump(exclude_none=True).items():
-            setattr(unit, field, value)
-        await self.session.flush()
-        return unit
-
-    async def delete(self, unit_id: uuid.UUID) -> None:
-        unit = await self.get(unit_id)
-        await self.repo.delete(unit)
-
-    async def set_resource(self, unit_id: uuid.UUID, resource_type: str, quantity: int) -> Resource:
-        unit = await self.get(unit_id)
-        fac_repo = FacilityRepository(self.session)
-        resource = await self.repo.get_resource(unit_id, resource_type)
-        if resource:
-            resource.quantity = quantity
-        else:
-            resource = Resource(unit_id=unit_id, resource_type=resource_type, quantity=quantity)
-            self.session.add(resource)
-        await self.session.flush()
-        return resource

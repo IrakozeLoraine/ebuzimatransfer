@@ -45,3 +45,20 @@ export const getResourceUsage = async (id: string): Promise<ResourceUsage> => {
   const { data } = await api.get<ResourceUsage>(`/resources/${id}/usage`);
   return data;
 };
+
+export const getAvailableResources = async (unitId?: string): Promise<Resource[]> => {
+  const { data } = await api.get<Resource[]>("/resources/available", {
+    params: unitId ? { unit_id: unitId } : {},
+  });
+  return data;
+};
+
+export const reserveResource = async (
+  id: string,
+  plannedAdmissionTime?: string
+): Promise<Resource> => {
+  const { data } = await api.post<Resource>(`/resources/${id}/reserve`, {
+    planned_admission_time: plannedAdmissionTime ?? null,
+  });
+  return data;
+};

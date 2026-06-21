@@ -20,10 +20,6 @@ class Facility(Base, UUIDMixin, TimestampMixin):
         secondaryjoin="User.id == UserFacilityRole.user_id",
         viewonly=True,
     )
-    units: Mapped[list["Unit"]] = relationship(
-        "Unit", back_populates="facility", cascade="all, delete-orphan"
-    )
 
 
 from app.models.user import User
-from app.models.unit import Unit

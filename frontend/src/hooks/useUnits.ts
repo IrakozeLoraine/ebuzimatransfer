@@ -5,10 +5,21 @@ import {
   updateUnit,
   deleteUnit
 } from "@/api/units.api";
-import { CreateUnitPayload, UpdateUnitPayload } from "@/types/unit";
+import { CreateUnitPayload, UnitListParams, UpdateUnitPayload } from "@/types/unit";
 
-export const useUnits = () =>
-  useQuery({ queryKey: ["units"], queryFn: getUnits });
+export const useUnits = (
+  params: UnitListParams = {},
+  options: { enabled?: boolean } = {}
+) =>
+  useQuery({
+    queryKey: ["units", params],
+    queryFn: () => getUnits(params),
+    enabled: options.enabled ?? true,
+  });
+
+/** Backwards-compatible alias for callers that just want the full catalog. */
+export const useGetAllUnits = ({ enabled = true }: { enabled?: boolean }) =>
+  useUnits({}, { enabled });
 
 export const useCreateUnit = () => {
   const qc = useQueryClient();
@@ -34,9 +45,3 @@ export const useDeleteUnit = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["units"] }),
   });
 };
-
-export const useGetAllUnits = ({ enabled = true }: { enabled?: boolean }) => useQuery({
-  queryKey: ["units"],
-  queryFn: getUnits,
-  enabled,
-});

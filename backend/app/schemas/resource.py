@@ -51,6 +51,12 @@ class ResourceReservationCreate(BaseModel):
     planned_admission_time: Optional[str] = None
 
 
+class ResourceReserveRequest(BaseModel):
+    """Initiate a transfer request: reserve an available resource at another
+    facility for one of the requester's patients."""
+    planned_admission_time: Optional[datetime] = None
+
+
 class ReservationOut(BaseModel):
     id: uuid.UUID
     reserved_by: uuid.UUID
@@ -74,6 +80,19 @@ class ResourceImportError(BaseModel):
 class ResourceImportResult(BaseModel):
     created: int
     errors: List[ResourceImportError] = []
+
+
+class DashboardActivityRow(BaseModel):
+    """A reservation/transfer interaction involving a facility's resource."""
+    id: uuid.UUID
+    resource_name: str
+    facility_name: Optional[str] = None
+    unit_name: Optional[str] = None
+    reserved_by_name: Optional[str] = None
+    planned_admission_time: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
 
 
 class CapacityRow(BaseModel):

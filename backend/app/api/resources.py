@@ -1,12 +1,10 @@
 import uuid
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, UploadFile, Query
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_session
 from app.core.permissions import require_role, require_roles, get_current_user
-from app.core.exceptions import ForbiddenError, NotFoundError, ValidationError
-from app.models.unit import Unit
+from app.core.exceptions import ForbiddenError, ValidationError
 from app.models.resource import ResourceStatus
 from app.services.resource_service import ResourceService
 from app.services.audit_service import AuditService
@@ -18,6 +16,7 @@ from app.schemas.resource import (
     ResourceOut,
     ResourceUsageOut,
     ResourceImportResult,
+    ResourceReserveRequest,
 )
 
 router = APIRouter()
@@ -30,14 +29,16 @@ def _is_super_admin(user) -> bool:
     return SUPER_ADMIN in set(user.effective_roles)
 
 
-async def _assert_unit_in_user_facilities(session: AsyncSession, user, unit_id: uuid.UUID) -> Unit:
-    result = await session.execute(select(Unit).where(Unit.id == unit_id))
-    unit = result.scalar_one_or_none()
-    if not unit:
-        raise NotFoundError("Unit")
-    if unit.facility_id not in {f.id for f in user.facilities}:
+def _resolve_target_facility(user, requested: Optional[uuid.UUID]) -> uuid.UUID:
+    """The facility a non-super-admin may act on: the requested one (must be
+    theirs) or their single/active facility."""
+    facility_ids = {f.id for f in user.facilities}
+    target = requested or getattr(user, "active_facility_id", None)
+    if target is None and len(facility_ids) == 1:
+        target = next(iter(facility_ids))
+    if target is None or target not in facility_ids:
         raise ForbiddenError()
-    return unit
+    return target
 
 
 @router.get("", response_model=List[ResourceOut])
@@ -69,11 +70,12 @@ async def create_resource(
     session: AsyncSession = Depends(get_session),
 ):
     if not _is_super_admin(current_user):
-        # FACILITY_ADMIN must target a unit in their own facility; they cannot
-        # create unassigned central stock.
+        # FACILITY_ADMIN creates resources within their own facility; they cannot
+        # create unassigned central stock. The service validates that the chosen
+        # unit is available at that facility's tier.
         if not payload.unit_id:
             raise ValidationError("A unit must be selected")
-        await _assert_unit_in_user_facilities(session, current_user, payload.unit_id)
+        payload.facility_id = _resolve_target_facility(current_user, payload.facility_id)
 
     svc = ResourceService(session)
     resource = await svc.create(payload)
@@ -112,6 +114,17 @@ async def import_resources(
     )
     await session.commit()
     return result
+
+
+@router.get("/available", response_model=List[ResourceOut])
+async def available_resources(
+    unit_id: Optional[uuid.UUID] = Query(None),
+    current_user=Depends(require_roles(SUPER_ADMIN, FACILITY_ADMIN, "ICU_COORDINATOR")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Available resources across all facilities, for initiating inter-facility
+    transfer requests. Optionally filtered by clinical unit."""
+    return await ResourceService(session).list_available(unit_id=unit_id)
 
 
 @router.get("/{resource_id}", response_model=ResourceOut)
@@ -154,6 +167,32 @@ async def assign_resource(
         "capacity", {"event": "RESOURCE_ASSIGNED", "resource_id": str(resource_id)}
     )
     return resource
+
+
+@router.post("/{resource_id}/reserve", response_model=ResourceOut)
+async def reserve_resource(
+    resource_id: uuid.UUID,
+    payload: ResourceReserveRequest,
+    current_user=Depends(require_roles(SUPER_ADMIN, FACILITY_ADMIN, "ICU_COORDINATOR")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Initiate a transfer request by reserving an available resource (typically
+    at another facility) for the requester's patient."""
+    svc = ResourceService(session)
+    await svc.reserve(
+        resource_id,
+        reserved_by=current_user.id,
+        planned_admission_time=payload.planned_admission_time,
+    )
+    await AuditService(session).log(
+        "RESERVE_RESOURCE", "resource", user_id=current_user.id, entity_id=resource_id
+    )
+    await session.commit()
+    await ws_manager.broadcast_to_channel(
+        "capacity", {"event": "RESOURCE_RESERVED", "resource_id": str(resource_id)}
+    )
+    resource = await svc.get(resource_id)
+    return ResourceOut.model_validate(resource)
 
 
 @router.patch("/{resource_id}/status", response_model=ResourceOut)

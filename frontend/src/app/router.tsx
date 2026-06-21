@@ -13,11 +13,6 @@ const DashboardPage = lazy(() =>
     default: m.DashboardPage,
   }))
 );
-const CapacityPage = lazy(() =>
-  import("@/pages/capacity/CapacityPage").then((m) => ({
-    default: m.CapacityPage,
-  }))
-);
 const ResourcesPage = lazy(() =>
   import("@/pages/capacity/ResourcesPage").then((m) => ({
     default: m.ResourcesPage,
@@ -53,6 +48,16 @@ const AuditLogsPage = lazy(() =>
     default: m.AuditLogsPage,
   }))
 );
+const UnitsCatalogPage = lazy(() =>
+  import("@/pages/admin/units/UnitsCatalogPage").then((m) => ({
+    default: m.UnitsCatalogPage,
+  }))
+);
+const FindResourcesPage = lazy(() =>
+  import("@/pages/transfers/FindResourcesPage").then((m) => ({
+    default: m.FindResourcesPage,
+  }))
+);
 
 const withSuspense = (element: React.ReactNode) => (
   <Suspense fallback={null}>{element}</Suspense>
@@ -68,12 +73,19 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="/dashboard" replace /> },
           { path: "/dashboard", element: withSuspense(<DashboardPage />) },
-          { path: "/capacity", element: withSuspense(<CapacityPage />) },
           {
             path: "/resources",
             element: (
               <RoleGuard roles={["ICU_COORDINATOR", "FACILITY_ADMIN", "SUPER_ADMIN"]}>
                 <ResourcesPage />
+              </RoleGuard>
+            ),
+          },
+          {
+            path: "/find-resources",
+            element: (
+              <RoleGuard roles={["ICU_COORDINATOR", "FACILITY_ADMIN", "SUPER_ADMIN"]}>
+                <FindResourcesPage />
               </RoleGuard>
             ),
           },
@@ -103,6 +115,14 @@ export const router = createBrowserRouter([
             ),
           },
           { path: "/admin/facilities/:id", element: <RoleGuard roles={["SUPER_ADMIN"]}><FacilityDetailPage /></RoleGuard> },
+          {
+            path: "/admin/units",
+            element: (
+              <RoleGuard roles={["SUPER_ADMIN"]}>
+                <UnitsCatalogPage />
+              </RoleGuard>
+            ),
+          },
           {
             path: "/admin/audit",
             element: (

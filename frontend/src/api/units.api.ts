@@ -1,8 +1,8 @@
 import { api } from "./axios";
-import { CreateUnitPayload, Unit, UpdateUnitPayload } from "@/types/unit";
+import { CreateUnitPayload, Unit, UnitListParams, UpdateUnitPayload } from "@/types/unit";
 
-export const getUnits = async (): Promise<Unit[]> => {
-  const { data } = await api.get<Unit[]>("/units");
+export const getUnits = async (params: UnitListParams = {}): Promise<Unit[]> => {
+  const { data } = await api.get<Unit[]>("/units", { params });
   return data;
 };
 

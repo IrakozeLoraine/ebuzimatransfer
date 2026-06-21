@@ -6,8 +6,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundError, ResourceReservedError, ValidationError
+from app.core.tiers import tier_rank
 from app.models.resource import Resource, ResourceStatus, ResourceType, ResourceReservation
 from app.models.unit import Unit
+from app.models.facility import Facility
 from app.repositories.resource_repository import ResourceRepository
 from app.schemas.resource import (
     ResourceCreate,
@@ -18,6 +20,7 @@ from app.schemas.resource import (
     ResourceImportResult,
     ResourceImportError,
     CapacityRow,
+    DashboardActivityRow,
 )
 
 
@@ -53,12 +56,23 @@ class ResourceService:
             raise NotFoundError("Unit")
         return unit
 
+    async def _validate_unit_facility(
+        self, unit_id: uuid.UUID | None, facility_id: uuid.UUID | None
+    ) -> None:
+        """A clinical unit may only be attached to a facility whose tier is at
+        or above the unit's tier (cascading catalog)."""
+        if unit_id is None or facility_id is None:
+            return
+        unit = await self._get_unit(unit_id)
+        facility = await self.session.get(Facility, facility_id)
+        if not facility:
+            raise NotFoundError("Facility")
+        if tier_rank(unit.tier) > tier_rank(facility.type):
+            raise ValidationError("This unit is not available at the selected facility's tier")
+
     async def create(self, data: ResourceCreate) -> Resource:
         payload = data.model_dump()
-        # When a unit is given, derive the facility from it so they stay consistent.
-        if payload.get("unit_id"):
-            unit = await self._get_unit(payload["unit_id"])
-            payload["facility_id"] = unit.facility_id
+        await self._validate_unit_facility(payload.get("unit_id"), payload.get("facility_id"))
         resource = Resource(**payload)
         return await self.repo.create(resource)
 
@@ -80,6 +94,10 @@ class ResourceService:
         )
         return [_to_out(r) for r in resources]
 
+    async def list_available(self, unit_id: uuid.UUID | None = None) -> List[ResourceOut]:
+        resources = await self.repo.list_available(unit_id=unit_id)
+        return [_to_out(r) for r in resources]
+
     async def update_status(self, resource_id: uuid.UUID, data: ResourceStatusUpdate) -> Resource:
         resource = await self.get(resource_id)
         resource.status = data.status
@@ -94,11 +112,12 @@ class ResourceService:
     ) -> ResourceOut:
         resource = await self.get(resource_id)
         if unit_id is not None:
-            unit = await self._get_unit(unit_id)
-            if facility_id is not None and unit.facility_id != facility_id:
-                raise ValidationError("Selected unit does not belong to the selected facility")
+            # A clinical unit only exists in the context of a facility.
+            if facility_id is None:
+                raise ValidationError("A facility is required when assigning a unit")
+            await self._validate_unit_facility(unit_id, facility_id)
             resource.unit_id = unit_id
-            resource.facility_id = unit.facility_id
+            resource.facility_id = facility_id
         else:
             # Assign to a facility without a specific unit, or clear (back to stock).
             resource.unit_id = None
@@ -166,7 +185,11 @@ class ResourceService:
         """Parse an .xlsx or .csv file and bulk-create resources.
 
         Expected header row (case-insensitive): resource_name, resource_code,
-        resource_type, quantity, unit_id, notes.
+        resource_type, quantity, unit, notes. The ``unit`` column holds the
+        clinical unit's *name*; it is resolved against the units available at
+        the target facility's tier. Rows whose unit name is unknown (or not
+        available at this facility) are reported as errors while the remaining
+        valid rows are still imported.
         """
         rows = self._read_csv_rows(file_bytes) if is_csv else self._read_xlsx_rows(file_bytes)
         if not rows:
@@ -174,14 +197,17 @@ class ResourceService:
 
         header = [str(c).strip().lower() if c is not None else "" for c in rows[0]]
 
-        def col(name: str) -> Optional[int]:
-            return header.index(name) if name in header else None
+        def col(*names: str) -> Optional[int]:
+            for name in names:
+                if name in header:
+                    return header.index(name)
+            return None
 
         idx_name = col("resource_name")
         idx_code = col("resource_code")
         idx_type = col("resource_type")
         idx_qty = col("quantity")
-        idx_unit = col("unit_id")
+        idx_unit = col("unit", "unit_name")
         idx_notes = col("notes")
 
         errors: List[ResourceImportError] = []
@@ -189,8 +215,28 @@ class ResourceService:
             raise ValidationError("Missing required 'resource_name' column in the spreadsheet.")
 
         created = 0
-        # Cache unit lookups so we can validate scoping once per unit.
-        unit_cache: dict[str, Unit | None] = {}
+
+        # Resolve the target facility's tier so we can scope unit names to the
+        # units actually available at that facility (cascading catalog). When no
+        # facility is given (super-admin central stock), names resolve against the
+        # full active catalog.
+        facility_tier: str | None = None
+        if default_facility_id is not None:
+            facility = await self.session.get(Facility, default_facility_id)
+            facility_tier = facility.type if facility else None
+
+        # Build a case-insensitive name -> Unit lookup of the units available for
+        # this import, computed once.
+        active_units = (
+            (await self.session.execute(select(Unit).where(Unit.is_active.is_(True))))
+            .scalars()
+            .all()
+        )
+        units_by_name: dict[str, Unit] = {}
+        for u in active_units:
+            if facility_tier is not None and tier_rank(u.tier) > tier_rank(facility_tier):
+                continue  # not available at this facility's tier
+            units_by_name.setdefault(u.name.strip().lower(), u)
 
         for i, raw in enumerate(rows[1:], start=2):  # row 1 is the header
             def cell(idx: Optional[int]) -> Optional[str]:
@@ -226,24 +272,17 @@ class ResourceService:
             unit_id: uuid.UUID | None = None
             unit_raw = cell(idx_unit)
             if unit_raw:
-                try:
-                    unit_uuid = uuid.UUID(unit_raw)
-                except ValueError:
-                    errors.append(ResourceImportError(row=i, message=f"Invalid unit_id '{unit_raw}'"))
-                    continue
-                if unit_raw not in unit_cache:
-                    res = await self.session.execute(select(Unit).where(Unit.id == unit_uuid))
-                    unit_cache[unit_raw] = res.scalar_one_or_none()
-                unit = unit_cache[unit_raw]
+                unit = units_by_name.get(unit_raw.strip().lower())
                 if not unit:
-                    errors.append(ResourceImportError(row=i, message=f"Unit '{unit_raw}' not found"))
-                    continue
-                # When the importer is facility-scoped, units must be in their facility.
-                if default_facility_id is not None and unit.facility_id != default_facility_id:
-                    errors.append(ResourceImportError(row=i, message="Unit is not in your facility"))
+                    errors.append(
+                        ResourceImportError(
+                            row=i,
+                            message=f"Unit '{unit_raw}' is not available at this facility",
+                        )
+                    )
                     continue
                 unit_id = unit.id
-                facility_id = unit.facility_id
+                # facility_id stays the import target (central stock when None).
 
             self.session.add(
                 Resource(
@@ -284,8 +323,10 @@ class ResourceService:
         await self.session.flush()
         return reservation
 
-    async def capacity_dashboard(self) -> List[CapacityRow]:
-        rows = await self.repo.capacity_summary_raw()
+    async def capacity_dashboard(
+        self, facility_ids: Optional[Sequence[uuid.UUID]] = None
+    ) -> List[CapacityRow]:
+        rows = await self.repo.capacity_summary_raw(facility_ids=facility_ids)
         result = []
         for r in rows:
             result.append(CapacityRow(
@@ -297,5 +338,23 @@ class ResourceService:
                 occupied=r["occupied"] or 0,
                 reserved=r["reserved"] or 0,
                 out_of_service=r["out_of_service"] or 0,
+            ))
+        return result
+
+    async def recent_activity(
+        self, facility_ids: Optional[Sequence[uuid.UUID]] = None, limit: int = 20
+    ) -> List[DashboardActivityRow]:
+        rows = await self.repo.recent_reservations(facility_ids=facility_ids, limit=limit)
+        result = []
+        for r in rows:
+            name = f"{r['first_name']} {r['last_name']}".strip() or None
+            result.append(DashboardActivityRow(
+                id=r["id"],
+                resource_name=r["resource_name"],
+                facility_name=r["facility_name"],
+                unit_name=r["unit_name"],
+                reserved_by_name=name,
+                planned_admission_time=r["planned_admission_time"],
+                created_at=r["created_at"],
             ))
         return result

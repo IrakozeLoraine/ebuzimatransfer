@@ -1,17 +1,28 @@
+export type FacilityTier = "HEALTH_CENTER_POST" | "DISTRICT" | "LEVEL_TWO" | "NRH_UTH";
+
 export interface Unit {
     id: string;
     name: string;
-    type: "ICU" | "HDU";
-    facility_id: string;
+    code: string | null;
+    tier: FacilityTier;
+    is_active: boolean;
 }
 
 export interface CreateUnitPayload {
     name: string;
-    type: "ICU" | "HDU";
-    facility_id: string;
+    tier: FacilityTier;
+    code?: string;
 }
 
 export interface UpdateUnitPayload {
     name?: string;
-    type?: "ICU" | "HDU";
+    tier?: FacilityTier;
+    code?: string;
+    is_active?: boolean;
+}
+
+export interface UnitListParams {
+    /** Narrow to the units a facility's tier is eligible for (cascading). */
+    facility_id?: string;
+    active?: boolean;
 }

@@ -1,2 +1,2 @@
-resource_name,resource_code,resource_type,quantity,unit_id,notes
-Maquet Servo-i Invasive Ventilator,CHUK-ICU-MV-01,Mechanical Ventilation,1,,"Sample row — replace with your data or delete before importing. Leave unit_id blank to add to stock."
+resource_name,resource_code,resource_type,quantity,unit,notes
+Maquet Servo-i Invasive Ventilator,CHUK-ICU-MV-01,Mechanical Ventilation,1,Intensive Care Unit (ICU) & High Dependency Unit (HDU),"Sample row — replace with your data or delete before importing. Put the clinical unit's name in the unit column, or leave it blank to add to stock."

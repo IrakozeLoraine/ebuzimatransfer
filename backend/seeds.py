@@ -6,6 +6,7 @@ Run from the backend/ directory:
 """
 import asyncio
 import sys
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,8 @@ from app.db.session import AsyncSessionLocal
 from app.core.security import hash_password
 from app.models.user import Role, User, UserRole, UserFacilityRole, AccountStatus
 from app.models.facility import Facility
+from app.models.unit import Unit
+from app.models.resource import Resource, ResourceReservation, ResourceStatus, ResourceType
 
 
 # ---------------------------------------------------------------------------
@@ -143,12 +146,68 @@ USERS = [
 ]
 
 
+# Resources reference a facility (by name) and a clinical unit (by name). The unit
+# must be available at the facility's tier — the cascading catalog already enforces
+# this; these specs respect it. Status is spread across the lifecycle so the
+# capacity dashboard shows a realistic mix.
+CHUK = "University Teaching Hospital of Kigali (CHUK)"
+KFH = "King Faisal Hospital Kigali"
+RMH = "Rwanda Military Hospital (RMH)"
+BUTARO = "Butaro District Hospital"
+RUHENGERI = "Ruhengeri Referral Hospital"
+
+ICU_HDU = "Intensive Care Unit (ICU) & High Dependency Unit (HDU)"
+
+RESOURCES = [
+    # CHUK — NRH_UTH
+    {"facility": CHUK, "unit": ICU_HDU, "name": "Maquet Servo-i Invasive Ventilator", "code": "CHUK-ICU-MV-01", "type": ResourceType.MECHANICAL_VENTILATION, "qty": 4, "status": ResourceStatus.AVAILABLE},
+    {"facility": CHUK, "unit": ICU_HDU, "name": "Hamilton-C6 Ventilator", "code": "CHUK-ICU-MV-02", "type": ResourceType.MECHANICAL_VENTILATION, "qty": 3, "status": ResourceStatus.OCCUPIED},
+    {"facility": CHUK, "unit": "Renal & Dialysis Center", "name": "Fresenius 4008S Dialysis Machine", "code": "CHUK-RD-RRT-01", "type": ResourceType.ACUTE_RENAL_REPLACEMENT_THERAPY, "qty": 5, "status": ResourceStatus.AVAILABLE},
+    {"facility": CHUK, "unit": "Medical Imaging & Advanced Diagnostics Unit", "name": "Siemens SOMATOM CT Scanner", "code": "CHUK-IMG-CT-01", "type": ResourceType.CT_SCANS_MRI, "qty": 1, "status": ResourceStatus.OCCUPIED},
+    {"facility": CHUK, "unit": "Neurosurgery Unit", "name": "Neurosurgical Theatre Suite", "code": "CHUK-NS-NE-01", "type": ResourceType.NEUROLOGICAL_EMERGENCIES, "qty": 2, "status": ResourceStatus.RESERVED},
+
+    # King Faisal — NRH_UTH
+    {"facility": KFH, "unit": ICU_HDU, "name": "GE CARESCAPE R860 Ventilator", "code": "KFH-ICU-MV-01", "type": ResourceType.MECHANICAL_VENTILATION, "qty": 6, "status": ResourceStatus.AVAILABLE},
+    {"facility": KFH, "unit": ICU_HDU, "name": "Bedside Hemodynamic Monitor", "code": "KFH-ICU-HM-01", "type": ResourceType.INVASIVE_HEMODYNAMIC_MONITORING, "qty": 8, "status": ResourceStatus.OCCUPIED},
+    {"facility": KFH, "unit": "Cardiothoracic Surgery Unit", "name": "Cardiac Operating Theatre", "code": "KFH-CT-ES-01", "type": ResourceType.EMERGENCY_SURGERY, "qty": 2, "status": ResourceStatus.AVAILABLE},
+    {"facility": KFH, "unit": "Renal & Dialysis Center", "name": "Nikkiso Dialysis Station", "code": "KFH-RD-RRT-01", "type": ResourceType.ACUTE_RENAL_REPLACEMENT_THERAPY, "qty": 4, "status": ResourceStatus.OUT_OF_SERVICE},
+
+    # Rwanda Military Hospital — LEVEL_TWO
+    {"facility": RMH, "unit": ICU_HDU, "name": "Dräger Evita V300 Ventilator", "code": "RMH-ICU-MV-01", "type": ResourceType.MECHANICAL_VENTILATION, "qty": 3, "status": ResourceStatus.AVAILABLE},
+    {"facility": RMH, "unit": ICU_HDU, "name": "High-Flow Oxygen Therapy Unit", "code": "RMH-ICU-ARS-01", "type": ResourceType.ADVANCED_RESPIRATORY_SUPPORT, "qty": 5, "status": ResourceStatus.OCCUPIED},
+    {"facility": RMH, "unit": "Orthopedics & Traumatology Unit", "name": "Orthopedic Trauma Theatre", "code": "RMH-OT-ES-01", "type": ResourceType.EMERGENCY_SURGERY, "qty": 1, "status": ResourceStatus.AVAILABLE},
+    {"facility": RMH, "unit": "Medical Imaging & Advanced Diagnostics Unit", "name": "Philips Ingenia MRI Scanner", "code": "RMH-IMG-CT-01", "type": ResourceType.CT_SCANS_MRI, "qty": 1, "status": ResourceStatus.RESERVED},
+
+    # Butaro District Hospital — DISTRICT
+    {"facility": BUTARO, "unit": "Accident & Emergency (A&E) Unit", "name": "Emergency Bay Transport Ventilator", "code": "BUT-AE-MV-01", "type": ResourceType.MECHANICAL_VENTILATION, "qty": 2, "status": ResourceStatus.AVAILABLE},
+    {"facility": BUTARO, "unit": "General Surgery Unit", "name": "General Surgical Theatre", "code": "BUT-GS-ES-01", "type": ResourceType.EMERGENCY_SURGERY, "qty": 1, "status": ResourceStatus.OCCUPIED},
+    {"facility": BUTARO, "unit": "Internal Medicine Unit", "name": "Vasopressor Infusion Pumps", "code": "BUT-IM-VI-01", "type": ResourceType.VASOPRESSOR_INOTROPE_INFUSIONS, "qty": 6, "status": ResourceStatus.AVAILABLE},
+    {"facility": BUTARO, "unit": "Neonatology Unit", "name": "Neonatal Respiratory Support Unit", "code": "BUT-NEO-ARS-01", "type": ResourceType.ADVANCED_RESPIRATORY_SUPPORT, "qty": 3, "status": ResourceStatus.AVAILABLE},
+
+    # Ruhengeri Referral Hospital — LEVEL_TWO
+    {"facility": RUHENGERI, "unit": ICU_HDU, "name": "ICU Ventilator (Mindray SV300)", "code": "RUH-ICU-MV-01", "type": ResourceType.MECHANICAL_VENTILATION, "qty": 2, "status": ResourceStatus.AVAILABLE},
+    {"facility": RUHENGERI, "unit": ICU_HDU, "name": "Invasive Hemodynamic Monitor", "code": "RUH-ICU-HM-01", "type": ResourceType.INVASIVE_HEMODYNAMIC_MONITORING, "qty": 4, "status": ResourceStatus.OCCUPIED},
+    {"facility": RUHENGERI, "unit": "Specialized Surgery Units", "name": "Specialized Operating Theatre", "code": "RUH-SS-ES-01", "type": ResourceType.EMERGENCY_SURGERY, "qty": 1, "status": ResourceStatus.AVAILABLE},
+    {"facility": RUHENGERI, "unit": "Advanced Neonatal Intensive Care Unit (NICU)", "name": "NICU Ventilator", "code": "RUH-NICU-ARS-01", "type": ResourceType.ADVANCED_RESPIRATORY_SUPPORT, "qty": 3, "status": ResourceStatus.RESERVED},
+]
+
+# Reservations give the dashboard "Recent Activity" feed some interactions.
+# (resource code, requesting clinician's medical_id, hours until planned admission)
+RESERVATIONS = [
+    ("CHUK-NS-NE-01", "RC-BUT-001", 6),
+    ("RMH-IMG-CT-01", "RC-CHUK-001", 12),
+    ("RUH-NICU-ARS-01", "RC-BUT-001", 3),
+]
+
+
 # ---------------------------------------------------------------------------
 # Seed helpers
 # ---------------------------------------------------------------------------
 
 async def clear_data(session: AsyncSession) -> None:
     for table in [
+        "resource_reservations",
+        "resources",
         "user_facility_roles",
         "users",
         "facilities",
@@ -215,6 +274,57 @@ async def seed_users(
     print(f"  ✓ Created {len(users)} users")
     return users
 
+async def seed_resources(session: AsyncSession) -> None:
+    """Seed clinical resources (and a few reservations). Idempotent: skips if any
+    resources already exist. Resolves facilities/units/users from the DB by name,
+    so it works on top of an already-seeded database."""
+    existing = await session.scalar(select(func.count()).select_from(Resource))
+    if existing:
+        print(f"  ↪ {existing} resources already present — skipping resource seed.")
+        return
+
+    fac_by_name = {f.name: f for f in (await session.execute(select(Facility))).scalars()}
+    unit_by_name = {u.name: u for u in (await session.execute(select(Unit))).scalars()}
+    user_by_mid = {u.medical_id: u for u in (await session.execute(select(User))).scalars()}
+
+    by_code: dict[str, Resource] = {}
+    for spec in RESOURCES:
+        facility = fac_by_name.get(spec["facility"])
+        unit = unit_by_name.get(spec["unit"])
+        if facility is None or unit is None:
+            print(f"  ⚠ Skipping {spec['code']}: missing facility/unit")
+            continue
+        resource = Resource(
+            resource_name=spec["name"],
+            resource_code=spec["code"],
+            resource_type=spec["type"],
+            quantity=spec["qty"],
+            status=spec["status"],
+            facility_id=facility.id,
+            unit_id=unit.id,
+        )
+        session.add(resource)
+        by_code[spec["code"]] = resource
+    await session.flush()
+    print(f"  ✓ Created {len(by_code)} resources")
+
+    now = datetime.now(timezone.utc)
+    reservations = 0
+    for code, medical_id, hours in RESERVATIONS:
+        resource = by_code.get(code)
+        requester = user_by_mid.get(medical_id)
+        if resource is None or requester is None:
+            continue
+        session.add(ResourceReservation(
+            resource_id=resource.id,
+            reserved_by=requester.id,
+            planned_admission_time=now + timedelta(hours=hours),
+        ))
+        reservations += 1
+    await session.flush()
+    print(f"  ✓ Created {reservations} reservations")
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -227,6 +337,15 @@ async def already_seeded(session: AsyncSession) -> bool:
 async def main() -> None:
     force = "--force" in sys.argv
 
+    # Seed only resources on top of existing data.
+    if "--resources" in sys.argv:
+        print("\n🌱 Seeding resources...\n")
+        async with AsyncSessionLocal() as session:
+            await seed_resources(session)
+            await session.commit()
+        print("\n✅ Resource seed complete!\n")
+        return
+
     print("\n🌱 Seeding eBuzimaTransfer database...\n")
     async with AsyncSessionLocal() as session:
         if not force and await already_seeded(session):
@@ -236,6 +355,7 @@ async def main() -> None:
         roles = await seed_roles(session)
         facilities = await seed_facilities(session)
         users = await seed_users(session, roles, facilities)
+        await seed_resources(session)
         await session.commit()
 
     print("\n✅ Seed complete!\n")

@@ -1,24 +1,27 @@
-import uuid
-from sqlalchemy import String, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import String, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, UUIDMixin, TimestampMixin
 
 
 class Unit(Base, UUIDMixin, TimestampMixin):
+    """A clinical unit type in the global, tier-scoped catalog.
+
+    The catalog is managed by the super admin. A facility automatically
+    exposes every unit whose ``tier`` is at or below the facility's own tier
+    (see ``app.core.tiers``).
+    """
+
     __tablename__ = "units"
 
-    facility_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("facilities.id", ondelete="CASCADE"), nullable=False
-    )
-    type: Mapped[str] = mapped_column(String(10), nullable=False)  # ICU | HDU
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Facility-tier value at which this unit is introduced (cascades upward).
+    tier: Mapped[str] = mapped_column(String(50), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    facility: Mapped["Facility"] = relationship("Facility", back_populates="units")
     resources: Mapped[list["Resource"]] = relationship(
-        "Resource", back_populates="unit", cascade="all, delete-orphan"
+        "Resource", back_populates="unit"
     )
 
 
-from app.models.facility import Facility
 from app.models.resource import Resource

@@ -30,24 +30,3 @@ class FacilityOut(FacilityBase):
     is_active: bool
 
     model_config = {"from_attributes": True}
-
-
-class UnitBase(BaseModel):
-    type: str  # ICU | HDU
-    name: str
-    facility_id: uuid.UUID
-
-
-class UnitCreate(UnitBase):
-    pass
-
-
-class UnitUpdate(BaseModel):
-    type: Optional[str] = None
-    name: Optional[str] = None
-
-
-class UnitOut(UnitBase):
-    id: uuid.UUID
-
-    model_config = {"from_attributes": True}

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -29,7 +29,7 @@ import { resourceSchema, type ResourceFormValues } from "@/schemas/resource.sche
 import { cn } from "@/utils/cn";
 import { Resource, RESOURCE_TYPES, ResourceStatus, ResourceFilters } from "@/types/resource";
 import { ROW_ACCENT, STATUS_LABELS, STATUS_OPTIONS } from "./constants";
-import { useGetAllUnits } from "@/hooks/useUnits";
+import { useUnits } from "@/hooks/useUnits";
 import { useFacilities } from "@/hooks/useFacilities";
 import { toast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/utils/apiError";
@@ -51,19 +51,27 @@ export const ResourcesPage = () => {
   const { mutate: updateStatus, isPending: updatingStatus } = useUpdateResourceStatus();
   const { mutate: createResource, isPending: creating } = useCreateResource();
 
-  const { data: allUnits = [] } = useGetAllUnits({ enabled: showCreate || !!assignTarget });
-
-  // FACILITY_ADMIN sees only their facilities' units; SUPER_ADMIN sees all
-  const availableUnits = isSuperAdmin
-    ? allUnits
-    : allUnits.filter((u) => user?.facilities?.some((f) => f.id === u.facility_id));
+  // A facility admin's resources live in their (active) facility; a super admin
+  // picks a target facility in the create dialog. Units are derived from that
+  // facility's tier (the cascading catalog) by the backend.
+  const myFacilityId = user?.active_facility_id ?? user?.facilities?.[0]?.id ?? "";
+  const [createFacilityId, setCreateFacilityId] = useState<string>("");
+  const unitFacilityId = isSuperAdmin ? createFacilityId : myFacilityId;
+  const { data: unitOptions = [] } = useUnits(
+    { facility_id: unitFacilityId || undefined },
+    { enabled: showCreate && !!unitFacilityId }
+  );
+  const { data: facilities = [] } = useFacilities();
 
   const form = useForm({ resolver: zodResolver(resourceSchema) });
 
   const onSubmit = (data: ResourceFormValues) => {
     createResource(
       {
-        unit_id: data.unit_id,
+        unit_id: data.unit_id || undefined,
+        // Super admin targets a chosen facility (empty = central stock); a
+        // facility admin's facility is resolved server-side.
+        facility_id: isSuperAdmin ? (createFacilityId || undefined) : undefined,
         resource_name: data.resource_name,
         resource_code: data.resource_code,
         resource_type: data.resource_type as Resource["resource_type"] ?? undefined,
@@ -74,6 +82,7 @@ export const ResourcesPage = () => {
         onSuccess: () => {
           toast({ variant: "success", title: "Resource added" });
           setShowCreate(false);
+          setCreateFacilityId("");
           form.reset();
         },
         onError: (e) => toast({ variant: "destructive", title: "Could not add resource", description: getApiErrorMessage(e) }),
@@ -225,27 +234,56 @@ export const ResourcesPage = () => {
       />
 
       {/* Add resource */}
-      <Dialog open={showCreate} onOpenChange={(o) => { setShowCreate(o); if (!o) form.reset(); }}>
+      <Dialog
+        open={showCreate}
+        onOpenChange={(o) => { setShowCreate(o); if (!o) { form.reset(); setCreateFacilityId(""); } }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Add Resource</DialogTitle>
           </DialogHeader>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+            {isSuperAdmin && (
+              <div className="space-y-1.5">
+                <Label>
+                  Facility{" "}
+                  <span className="text-muted-foreground text-xs">(optional — leave empty for central stock)</span>
+                </Label>
+                <Select
+                  value={createFacilityId}
+                  onValueChange={(v) => { setCreateFacilityId(v); form.setValue("unit_id", ""); }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Unassigned (central stock)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {facilities.map((f) => (
+                      <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label>
                 Unit{" "}
                 {isSuperAdmin && (
-                  <span className="text-muted-foreground text-xs">(optional — leave empty for central stock)</span>
+                  <span className="text-muted-foreground text-xs">(select a facility first)</span>
                 )}
               </Label>
-              <Select onValueChange={(v) => form.setValue("unit_id", v)}>
+              <Select
+                key={unitFacilityId}
+                onValueChange={(v) => form.setValue("unit_id", v)}
+                disabled={isSuperAdmin && !createFacilityId}
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder={isSuperAdmin ? "Unassigned (central stock)" : "Select a unit"} />
+                  <SelectValue placeholder={isSuperAdmin && !createFacilityId ? "Select a facility first" : "Select a unit"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableUnits.map((u) => (
+                  {unitOptions.map((u) => (
                     <SelectItem key={u.id} value={u.id}>
-                      {u.name} ({u.type})
+                      {u.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -306,7 +344,6 @@ export const ResourcesPage = () => {
       <ImportDialog open={showImport} onOpenChange={setShowImport} facilityScoped={isFacilityAdmin && !isSuperAdmin} />
       <AssignDialog
         resource={assignTarget}
-        units={availableUnits}
         onClose={() => setAssignTarget(null)}
       />
       <UsageDialog resourceId={usageId} onClose={() => setUsageId(null)} />
@@ -363,7 +400,9 @@ const ImportDialog = ({
             first row must be a header with columns:{" "}
             <span className="font-mono">resource_name</span>, <span className="font-mono">resource_code</span>,{" "}
             <span className="font-mono">resource_type</span>, <span className="font-mono">quantity</span>,{" "}
-            <span className="font-mono">unit_id</span>, <span className="font-mono">notes</span>.
+            <span className="font-mono">unit</span>, <span className="font-mono">notes</span>. The{" "}
+            <span className="font-mono">unit</span> column takes the clinical unit's name; rows naming a unit that
+            isn't available here are skipped and reported, while the rest still import.
             {facilityScoped
               ? " Resources without a unit are added to your facility's stock."
               : " Rows without a unit are added to central (unassigned) stock."}
@@ -417,11 +456,9 @@ const ImportDialog = ({
 
 const AssignDialog = ({
   resource,
-  units,
   onClose,
 }: {
   resource: Resource | null;
-  units: { id: string; name: string; type: string; facility_id: string }[];
   onClose: () => void;
 }) => {
   const { data: facilities = [] } = useFacilities();
@@ -438,9 +475,10 @@ const AssignDialog = ({
     setUnitId(resource?.unit_id ?? "");
   }
 
-  const facilityUnits = useMemo(
-    () => units.filter((u) => u.facility_id === facilityId),
-    [units, facilityId]
+  // Units are derived from the target facility's tier (cascading catalog).
+  const { data: facilityUnits = [] } = useUnits(
+    { facility_id: facilityId || undefined },
+    { enabled: !!facilityId }
   );
 
   const handleAssign = () => {
@@ -500,7 +538,7 @@ const AssignDialog = ({
                 </SelectTrigger>
                 <SelectContent>
                   {facilityUnits.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>{u.name} ({u.type})</SelectItem>
+                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

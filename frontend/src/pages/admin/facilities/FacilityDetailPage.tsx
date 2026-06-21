@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Pencil, Building2, Users, UserPlus, X, UserX, UserCheck } from "lucide-react";
+import { ArrowLeft, Pencil, Building2, Users, UserPlus, X, UserX, UserCheck, Layers } from "lucide-react";
 import { useFacility, useFacilityUsers } from "@/hooks/useFacilities";
+import { useUnits } from "@/hooks/useUnits";
 import { useRemoveUserFromFacility } from "@/hooks/useUser";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,6 +21,7 @@ export const FacilityDetailPage = () => {
   const navigate = useNavigate();
   const { data: facility, isLoading } = useFacility(id);
   const { data: users = [], isLoading: usersLoading } = useFacilityUsers(id);
+  const { data: units = [] } = useUnits({ facility_id: id }, { enabled: !!id });
   const [tab, setTab] = useState("info");
   const [showEdit, setShowEdit] = useState(false);
   const [showAssign, setShowAssign] = useState(false);
@@ -163,6 +165,7 @@ export const FacilityDetailPage = () => {
         tabs={[
           { value: "info", label: "Facility Information", icon: <Building2 className="h-4 w-4" /> },
           { value: "users", label: `Assigned Users (${users.length})`, icon: <Users className="h-4 w-4" /> },
+          { value: "units", label: `Clinical Units (${units.length})`, icon: <Layers className="h-4 w-4" /> },
         ]}
       />
 
@@ -202,6 +205,30 @@ export const FacilityDetailPage = () => {
             pageSize={10}
           />
         </div>
+      )}
+
+      {tab === "units" && (
+        <Card className="p-6">
+          <p className="mb-4 text-sm text-muted-foreground">
+            Units are derived from this facility's tier and the{" "}
+            <button type="button" className="text-primary hover:underline" onClick={() => navigate("/admin/units")}>
+              clinical units catalog
+            </button>
+            . Higher tiers automatically inherit lower-tier units.
+          </p>
+          {units.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No clinical units available at this facility's tier.</p>
+          ) : (
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {units.map((u) => (
+                <li key={u.id} className="flex items-center gap-2 rounded-md border p-2.5 text-sm">
+                  <Layers className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="font-medium">{u.name}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
       )}
 
       <FacilityFormDialog open={showEdit} facility={facility ?? null} onOpenChange={setShowEdit} />

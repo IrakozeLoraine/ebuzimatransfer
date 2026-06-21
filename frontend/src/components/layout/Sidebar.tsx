@@ -1,7 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
-  Package,
   Boxes,
   FileText,
   Truck,
@@ -10,6 +9,8 @@ import {
   Building2,
   ClipboardList,
   User,
+  Search,
+  Layers,
 } from "lucide-react";
 import logo from "@/assets/ebuzimaTransfer.svg";
 import { cn } from "@/utils/cn";
@@ -32,9 +33,7 @@ export const Sidebar = () => {
 
   const mainLinks = [
     navItem("/dashboard", "Dashboard", LayoutDashboard),
-    ...(isSuperAdmin || isFacilityAdmin
-      ? [navItem("/capacity", "Capacity", Package)]
-      : []),
+    ...(canViewResources ? [navItem("/find-resources", "Clinical Resource Lookup", Search)] : []),
     ...(canViewResources ? [navItem("/resources", "Resources", Boxes)] : []),
     navItem("/referrals", "Referrals", FileText),
     ...(isSuperAdmin ? [navItem("/transport", "Transport", Truck)] : []),
@@ -44,6 +43,7 @@ export const Sidebar = () => {
   const adminLinks = [
     ...(isSuperAdmin || isFacilityAdmin ? [navItem("/admin/users", "Users", Users)] : []),
     ...(canManageFacilities ? [navItem("/admin/facilities", "Facilities", Building2)] : []),
+    ...(isSuperAdmin ? [navItem("/admin/units", "Clinical Units", Layers)] : []),
     ...(canViewAudit ? [navItem("/admin/audit", "Audit Logs", ClipboardList)] : []),
   ];
 
