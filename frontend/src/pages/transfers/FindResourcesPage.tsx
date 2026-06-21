@@ -1,29 +1,37 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Search, ArrowLeftRight, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
-import { ConfirmDialog } from "@/components/molecules/ConfirmDialog";
-import { toast } from "@/components/ui/toaster";
-import { getApiErrorMessage } from "@/utils/apiError";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useUnits } from "@/hooks/useUnits";
-import { useAvailableResources, useReserveResource } from "@/hooks/useResources";
+import { useAvailableResources } from "@/hooks/useResources";
 import type { Resource } from "@/types/resource";
 
 export const FindResourcesPage = () => {
+  const navigate = useNavigate();
+  const { canCreateReferral } = usePermissions();
   const { data: units = [] } = useUnits();
   const [unitId, setUnitId] = useState<string>("");
   const [search, setSearch] = useState("");
   const { data: resources = [], isLoading } = useAvailableResources(unitId || null);
-  const { mutate: reserve, isPending } = useReserveResource();
-  const [toReserve, setToReserve] = useState<Resource | null>(null);
 
   const unitOptions = [
     { value: "", label: "All clinical units" },
     ...units.map((u) => ({ value: u.id, label: u.name })),
   ];
+
+  // Requesting a transfer opens the transfer-request form prefilled with the
+  // destination facility + clinical unit; approval reserves the resource.
+  const requestTransfer = (r: Resource) => {
+    const params = new URLSearchParams();
+    if (r.facility_id) params.set("facility", r.facility_id);
+    if (r.unit_id) params.set("unit", r.unit_id);
+    navigate(`/transfer-requests/new?${params.toString()}`);
+  };
 
   // Free-text filtering on top of the (optionally unit-scoped) results.
   const filtered = useMemo(() => {
@@ -48,21 +56,6 @@ export const FindResourcesPage = () => {
     }
     return [...groups.values()].sort((a, b) => a.facility.localeCompare(b.facility));
   }, [filtered]);
-
-  const confirmReserve = () => {
-    if (!toReserve) return;
-    reserve(
-      { id: toReserve.id },
-      {
-        onSuccess: () => {
-          toast({ variant: "success", title: "Transfer requested", description: `${toReserve.resource_name} reserved.` });
-          setToReserve(null);
-        },
-        onError: (e) =>
-          toast({ variant: "destructive", title: "Could not request transfer", description: getApiErrorMessage(e) }),
-      }
-    );
-  };
 
   return (
     <div className="space-y-6">
@@ -128,10 +121,12 @@ export const FindResourcesPage = () => {
                         {r.unit_name ? ` · ${r.unit_name}` : ""}
                       </p>
                     </div>
-                    <Button size="sm" variant="outline" className="border-primary text-primary bg-white cursor-pointer" onClick={() => setToReserve(r)}>
-                      <ArrowLeftRight className="mr-1.5 h-3.5 w-3.5" />
-                      Request Transfer
-                    </Button>
+                    {canCreateReferral && (
+                      <Button size="sm" variant="outline" className="border-primary text-primary bg-white cursor-pointer" onClick={() => requestTransfer(r)}>
+                        <ArrowLeftRight className="mr-1.5 h-3.5 w-3.5" />
+                        Request Transfer
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -139,15 +134,6 @@ export const FindResourcesPage = () => {
           ))}
         </div>
       )}
-
-      <ConfirmDialog
-        open={!!toReserve}
-        title="Request transfer"
-        description={`Reserve "${toReserve?.resource_name}" at ${toReserve?.facility_name ?? "this facility"} for your patient? It will be marked as reserved.`}
-        confirmLabel={isPending ? "Requesting…" : "Request Transfer"}
-        onConfirm={confirmReserve}
-        onCancel={() => setToReserve(null)}
-      />
     </div>
   );
 };

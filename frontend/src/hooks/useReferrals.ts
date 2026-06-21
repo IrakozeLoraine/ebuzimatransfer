@@ -4,6 +4,7 @@ import {
   getReferral,
   createReferral,
   acceptReferral,
+  quickAcceptReferral,
   rejectReferral,
   updateReferralStatus,
 } from "@/api/referrals.api";
@@ -36,6 +37,18 @@ export const useAcceptReferral = () => {
     mutationFn: ({ id, payload }: { id: string; payload: AcceptReferralPayload }) =>
       acceptReferral(id, payload),
     onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: ["referrals"] });
+      qc.invalidateQueries({ queryKey: ["referral", id] });
+      qc.invalidateQueries({ queryKey: ["capacity"] });
+    },
+  });
+};
+
+export const useQuickAcceptReferral = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => quickAcceptReferral(id),
+    onSuccess: (_, id) => {
       qc.invalidateQueries({ queryKey: ["referrals"] });
       qc.invalidateQueries({ queryKey: ["referral", id] });
       qc.invalidateQueries({ queryKey: ["capacity"] });

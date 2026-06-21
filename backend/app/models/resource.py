@@ -71,8 +71,12 @@ class ResourceReservation(Base, UUIDMixin, TimestampMixin):
     planned_admission_time: Mapped["datetime | None"] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    referral_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("referrals.id"), nullable=True
+    )
 
     resource: Mapped[Resource] = relationship("Resource", back_populates="reservations")
+    referral: Mapped["Referral | None"] = relationship("Referral", back_populates="resource_reservation")
 
 from app.models.unit import Unit
 from app.models.facility import Facility

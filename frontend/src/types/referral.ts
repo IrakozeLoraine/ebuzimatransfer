@@ -33,9 +33,12 @@ export interface Referral {
   rejection_reason: string | null;
   rejection_comment: string | null;
   created_by: string;
+  arrival_condition: string | null;
   referring_facility_id: string | null;
   preferred_facility_id: string | null;
   accepted_facility_id: string | null;
+  origin_unit_id: string | null;
+  requested_unit_id: string | null;
   created_at: string;
   updated_at: string;
   status_history: StatusHistory[];
@@ -53,6 +56,7 @@ export interface CreateReferralPayload {
   ventilator_needed: boolean;
   high_flow_oxygen_needed: boolean;
   preferred_facility_id?: string;
+  requested_unit_id?: string;
 }
 
 export interface AcceptReferralPayload {

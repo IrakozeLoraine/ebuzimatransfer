@@ -8,6 +8,7 @@ export interface User {
   last_name: string;
   phone: string | null;
   location: string | null;
+  unit_id: string | null;
   is_active: boolean;
   account_status: string;
   /** Roles grouped by facility. */

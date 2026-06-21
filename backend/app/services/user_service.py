@@ -121,6 +121,8 @@ class UserService:
             user.phone = data.phone
         if "location" in fields_set:
             user.location = data.location
+        if "unit_id" in fields_set:
+            user.unit_id = data.unit_id
         # Required fields are only overwritten when a value is actually provided.
         if data.first_name is not None:
             user.first_name = data.first_name

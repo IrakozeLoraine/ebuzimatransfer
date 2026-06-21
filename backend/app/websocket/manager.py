@@ -26,6 +26,10 @@ class ConnectionManager:
         async with self._lock:
             self._channels.get(channel, set()).discard(websocket)
 
+    async def broadcast_to_user(self, user_id: str, message: Any) -> None:
+        """Fan a message out to all sockets a user has open (per-user channel)."""
+        await self.broadcast_to_channel(f"user:{user_id}", message)
+
     async def broadcast_to_channel(self, channel: str, message: Any) -> None:
         # Copy under lock, send outside the lock so a slow/closed client doesn't
         # block others. Drop connections that fail to receive.

@@ -18,6 +18,7 @@ class ReferralCreate(BaseModel):
     ventilator_needed: bool = False
     high_flow_oxygen_needed: bool = False
     preferred_facility_id: Optional[uuid.UUID] = None
+    requested_unit_id: Optional[uuid.UUID] = None
 
 
 class ReferralUpdate(BaseModel):
@@ -65,10 +66,13 @@ class ReferralOut(BaseModel):
     status: ReferralStatus
     rejection_reason: Optional[str]
     rejection_comment: Optional[str]
+    arrival_condition: Optional[str] = None
     created_by: uuid.UUID
     referring_facility_id: Optional[uuid.UUID]
     preferred_facility_id: Optional[uuid.UUID]
     accepted_facility_id: Optional[uuid.UUID]
+    origin_unit_id: Optional[uuid.UUID] = None
+    requested_unit_id: Optional[uuid.UUID] = None
     created_at: datetime
     updated_at: datetime
     status_history: List[StatusHistoryOut] = []

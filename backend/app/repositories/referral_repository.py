@@ -44,6 +44,52 @@ class ReferralRepository(BaseRepository[Referral]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_for_facilities(
+        self,
+        facility_ids: List[uuid.UUID],
+        status: Optional[ReferralStatus] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Referral]:
+        """Requests touching any of these facilities (referring/preferred/accepted)."""
+        from sqlalchemy import or_
+        if not facility_ids:
+            return []
+        stmt = select(Referral).options(selectinload(Referral.status_history)).where(
+            or_(
+                Referral.referring_facility_id.in_(facility_ids),
+                Referral.preferred_facility_id.in_(facility_ids),
+                Referral.accepted_facility_id.in_(facility_ids),
+            )
+        )
+        if status:
+            stmt = stmt.where(Referral.status == status)
+        stmt = stmt.order_by(Referral.created_at.desc()).offset(offset).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_for_clinician(
+        self,
+        user_id: uuid.UUID,
+        unit_id: Optional[uuid.UUID],
+        status: Optional[ReferralStatus] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Referral]:
+        """A clinician's own requests plus any sharing their clinical unit
+        (origin unit outbound, or requested unit inbound)."""
+        from sqlalchemy import or_
+        conds = [Referral.created_by == user_id]
+        if unit_id is not None:
+            conds.append(Referral.origin_unit_id == unit_id)
+            conds.append(Referral.requested_unit_id == unit_id)
+        stmt = select(Referral).options(selectinload(Referral.status_history)).where(or_(*conds))
+        if status:
+            stmt = stmt.where(Referral.status == status)
+        stmt = stmt.order_by(Referral.created_at.desc()).offset(offset).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_accepted_awaiting_transport(self) -> List[Referral]:
         result = await self.session.execute(
             select(Referral)

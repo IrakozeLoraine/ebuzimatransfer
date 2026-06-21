@@ -36,7 +36,7 @@ export const Sidebar = () => {
     navItem("/dashboard", "Dashboard", LayoutDashboard),
     ...(canViewResources ? [navItem("/find-resources", "Resource Lookup", Search)] : []),
     ...(canViewResources ? [navItem("/resources", "Resources", Package)] : []),
-    navItem("/referrals", "Referrals", FileText),
+    navItem("/transfer-requests", "Transfer Requests", FileText),
     ...(canManageTransport ? [navItem("/transport", "Transport", Truck)] : []),
     ...(canViewReports ? [navItem("/reports", "Reports", BarChart3)] : []),
   ];

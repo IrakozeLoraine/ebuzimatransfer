@@ -21,6 +21,11 @@ export const acceptReferral = async (id: string, payload: AcceptReferralPayload)
   return data;
 };
 
+export const quickAcceptReferral = async (id: string): Promise<Referral> => {
+  const { data } = await api.post<Referral>(`/referrals/${id}/quick-accept`);
+  return data;
+};
+
 export const rejectReferral = async (id: string, payload: RejectReferralPayload): Promise<Referral> => {
   const { data } = await api.post<Referral>(`/referrals/${id}/reject`, payload);
   return data;

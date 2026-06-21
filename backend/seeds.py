@@ -17,6 +17,7 @@ from app.models.user import Role, User, UserRole, UserFacilityRole, AccountStatu
 from app.models.facility import Facility
 from app.models.unit import Unit
 from app.models.resource import Resource, ResourceReservation, ResourceStatus, ResourceType
+from app.models.referral import Referral, ReferralStatus, ReferralStatusHistory
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +101,7 @@ USERS = [
         "last_name": "Uwimana",
         "phone": "+250788000002",
         "password": "Pass@1234",
-        "roles": [UserRole.ICU_COORDINATOR],
+        "roles": [UserRole.CLINICIAN],
         "facility_indices": [0],  # CHUK
     },
     {
@@ -110,7 +111,7 @@ USERS = [
         "last_name": "Habimana",
         "phone": "+250788000003",
         "password": "Pass@1234",
-        "roles": [UserRole.ICU_COORDINATOR],
+        "roles": [UserRole.CLINICIAN],
         "facility_indices": [1],  # King Faisal
     },
     {
@@ -120,7 +121,7 @@ USERS = [
         "last_name": "Mukamana",
         "phone": "+250788000004",
         "password": "Pass@1234",
-        "roles": [UserRole.REFERRING_CLINICIAN],
+        "roles": [UserRole.CLINICIAN],
         "facility_indices": [0],  # CHUK
     },
     {
@@ -130,7 +131,7 @@ USERS = [
         "last_name": "Nzeyimana",
         "phone": "+250788000005",
         "password": "Pass@1234",
-        "roles": [UserRole.REFERRING_CLINICIAN],
+        "roles": [UserRole.CLINICIAN],
         "facility_indices": [3],  # Butaro
     },
     {
@@ -207,7 +208,11 @@ RESERVATIONS = [
 async def clear_data(session: AsyncSession) -> None:
     for table in [
         "resource_reservations",
+        "referral_status_history",
+        "transport_events",
+        "notifications",
         "resources",
+        "referrals",
         "user_facility_roles",
         "users",
         "facilities",
@@ -325,6 +330,90 @@ async def seed_resources(session: AsyncSession) -> None:
     print(f"  ✓ Created {reservations} reservations")
 
 
+# Clinical-unit membership for the seeded clinicians (medical_id -> unit name),
+# plus sample transfer requests across facilities in varied statuses.
+CLINICIAN_UNITS = {
+    "RC-BUT-001": "Accident & Emergency (A&E) Unit",   # Butaro (district)
+    "RC-CHUK-001": ICU_HDU,                              # CHUK
+    "IC-CHUK-001": ICU_HDU,                              # CHUK
+    "IC-KFH-001": ICU_HDU,                               # King Faisal
+}
+
+TRANSFERS = [
+    {"created_by": "RC-BUT-001", "from": BUTARO, "to": CHUK, "origin_unit": "Accident & Emergency (A&E) Unit",
+     "requested_unit": ICU_HDU, "patient_code": "PT-0001", "age_band": "ADULT", "sex": "M",
+     "diagnosis": "Severe traumatic brain injury", "acuity_level": "HIGH", "urgency": "IMMEDIATE",
+     "reason": "Needs neuro-ICU and ventilation", "vent": True, "status": ReferralStatus.REQUESTED},
+    {"created_by": "RC-BUT-001", "from": BUTARO, "to": KFH, "origin_unit": "Accident & Emergency (A&E) Unit",
+     "requested_unit": ICU_HDU, "patient_code": "PT-0002", "age_band": "ADULT", "sex": "F",
+     "diagnosis": "Septic shock", "acuity_level": "HIGH", "urgency": "URGENT",
+     "reason": "ICU bed + vasopressors", "vent": True, "status": ReferralStatus.ACCEPTED},
+    {"created_by": "RC-BUT-001", "from": BUTARO, "to": CHUK, "origin_unit": "Accident & Emergency (A&E) Unit",
+     "requested_unit": ICU_HDU, "patient_code": "PT-0003", "age_band": "PEDIATRIC", "sex": "M",
+     "diagnosis": "Status epilepticus", "acuity_level": "MEDIUM", "urgency": "URGENT",
+     "reason": "Pediatric ICU", "vent": False, "status": ReferralStatus.REJECTED,
+     "rejection_reason": "No pediatric ICU bed available"},
+]
+
+
+async def seed_transfers(session: AsyncSession) -> None:
+    """Assign clinicians a clinical unit and seed sample transfer requests.
+    Idempotent: skips request creation if any already exist."""
+    fac_by_name = {f.name: f for f in (await session.execute(select(Facility))).scalars()}
+    unit_by_name = {u.name: u for u in (await session.execute(select(Unit))).scalars()}
+    user_by_mid = {u.medical_id: u for u in (await session.execute(select(User))).scalars()}
+
+    # Clinical-unit membership (idempotent — always reasserted).
+    for mid, unit_name in CLINICIAN_UNITS.items():
+        user = user_by_mid.get(mid)
+        unit = unit_by_name.get(unit_name)
+        if user and unit:
+            user.unit_id = unit.id
+    await session.flush()
+    print(f"  ✓ Assigned clinical units to {len(CLINICIAN_UNITS)} clinicians")
+
+    existing = await session.scalar(select(func.count()).select_from(Referral))
+    if existing:
+        print(f"  ↪ {existing} transfer requests already present — skipping.")
+        return
+
+    year = datetime.now(timezone.utc).year
+    for i, t in enumerate(TRANSFERS, start=1):
+        creator = user_by_mid.get(t["created_by"])
+        frm = fac_by_name.get(t["from"])
+        to = fac_by_name.get(t["to"])
+        if not creator or not frm or not to:
+            continue
+        ref = Referral(
+            referral_number=f"REF-{year}-{i:05d}",
+            patient_code=t["patient_code"],
+            age_band=t["age_band"],
+            sex=t["sex"],
+            diagnosis=t["diagnosis"],
+            acuity_level=t["acuity_level"],
+            urgency=t["urgency"],
+            reason_for_transfer=t["reason"],
+            ventilator_needed=t.get("vent", False),
+            high_flow_oxygen_needed=False,
+            status=t["status"],
+            rejection_reason=t.get("rejection_reason"),
+            created_by=creator.id,
+            referring_facility_id=frm.id,
+            preferred_facility_id=to.id,
+            accepted_facility_id=to.id if t["status"] == ReferralStatus.ACCEPTED else None,
+            origin_unit_id=unit_by_name[t["origin_unit"]].id if t["origin_unit"] in unit_by_name else None,
+            requested_unit_id=unit_by_name[t["requested_unit"]].id if t["requested_unit"] in unit_by_name else None,
+        )
+        session.add(ref)
+        await session.flush()
+        # Status history: always a REQUESTED entry, plus the terminal one.
+        session.add(ReferralStatusHistory(referral_id=ref.id, status=ReferralStatus.REQUESTED, changed_by=creator.id))
+        if t["status"] != ReferralStatus.REQUESTED:
+            session.add(ReferralStatusHistory(referral_id=ref.id, status=t["status"], changed_by=creator.id))
+    await session.flush()
+    print(f"  ✓ Created {len(TRANSFERS)} transfer requests")
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -346,6 +435,15 @@ async def main() -> None:
         print("\n✅ Resource seed complete!\n")
         return
 
+    # Seed only transfer requests (+ clinician unit membership) on top of existing data.
+    if "--transfers" in sys.argv:
+        print("\n🌱 Seeding transfer requests...\n")
+        async with AsyncSessionLocal() as session:
+            await seed_transfers(session)
+            await session.commit()
+        print("\n✅ Transfer-request seed complete!\n")
+        return
+
     print("\n🌱 Seeding eBuzimaTransfer database...\n")
     async with AsyncSessionLocal() as session:
         if not force and await already_seeded(session):
@@ -356,6 +454,7 @@ async def main() -> None:
         facilities = await seed_facilities(session)
         users = await seed_users(session, roles, facilities)
         await seed_resources(session)
+        await seed_transfers(session)
         await session.commit()
 
     print("\n✅ Seed complete!\n")

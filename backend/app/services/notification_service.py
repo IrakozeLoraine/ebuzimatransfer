@@ -4,7 +4,7 @@ from typing import List
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.notification import Notification
-from app.models.user import User
+from app.models.user import User, UserFacilityRole, Role
 from app.websocket.manager import ws_manager
 
 
@@ -58,10 +58,66 @@ class NotificationService:
             n.is_read = True
             await self.session.flush()
 
-    async def notify_role(self, role_name: str, title: str, message: str, event_type: str | None = None) -> None:
+    async def mark_all_read(self, user_id: uuid.UUID) -> None:
         result = await self.session.execute(
-            select(User).join(User.roles).where(User.roles.any(name=role_name), User.is_active == True)
+            select(Notification).where(Notification.user_id == user_id, Notification.is_read == False)
         )
-        users = result.scalars().all()
-        for user in users:
-            await self.create(user.id, title, message, event_type)
+        for n in result.scalars().all():
+            n.is_read = True
+        await self.session.flush()
+
+    async def notify_role(
+        self,
+        role_name: str,
+        title: str,
+        message: str,
+        event_type: str | None = None,
+        entity_type: str | None = None,
+        entity_id: uuid.UUID | None = None,
+        facility_id: uuid.UUID | None = None,
+    ) -> None:
+        """Notify every active user holding ``role_name`` (optionally at one facility)."""
+        stmt = (
+            select(User)
+            .join(UserFacilityRole, UserFacilityRole.user_id == User.id)
+            .join(Role, Role.id == UserFacilityRole.role_id)
+            .where(Role.name == role_name, User.is_active == True)
+        )
+        if facility_id is not None:
+            stmt = stmt.where(UserFacilityRole.facility_id == facility_id)
+        result = await self.session.execute(stmt.distinct())
+        for user in result.scalars().all():
+            await self.create(user.id, title, message, event_type, entity_type, entity_id)
+
+    async def notify_facility_unit(
+        self,
+        facility_id: uuid.UUID,
+        unit_id: uuid.UUID | None,
+        role_name: str,
+        title: str,
+        message: str,
+        event_type: str | None = None,
+        entity_type: str | None = None,
+        entity_id: uuid.UUID | None = None,
+        exclude_user_id: uuid.UUID | None = None,
+    ) -> None:
+        """Notify active users with ``role_name`` at ``facility_id`` who belong to
+        ``unit_id`` (same clinical unit). When ``unit_id`` is None, notifies all
+        such users at the facility."""
+        stmt = (
+            select(User)
+            .join(UserFacilityRole, UserFacilityRole.user_id == User.id)
+            .join(Role, Role.id == UserFacilityRole.role_id)
+            .where(
+                Role.name == role_name,
+                User.is_active == True,
+                UserFacilityRole.facility_id == facility_id,
+            )
+        )
+        if unit_id is not None:
+            stmt = stmt.where(User.unit_id == unit_id)
+        result = await self.session.execute(stmt.distinct())
+        for user in result.scalars().all():
+            if exclude_user_id and user.id == exclude_user_id:
+                continue
+            await self.create(user.id, title, message, event_type, entity_type, entity_id)

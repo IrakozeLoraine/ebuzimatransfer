@@ -1,8 +1,10 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useCreateReferral } from "@/hooks/useReferrals";
 import { useFacilities } from "@/hooks/useFacilities";
+import { useUnits } from "@/hooks/useUnits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,8 +44,10 @@ const SectionHeader = ({
 
 export const NewReferralPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { mutate: create, isPending, error } = useCreateReferral();
   const { data: facilities = [] } = useFacilities();
+  const { data: units = [] } = useUnits();
 
   const {
     register,
@@ -56,9 +60,17 @@ export const NewReferralPage = () => {
     defaultValues: { ventilator_needed: false, high_flow_oxygen_needed: false },
   });
 
+  // Prefill destination facility + requested unit when arriving from Resource Lookup.
+  useEffect(() => {
+    const facility = searchParams.get("facility");
+    const unit = searchParams.get("unit");
+    if (facility) setValue("preferred_facility_id", facility);
+    if (unit) setValue("requested_unit_id", unit);
+  }, [searchParams, setValue]);
+
   const onSubmit = (data: NewReferralFormValues) => {
     create(data, {
-      onSuccess: (referral) => navigate(`/referrals/${referral.id}`),
+      onSuccess: (referral) => navigate(`/transfer-requests/${referral.id}`),
     });
   };
 
@@ -69,14 +81,14 @@ export const NewReferralPage = () => {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">New Referral</h1>
+          <h1 className="text-2xl font-bold">New Transfer Request</h1>
           <p className="text-sm text-muted-foreground">Complete all required sections below</p>
         </div>
       </div>
 
       {error && (
         <Alert variant="destructive">
-          <AlertDescription>Failed to create referral. Please check all fields and try again.</AlertDescription>
+          <AlertDescription>Failed to create the transfer request. Please check all fields and try again.</AlertDescription>
         </Alert>
       )}
 
@@ -189,14 +201,25 @@ export const NewReferralPage = () => {
           <CardHeader className="pb-4">
             <SectionHeader icon={Building2} title="Preferred Destination" step={3} />
           </CardHeader>
-          <CardContent>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Preferred Facility <span className="text-muted-foreground text-xs">(optional)</span></Label>
-              <Select onValueChange={(v) => setValue("preferred_facility_id", v)}>
+              <Select value={watch("preferred_facility_id")} onValueChange={(v) => setValue("preferred_facility_id", v)}>
                 <SelectTrigger><SelectValue placeholder="Any available facility" /></SelectTrigger>
                 <SelectContent>
                   {facilities.map((f) => (
                     <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Requested Clinical Unit <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Select value={watch("requested_unit_id")} onValueChange={(v) => setValue("requested_unit_id", v)}>
+                <SelectTrigger><SelectValue placeholder="Any unit" /></SelectTrigger>
+                <SelectContent>
+                  {units.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -209,7 +232,7 @@ export const NewReferralPage = () => {
             Cancel
           </Button>
           <Button type="submit" disabled={isPending} className="flex-1 sm:flex-none sm:min-w-40">
-            {isPending ? "Submitting…" : "Submit Referral"}
+            {isPending ? "Submitting…" : "Submit Transfer Request"}
           </Button>
         </div>
       </form>

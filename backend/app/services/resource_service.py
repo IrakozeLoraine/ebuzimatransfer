@@ -306,8 +306,10 @@ class ResourceService:
         resource_id: uuid.UUID,
         reserved_by: uuid.UUID,
         planned_admission_time: datetime | None = None,
+        referral_id: uuid.UUID | None = None,
     ) -> ResourceReservation:
-        """Atomically reserve a resource using SELECT FOR UPDATE."""
+        """Atomically reserve a resource using SELECT FOR UPDATE. Optionally links
+        the reservation to the transfer request (referral) it fulfils."""
         resource = await self.repo.lock_for_update(resource_id)
         if not resource or resource.status != ResourceStatus.AVAILABLE:
             raise ResourceReservedError()
@@ -317,6 +319,7 @@ class ResourceService:
             resource_id=resource_id,
             reserved_by=reserved_by,
             planned_admission_time=planned_admission_time,
+            referral_id=referral_id,
         )
         self.session.add(reservation)
 

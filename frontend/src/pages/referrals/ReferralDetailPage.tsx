@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useReferral, useAcceptReferral, useRejectReferral } from "@/hooks/useReferrals";
+import { useReferral, useAcceptReferral, useQuickAcceptReferral, useRejectReferral } from "@/hooks/useReferrals";
 import { useResources } from "@/hooks/useResources";
+import { toast } from "@/components/ui/toaster";
+import { getApiErrorMessage } from "@/utils/apiError";
+import { Zap } from "lucide-react";
 import { StatusBadge } from "@/components/atoms/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -33,6 +36,7 @@ export const ReferralDetailPage = () => {
   const { data: referral, isLoading } = useReferral(id!);
   const { data: resources = [] } = useResources();
   const { mutate: accept, isPending: accepting } = useAcceptReferral();
+  const { mutate: quickAccept, isPending: quickAccepting } = useQuickAcceptReferral();
   const { mutate: reject, isPending: rejecting } = useRejectReferral();
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [selectedResourceId, setSelectedResourceId] = useState("");
@@ -41,7 +45,21 @@ export const ReferralDetailPage = () => {
 
   const handleAccept = () => {
     if (!selectedResourceId || !id) return;
-    accept({ id, payload: { resource_id: selectedResourceId } });
+    accept(
+      { id, payload: { resource_id: selectedResourceId } },
+      {
+        onSuccess: () => toast({ variant: "success", title: "Transfer request approved" }),
+        onError: (e) => toast({ variant: "destructive", title: "Could not approve", description: getApiErrorMessage(e) }),
+      }
+    );
+  };
+
+  const handleQuickApprove = () => {
+    if (!id) return;
+    quickAccept(id, {
+      onSuccess: () => toast({ variant: "success", title: "Approved", description: "An available resource was reserved automatically." }),
+      onError: (e) => toast({ variant: "destructive", title: "Could not approve", description: getApiErrorMessage(e) }),
+    });
   };
 
   const onReject = (data: { reason: string; comment?: string }) => {
@@ -61,7 +79,7 @@ export const ReferralDetailPage = () => {
     );
   }
 
-  if (!referral) return <p className="text-destructive">Referral not found</p>;
+  if (!referral) return <p className="text-destructive">Transfer request not found</p>;
 
   const canAction =
     canAcceptReferral &&
@@ -183,35 +201,49 @@ export const ReferralDetailPage = () => {
 
       {/* Action bar */}
       {canAction && (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end rounded-xl border border-border/60 bg-card p-4 shadow-card">
-          <div className="flex-1 space-y-1.5">
-            <Label className="text-sm font-medium">Select Available Resource</Label>
-            <Select onValueChange={setSelectedResourceId}>
-              <SelectTrigger>
-                <SelectValue placeholder={availableResources.length > 0 ? "Choose a resource…" : "No resources available"} />
-              </SelectTrigger>
-              <SelectContent>
-                {availableResources.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>{r.resource_code}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <div className="space-y-3 rounded-xl border border-border/60 bg-card p-4 shadow-card">
+          {/* One-click approve for fast decisions */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">Quick decision</p>
+              <p className="text-xs text-muted-foreground">
+                Approve auto-reserves an available resource in the requested unit at your facility.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={handleQuickApprove}
+                disabled={quickAccepting}
+                className="bg-gradient-to-r from-emerald-500 to-green-600 text-white hover:brightness-110 shadow-sm"
+              >
+                <Zap className="mr-2 h-4 w-4" />
+                {quickAccepting ? "Approving…" : "Quick Approve"}
+              </Button>
+              <Button variant="destructive" onClick={() => setShowRejectDialog(true)}>
+                <X className="mr-2 h-4 w-4" />
+                Reject
+              </Button>
+            </div>
           </div>
-          <div className="flex gap-2 shrink-0">
-            <Button
-              onClick={handleAccept}
-              disabled={!selectedResourceId || accepting}
-              className="bg-gradient-to-r from-emerald-500 to-green-600 text-white hover:brightness-110 shadow-sm"
-            >
+
+          {/* Or pick a specific resource manually */}
+          <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-end">
+            <div className="flex-1 space-y-1.5">
+              <Label className="text-sm font-medium">Or choose a specific resource</Label>
+              <Select onValueChange={setSelectedResourceId}>
+                <SelectTrigger>
+                  <SelectValue placeholder={availableResources.length > 0 ? "Choose a resource…" : "No resources available"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableResources.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>{r.resource_code ?? r.resource_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleAccept} disabled={!selectedResourceId || accepting} variant="outline">
               <Check className="mr-2 h-4 w-4" />
-              {accepting ? "Accepting…" : "Accept"}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => setShowRejectDialog(true)}
-            >
-              <X className="mr-2 h-4 w-4" />
-              Reject
+              {accepting ? "Approving…" : "Approve with selected"}
             </Button>
           </div>
         </div>

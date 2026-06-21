@@ -103,7 +103,7 @@ export const router = createBrowserRouter([
           {
             path: "/resources",
             element: (
-              <RoleGuard roles={["ICU_COORDINATOR", "FACILITY_ADMIN", "SUPER_ADMIN"]}>
+              <RoleGuard roles={["CLINICIAN", "FACILITY_ADMIN", "SUPER_ADMIN"]}>
                 <ResourcesPage />
               </RoleGuard>
             ),
@@ -111,21 +111,21 @@ export const router = createBrowserRouter([
           {
             path: "/find-resources",
             element: (
-              <RoleGuard roles={["ICU_COORDINATOR", "FACILITY_ADMIN", "SUPER_ADMIN"]}>
+              <RoleGuard roles={["CLINICIAN", "FACILITY_ADMIN", "SUPER_ADMIN"]}>
                 <FindResourcesPage />
               </RoleGuard>
             ),
           },
-          { path: "/referrals", element: withSuspense(<ReferralsPage />) },
+          { path: "/transfer-requests", element: withSuspense(<ReferralsPage />) },
           {
-            path: "/referrals/new",
+            path: "/transfer-requests/new",
             element: (
-              <RoleGuard roles={["REFERRING_CLINICIAN", "SUPER_ADMIN"]}>
+              <RoleGuard roles={["CLINICIAN", "SUPER_ADMIN"]}>
                 <NewReferralPage />
               </RoleGuard>
             ),
           },
-          { path: "/referrals/:id", element: withSuspense(<ReferralDetailPage />) },
+          { path: "/transfer-requests/:id", element: withSuspense(<ReferralDetailPage />) },
           {
             path: "/transport",
             element: (

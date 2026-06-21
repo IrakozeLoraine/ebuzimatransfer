@@ -9,6 +9,9 @@ from app.api import (
     units,
     resources,
     dashboard,
+    referrals,
+    transport,
+    notifications,
 )
 
 router = APIRouter(prefix="/api/v1")
@@ -21,3 +24,6 @@ router.include_router(audit.router, prefix="/audit", tags=["Audit"])
 router.include_router(units.router, prefix="/units", tags=["Units"])
 router.include_router(resources.router, prefix="/resources", tags=["Resources"])
 router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
+router.include_router(referrals.router, prefix="/referrals", tags=["Transfer Requests"])
+router.include_router(transport.router, prefix="/transport", tags=["Transport"])
+router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])

@@ -119,7 +119,7 @@ async def import_resources(
 @router.get("/available", response_model=List[ResourceOut])
 async def available_resources(
     unit_id: Optional[uuid.UUID] = Query(None),
-    current_user=Depends(require_roles(SUPER_ADMIN, FACILITY_ADMIN, "ICU_COORDINATOR")),
+    current_user=Depends(require_roles(SUPER_ADMIN, FACILITY_ADMIN, "CLINICIAN")),
     session: AsyncSession = Depends(get_session),
 ):
     """Available resources across all facilities, for initiating inter-facility
@@ -173,7 +173,7 @@ async def assign_resource(
 async def reserve_resource(
     resource_id: uuid.UUID,
     payload: ResourceReserveRequest,
-    current_user=Depends(require_roles(SUPER_ADMIN, FACILITY_ADMIN, "ICU_COORDINATOR")),
+    current_user=Depends(require_roles(SUPER_ADMIN, FACILITY_ADMIN, "CLINICIAN")),
     session: AsyncSession = Depends(get_session),
 ):
     """Initiate a transfer request by reserving an available resource (typically
@@ -199,7 +199,7 @@ async def reserve_resource(
 async def update_resource_status(
     resource_id: uuid.UUID,
     payload: ResourceStatusUpdate,
-    current_user=Depends(require_roles(SUPER_ADMIN, FACILITY_ADMIN, "ICU_COORDINATOR")),
+    current_user=Depends(require_roles(SUPER_ADMIN, FACILITY_ADMIN, "CLINICIAN")),
     session: AsyncSession = Depends(get_session),
 ):
     svc = ResourceService(session)

@@ -9,26 +9,27 @@ export const usePermissions = () => {
 
   const isSuperAdmin = hasRole("SUPER_ADMIN");
   const isFacilityAdmin = hasRole("FACILITY_ADMIN");
-  const isICUCoordinator = hasRole("ICU_COORDINATOR");
   const isAdmin = isSuperAdmin || isFacilityAdmin;
-  const isClinician = hasRole("REFERRING_CLINICIAN");
+  // A single clinician role; "referring" vs "receiving" is contextual, not a role.
+  const isClinician = hasRole("CLINICIAN");
   const isAmbulance = hasRole("AMBULANCE_COORDINATOR");
 
   const canViewReports = isSuperAdmin;
   const canManageFacilities = isSuperAdmin;
   const canViewAudit = isAdmin;
-  const canManageResources = isAdmin || isICUCoordinator;
+  const canManageResources = isAdmin || isClinician;
   const canAssignResources = isAdmin;
-  const canAcceptReferral = isFacilityAdmin || isICUCoordinator;
-  const canCreateReferral = isClinician;
+  // Any clinician can create a transfer request (referring) and act on one that
+  // targets their facility (receiving); admins can too.
+  const canCreateReferral = isClinician || isSuperAdmin;
+  const canAcceptReferral = isClinician || isAdmin;
   const canManageTransport = isAmbulance || isSuperAdmin;
-  const canViewResources = isSuperAdmin || isFacilityAdmin || isICUCoordinator || isAmbulance || isClinician;
+  const canViewResources = isSuperAdmin || isFacilityAdmin || isAmbulance || isClinician;
 
   return {
     hasRole,
     isSuperAdmin,
     isFacilityAdmin,
-    isICUCoordinator,
     isAdmin,
     isClinician,
     isAmbulance,

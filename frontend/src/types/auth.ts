@@ -34,6 +34,7 @@ export interface UserMe {
   last_name: string;
   phone: string | null;
   location: string | null;
+  unit_id: string | null;
   /** Roles effective in the active facility (global grants + active-facility grants). */
   roles: string[];
   active_facility_id: string | null;
@@ -49,8 +50,7 @@ export interface UpdateProfilePayload {
 }
 
 export type UserRole =
-  | "REFERRING_CLINICIAN"
-  | "ICU_COORDINATOR"
+  | "CLINICIAN"
   | "FACILITY_ADMIN"
   | "AMBULANCE_COORDINATOR"
   | "SUPER_ADMIN";

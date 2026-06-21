@@ -53,6 +53,9 @@ class User(Base, UUIDMixin, TimestampMixin):
     medical_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
     phone: Mapped[str | None] = mapped_column(String(20))
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    unit_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("units.id"), nullable=True
+    )
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -103,15 +106,15 @@ from app.models.audit_log import AuditLog
 
 
 class UserRole:
-    REFERRING_CLINICIAN = "REFERRING_CLINICIAN"
-    ICU_COORDINATOR = "ICU_COORDINATOR"
+    # A single clinician role; whether a clinician is "referring" or "receiving"
+    # is derived from the facility/tier they are working in for a given request.
+    CLINICIAN = "CLINICIAN"
     AMBULANCE_COORDINATOR = "AMBULANCE_COORDINATOR"
     FACILITY_ADMIN = "FACILITY_ADMIN"
     SUPER_ADMIN = "SUPER_ADMIN"
 
     ALL = [
-        REFERRING_CLINICIAN,
-        ICU_COORDINATOR,
+        CLINICIAN,
         AMBULANCE_COORDINATOR,
         FACILITY_ADMIN,
         SUPER_ADMIN,

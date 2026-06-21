@@ -6,8 +6,7 @@ from pydantic import BaseModel, EmailStr, field_validator
 
 
 VALID_ROLES = {
-    "REFERRING_CLINICIAN",
-    "ICU_COORDINATOR",
+    "CLINICIAN",
     "AMBULANCE_COORDINATOR",
     "FACILITY_ADMIN",
     "SUPER_ADMIN",
@@ -40,6 +39,7 @@ class UserBase(BaseModel):
     last_name: str
     phone: Optional[str] = None
     location: Optional[str] = None
+    unit_id: Optional[uuid.UUID] = None
     medical_id: str
 
     @field_validator("email", mode="before")
@@ -81,6 +81,7 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = None
     phone: Optional[str] = None
     location: Optional[str] = None
+    unit_id: Optional[uuid.UUID] = None
     email: Optional[EmailStr] = None
 
     @field_validator("email", mode="before")
@@ -170,6 +171,7 @@ class UserOut(UserBase):
             last_name=user.last_name,
             phone=user.phone,
             location=user.location,
+            unit_id=user.unit_id,
             is_active=user.is_active,
             account_status=user.account_status,
             facility_roles=_facility_roles(user),
@@ -187,6 +189,7 @@ class UserMe(BaseModel):
     last_name: str
     phone: Optional[str] = None
     location: Optional[str] = None
+    unit_id: Optional[uuid.UUID] = None
     roles: List[str]
     active_facility_id: Optional[uuid.UUID] = None
     facilities: List[FacilityRef] = []
@@ -209,6 +212,7 @@ class UserMe(BaseModel):
             last_name=user.last_name,
             phone=user.phone,
             location=user.location,
+            unit_id=user.unit_id,
             roles=roles,
             active_facility_id=active_facility_id,
             facilities=[FacilityRef(id=f.id, name=f.name) for f in user.facilities],

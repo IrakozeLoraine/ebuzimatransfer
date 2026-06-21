@@ -14,6 +14,15 @@ from app.schemas.referral import ReferralCreate, ReferralOut, ReferralSummary, A
 router = APIRouter()
 
 
+def _active_facility_id(user) -> Optional[uuid.UUID]:
+    """The facility a user is acting from: their active facility, or their only one."""
+    active = getattr(user, "active_facility_id", None)
+    if active is not None:
+        return active
+    facilities = getattr(user, "facilities", [])
+    return facilities[0].id if len(facilities) == 1 else None
+
+
 @router.get("", response_model=List[ReferralSummary])
 async def list_referrals(
     status: Optional[ReferralStatus] = Query(None),
@@ -24,27 +33,25 @@ async def list_referrals(
     session: AsyncSession = Depends(get_session),
 ):
     svc = ReferralService(session)
-    own_only = "REFERRING_CLINICIAN" in current_user.role_names
-    return await svc.list(
-        status=status,
-        facility_id=facility_id,
-        created_by=current_user.id if own_only else None,
-        limit=limit,
-        offset=offset,
-    )
+    return await svc.list_visible(current_user, status=status, limit=limit, offset=offset)
 
 
 @router.post("", response_model=ReferralOut, status_code=201)
 async def create_referral(
     payload: ReferralCreate,
-    current_user=Depends(require_roles("REFERRING_CLINICIAN", "SUPER_ADMIN")),
+    current_user=Depends(require_roles("CLINICIAN", "SUPER_ADMIN")),
     session: AsyncSession = Depends(get_session),
 ):
     svc = ReferralService(session)
-    referral = await svc.create(payload, current_user.id, current_user.primary_facility_id)
+    referral = await svc.create(
+        payload,
+        current_user.id,
+        _active_facility_id(current_user),
+        origin_unit_id=getattr(current_user, "unit_id", None),
+    )
     await AuditService(session).log("CREATE_REFERRAL", "referral", user_id=current_user.id, entity_id=referral.id)
     notif = NotificationService(session)
-    await notif.notify_role("ICU_COORDINATOR", "New Referral", f"Referral {referral.referral_number} received", "NEW_REFERRAL")
+    await notif.notify_role("CLINICIAN", "New Referral", f"Referral {referral.referral_number} received", "NEW_REFERRAL")
     await session.commit()
     await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_CREATED", "referral_id": str(referral.id)})
     return await svc.get(referral.id)
@@ -63,7 +70,7 @@ async def get_referral(
 async def accept_referral(
     referral_id: uuid.UUID,
     payload: AcceptReferralRequest,
-    current_user=Depends(require_roles("ICU_COORDINATOR", "SUPER_ADMIN")),
+    current_user=Depends(require_roles("CLINICIAN", "FACILITY_ADMIN", "SUPER_ADMIN")),
     session: AsyncSession = Depends(get_session),
 ):
     svc = ReferralService(session)
@@ -75,11 +82,35 @@ async def accept_referral(
     return await svc.get(referral_id)
 
 
+@router.post("/{referral_id}/quick-accept", response_model=ReferralOut)
+async def quick_accept_referral(
+    referral_id: uuid.UUID,
+    current_user=Depends(require_roles("CLINICIAN", "FACILITY_ADMIN", "SUPER_ADMIN")),
+    session: AsyncSession = Depends(get_session),
+):
+    """One-click approve: auto-pick an available resource in the requested unit at
+    the receiving clinician's facility, then accept."""
+    from app.core.exceptions import ValidationError
+    svc = ReferralService(session)
+    facility_id = _active_facility_id(current_user)
+    if facility_id is None:
+        raise ValidationError("Could not determine your facility")
+    resource_id = await svc.auto_pick_resource(referral_id, facility_id)
+    if resource_id is None:
+        raise ValidationError("No available resource in the requested unit at your facility")
+    referral = await svc.accept(referral_id, AcceptReferralRequest(resource_id=resource_id), current_user.id)
+    await AuditService(session).log("ACCEPT_REFERRAL", "referral", user_id=current_user.id, entity_id=referral_id)
+    await session.commit()
+    await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_ACCEPTED", "referral_id": str(referral_id)})
+    await ws_manager.broadcast_to_channel("capacity", {"event": "RESOURCE_UPDATED"})
+    return await svc.get(referral_id)
+
+
 @router.post("/{referral_id}/reject", response_model=ReferralOut)
 async def reject_referral(
     referral_id: uuid.UUID,
     payload: RejectReferralRequest,
-    current_user=Depends(require_roles("ICU_COORDINATOR", "SUPER_ADMIN")),
+    current_user=Depends(require_roles("CLINICIAN", "FACILITY_ADMIN", "SUPER_ADMIN")),
     session: AsyncSession = Depends(get_session),
 ):
     svc = ReferralService(session)
@@ -94,7 +125,7 @@ async def reject_referral(
 async def update_status(
     referral_id: uuid.UUID,
     status: ReferralStatus = Query(...),
-    current_user=Depends(require_roles("ICU_COORDINATOR", "AMBULANCE_COORDINATOR", "SUPER_ADMIN")),
+    current_user=Depends(require_roles("CLINICIAN", "AMBULANCE_COORDINATOR", "FACILITY_ADMIN", "SUPER_ADMIN")),
     session: AsyncSession = Depends(get_session),
 ):
     svc = ReferralService(session)
