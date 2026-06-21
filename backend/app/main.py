@@ -7,6 +7,7 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
 from app.api import router
 from app.core.permissions import decode_token
+from app.websocket.manager import ws_manager
 
 
 @asynccontextmanager
@@ -42,3 +43,16 @@ app.include_router(router)
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "eBuzimaTransfer"}
+
+
+@app.websocket("/ws/{channel}")
+async def websocket_channel(websocket: WebSocket, channel: str):
+    """Subscribe to channel-scoped broadcasts (e.g. ``capacity`` updates)."""
+    await ws_manager.connect(channel, websocket)
+    try:
+        while True:
+            # We only push to clients; reads keep the connection alive and
+            # surface disconnects.
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        await ws_manager.disconnect(channel, websocket)

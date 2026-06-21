@@ -70,9 +70,9 @@ export const router = createBrowserRouter([
           { path: "/dashboard", element: withSuspense(<DashboardPage />) },
           { path: "/capacity", element: withSuspense(<CapacityPage />) },
           {
-            path: "/capacity/resources",
+            path: "/resources",
             element: (
-              <RoleGuard roles={["ICU_COORDINATOR", "SUPER_ADMIN"]}>
+              <RoleGuard roles={["ICU_COORDINATOR", "FACILITY_ADMIN", "SUPER_ADMIN"]}>
                 <ResourcesPage />
               </RoleGuard>
             ),

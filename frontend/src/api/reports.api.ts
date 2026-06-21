@@ -1,4 +1,4 @@
-import { OccupancyRow, ReferralReport } from "@/types/report";
+import { OccupancyRow } from "@/types/report";
 import { api } from "./axios";
 import { DashboardData } from "@/types/report";
 import type { CapacityRow } from "@/types/facility";
@@ -10,11 +10,6 @@ export const getDashboard = async (): Promise<DashboardData> => {
 
 export const getCapacity = async (): Promise<CapacityRow[]> => {
   const { data } = await api.get<CapacityRow[]>("/dashboard/capacity");
-  return data;
-};
-
-export const getReferralReport = async (params?: { from_date?: string; to_date?: string }): Promise<ReferralReport> => {
-  const { data } = await api.get<ReferralReport>("/reports/referrals", { params });
   return data;
 };
 

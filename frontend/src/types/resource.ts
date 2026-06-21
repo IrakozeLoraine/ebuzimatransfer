@@ -25,21 +25,59 @@ export const RESOURCE_TYPES: ResourceType[] = [
 
 export interface Resource {
     id: string;
-    unit_id: string;
+    unit_id: string | null;
+    facility_id: string | null;
     resource_name: string;
-    resource_code: string;
+    resource_code: string | null;
     resource_type: ResourceType | null;
     quantity: number;
     status: ResourceStatus;
     notes: string | null;
+    facility_name?: string | null;
+    unit_name?: string | null;
 }
 
 export interface CreateResourcePayload {
-    unit_id: string;
+    unit_id?: string;
+    facility_id?: string;
     resource_name: string;
-    resource_code: string;
+    resource_code?: string;
     resource_type?: ResourceType;
     quantity?: number;
     status?: ResourceStatus;
     notes?: string;
+}
+
+export interface AssignResourcePayload {
+    facility_id?: string | null;
+    unit_id?: string | null;
+}
+
+export interface ResourceImportError {
+    row: number;
+    message: string;
+}
+
+export interface ResourceImportResult {
+    created: number;
+    errors: ResourceImportError[];
+}
+
+export interface ReservationEntry {
+    id: string;
+    reserved_by: string;
+    reserved_by_name: string | null;
+    planned_admission_time: string | null;
+    created_at: string | null;
+}
+
+export interface ResourceUsage {
+    resource: Resource;
+    reservations: ReservationEntry[];
+}
+
+export interface ResourceFilters {
+    unassigned?: boolean;
+    facility_id?: string;
+    status?: ResourceStatus;
 }

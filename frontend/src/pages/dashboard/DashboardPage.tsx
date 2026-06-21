@@ -1,5 +1,3 @@
-import { StatCard } from "@/components/molecules/StatCard";
-import { Bed, FileText, Activity, CheckCircle } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuthStore } from "@/store/auth.store";
@@ -43,8 +41,6 @@ export const DashboardPage = () => {
   const user = useAuthStore((s) => s.user);
   const { data, isLoading } = useGetDashboard();
 
-  const availableResources = data?.capacity.reduce((s, r) => s + r.available, 0) ?? 0;
-
   const chartData =
     data?.capacity.map((r) => ({
       name: `${r.facility} ${r.unit_type}`,
@@ -72,10 +68,6 @@ export const DashboardPage = () => {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Total Referrals" value={data?.referrals.total ?? 0} icon={FileText} accent="teal" />
-          <StatCard label="Active Referrals" value={data?.referrals.active ?? 0} icon={Activity} accent="amber" />
-          <StatCard label="Available Resources" value={availableResources} icon={Bed} accent="emerald" />
-          <StatCard label="Arrived Today" value={data?.referrals.arrived ?? 0} icon={CheckCircle} accent="violet" />
         </div>
       )}
 
@@ -99,7 +91,7 @@ export const DashboardPage = () => {
                     <div>
                       <p className="text-xs text-muted-foreground">{label}</p>
                       <p className="text-lg font-bold">
-                        {data?.referrals[key] ?? 0}
+                        {0}
                       </p>
                     </div>
                   </div>

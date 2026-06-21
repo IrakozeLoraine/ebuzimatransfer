@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Package,
+  Boxes,
   FileText,
   Truck,
   BarChart3,
@@ -25,6 +26,7 @@ export const Sidebar = () => {
     canViewReports,
     canManageFacilities,
     canViewAudit,
+    canViewResources
   } = usePermissions();
   const user = useAuthStore((s) => s.user);
 
@@ -33,6 +35,7 @@ export const Sidebar = () => {
     ...(isSuperAdmin || isFacilityAdmin
       ? [navItem("/capacity", "Capacity", Package)]
       : []),
+    ...(canViewResources ? [navItem("/resources", "Resources", Boxes)] : []),
     navItem("/referrals", "Referrals", FileText),
     ...(isSuperAdmin ? [navItem("/transport", "Transport", Truck)] : []),
     ...(canViewReports ? [navItem("/reports", "Reports", BarChart3)] : []),

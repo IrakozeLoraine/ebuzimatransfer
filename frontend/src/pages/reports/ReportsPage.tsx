@@ -16,7 +16,7 @@ import { FileText, CheckCircle, XCircle, Download, TrendingUp } from "lucide-rea
 import { DataTable } from "@/components/organisms/DataTable";
 import { cn } from "@/utils/cn";
 import { OccupancyRow } from "@/types/report";
-import { useGetCapacity, useGetOccupancy } from "@/hooks/useReport";
+import { useGetOccupancy } from "@/hooks/useReport";
 
 const getOccupancyColor = (rate: number) => {
   if (rate > 90) return "hsl(0 84% 60%)";
@@ -25,8 +25,6 @@ const getOccupancyColor = (rate: number) => {
 };
 
 export const ReportsPage = () => {
-  const { data: referralReport } = useGetCapacity()
-
   const { data: occupancy = [] } = useGetOccupancy()
 
   const occupancyColumns = [
@@ -86,12 +84,12 @@ export const ReportsPage = () => {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-4">
-        <StatCard label="Total Referrals" value={referralReport?.total_referrals ?? 0} icon={FileText} accent="teal" />
-        <StatCard label="Accepted" value={referralReport?.accepted ?? 0} icon={CheckCircle} accent="emerald" />
-        <StatCard label="Rejected" value={referralReport?.rejected ?? 0} icon={XCircle} accent="rose" />
+        <StatCard label="Total Referrals" value={0} icon={FileText} accent="teal" />
+        <StatCard label="Accepted" value={0} icon={CheckCircle} accent="emerald" />
+        <StatCard label="Rejected" value={0} icon={XCircle} accent="rose" />
         <StatCard
           label="Acceptance Rate"
-          value={`${referralReport?.acceptance_rate ?? 0}%`}
+          value={`${0}%`}
           icon={TrendingUp}
           accent="violet"
         />

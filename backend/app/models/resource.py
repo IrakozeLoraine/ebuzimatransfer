@@ -29,8 +29,11 @@ class ResourceType(str, PyEnum):
 class Resource(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "resources"
 
-    unit_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("units.id", ondelete="CASCADE"), nullable=False
+    unit_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("units.id", ondelete="CASCADE"), nullable=True
+    )
+    facility_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("facilities.id", ondelete="SET NULL"), nullable=True, index=True
     )
     resource_name: Mapped[str] = mapped_column(String(200), nullable=False)
     resource_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -49,7 +52,8 @@ class Resource(Base, UUIDMixin, TimestampMixin):
     )
     quantity: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    unit: Mapped["Unit"] = relationship("Unit", back_populates="resources")
+    unit: Mapped["Unit | None"] = relationship("Unit", back_populates="resources")
+    facility: Mapped["Facility | None"] = relationship("Facility")
     reservations: Mapped[list["ResourceReservation"]] = relationship(
         "ResourceReservation", back_populates="resource"
     )
@@ -58,9 +62,6 @@ class Resource(Base, UUIDMixin, TimestampMixin):
 class ResourceReservation(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "resource_reservations"
 
-    referral_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("referrals.id", ondelete="CASCADE"), nullable=False
-    )
     resource_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("resources.id"), nullable=False
     )
@@ -72,8 +73,6 @@ class ResourceReservation(Base, UUIDMixin, TimestampMixin):
     )
 
     resource: Mapped[Resource] = relationship("Resource", back_populates="reservations")
-    referral: Mapped["Referral"] = relationship("Referral", back_populates="resource_reservation")
-
 
 from app.models.unit import Unit
-from app.models.referral import Referral
+from app.models.facility import Facility

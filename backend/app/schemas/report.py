@@ -3,20 +3,6 @@ from typing import Optional
 from datetime import date
 from pydantic import BaseModel
 
-
-class ReferralReportOut(BaseModel):
-    total_referrals: int
-    accepted: int
-    rejected: int
-    cancelled: int
-    en_route: int
-    arrived: int
-    acceptance_rate: float
-    rejection_rate: float
-    median_decision_minutes: Optional[float]
-    avg_transport_minutes: Optional[float]
-
-
 class OccupancyReportRow(BaseModel):
     facility: str
     unit_type: str

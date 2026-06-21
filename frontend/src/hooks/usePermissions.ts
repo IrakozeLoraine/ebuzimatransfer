@@ -9,27 +9,33 @@ export const usePermissions = () => {
 
   const isSuperAdmin = hasRole("SUPER_ADMIN");
   const isFacilityAdmin = hasRole("FACILITY_ADMIN");
+  const isIcuCoordinator = hasRole("ICU_COORDINATOR");
   const isAdmin = isSuperAdmin || isFacilityAdmin;
 
   const canViewReports = isSuperAdmin;
   const canManageFacilities = isSuperAdmin;
   const canViewAudit = isAdmin;
-  const canManageResources = isSuperAdmin;
+  const canManageResources = isAdmin;
+  const canAssignResources = isSuperAdmin;
   const canAcceptReferral = isSuperAdmin || isFacilityAdmin;
   const canCreateReferral = isSuperAdmin;
   const canManageTransport = isSuperAdmin;
+  const canViewResources = isSuperAdmin || isFacilityAdmin || isIcuCoordinator;
 
   return {
     hasRole,
     isSuperAdmin,
     isFacilityAdmin,
+    isIcuCoordinator,
     isAdmin,
     canViewReports,
     canManageFacilities,
     canViewAudit,
     canManageResources,
+    canAssignResources,
     canAcceptReferral,
     canCreateReferral,
     canManageTransport,
+    canViewResources,
   };
 };

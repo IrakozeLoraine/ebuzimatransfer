@@ -1,16 +1,18 @@
 from __future__ import annotations
 import uuid
-from typing import Optional
+from datetime import datetime
+from typing import List, Optional
 from pydantic import BaseModel
 from app.models.resource import ResourceStatus, ResourceType
 
 
 class ResourceBase(BaseModel):
-    unit_id: uuid.UUID
     resource_name: str
-    resource_code: str
+    resource_code: Optional[str] = None
     notes: Optional[str] = None
     resource_type: Optional[ResourceType] = None
+    unit_id: Optional[uuid.UUID] = None
+    facility_id: Optional[uuid.UUID] = None
 
 
 class ResourceCreate(ResourceBase):
@@ -28,18 +30,50 @@ class ResourceStatusUpdate(BaseModel):
     status: ResourceStatus
 
 
+class ResourceAssign(BaseModel):
+    """Assign or transfer a resource. Null facility_id/unit_id returns it to central stock."""
+    facility_id: Optional[uuid.UUID] = None
+    unit_id: Optional[uuid.UUID] = None
+
+
 class ResourceOut(ResourceBase):
     id: uuid.UUID
     quantity: int
     status: Optional[ResourceStatus] = None
+    facility_name: Optional[str] = None
+    unit_name: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
 
 class ResourceReservationCreate(BaseModel):
     resource_id: uuid.UUID
-    referral_id: uuid.UUID
     planned_admission_time: Optional[str] = None
+
+
+class ReservationOut(BaseModel):
+    id: uuid.UUID
+    reserved_by: uuid.UUID
+    reserved_by_name: Optional[str] = None
+    planned_admission_time: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class ResourceUsageOut(BaseModel):
+    resource: ResourceOut
+    reservations: List[ReservationOut] = []
+
+
+class ResourceImportError(BaseModel):
+    row: int
+    message: str
+
+
+class ResourceImportResult(BaseModel):
+    created: int
+    errors: List[ResourceImportError] = []
 
 
 class CapacityRow(BaseModel):

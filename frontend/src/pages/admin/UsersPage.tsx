@@ -56,11 +56,11 @@ export const UsersPage = () => {
 
   const { mutate: deactivate } = useDeactivateUser({
     onSuccess: () => setToDeactivate(null),
-    id: toDeactivate!.id,
+    id: toDeactivate?.id || "",
   })
 
   const { mutate: setStatus } = useUpdateUserAccountStatus({
-    id: statusTarget!.id,
+    id: statusTarget?.id || "",
     onSuccess: () => setStatusTarget(null),
     status: "PASSWORD_RESET_ENABLED"
   })
@@ -154,7 +154,7 @@ export const UsersPage = () => {
         description={`Deactivate ${toDeactivate?.first_name} ${toDeactivate?.last_name}? They will lose system access immediately.`}
         confirmLabel="Deactivate"
         destructive
-        onConfirm={() => toDeactivate && deactivate()}
+        onConfirm={() => toDeactivate ? deactivate() : null}
         onCancel={() => setToDeactivate(null)}
       />
 
