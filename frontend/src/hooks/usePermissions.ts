@@ -21,7 +21,7 @@ export const usePermissions = () => {
   const canAssignResources = isAdmin;
   const canAcceptReferral = isFacilityAdmin || isICUCoordinator;
   const canCreateReferral = isClinician;
-  const canManageTransport = isAmbulance;
+  const canManageTransport = isAmbulance || isSuperAdmin;
   const canViewResources = isSuperAdmin || isFacilityAdmin || isICUCoordinator || isAmbulance || isClinician;
 
   return {

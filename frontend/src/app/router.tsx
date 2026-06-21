@@ -79,6 +79,11 @@ const ReferralDetailPage = lazy(() =>
     default: m.ReferralDetailPage,
   }))
 );
+const TransportPage = lazy(() =>
+  import("@/pages/transport/TransportPage").then((m) => ({
+    default: m.TransportPage,
+  }))
+);
 
 const withSuspense = (element: React.ReactNode) => (
   <Suspense fallback={null}>{element}</Suspense>
@@ -121,6 +126,14 @@ export const router = createBrowserRouter([
             ),
           },
           { path: "/referrals/:id", element: withSuspense(<ReferralDetailPage />) },
+          {
+            path: "/transport",
+            element: (
+              <RoleGuard roles={["AMBULANCE_COORDINATOR", "SUPER_ADMIN"]}>
+                <TransportPage />
+              </RoleGuard>
+            ),
+          },
           {
             path: "/reports",
             element: (

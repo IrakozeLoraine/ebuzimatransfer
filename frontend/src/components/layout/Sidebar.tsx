@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
-  Boxes,
+  Package,
   FileText,
   Truck,
   BarChart3,
@@ -10,7 +10,7 @@ import {
   ClipboardList,
   User,
   Search,
-  Layers,
+  Layers
 } from "lucide-react";
 import logo from "@/assets/ebuzimaTransfer.svg";
 import { cn } from "@/utils/cn";
@@ -27,16 +27,17 @@ export const Sidebar = () => {
     canViewReports,
     canManageFacilities,
     canViewAudit,
-    canViewResources
+    canViewResources,
+    canManageTransport
   } = usePermissions();
   const user = useAuthStore((s) => s.user);
 
   const mainLinks = [
     navItem("/dashboard", "Dashboard", LayoutDashboard),
     ...(canViewResources ? [navItem("/find-resources", "Resource Lookup", Search)] : []),
-    ...(canViewResources ? [navItem("/resources", "Resources", Boxes)] : []),
+    ...(canViewResources ? [navItem("/resources", "Resources", Package)] : []),
     navItem("/referrals", "Referrals", FileText),
-    ...(isSuperAdmin ? [navItem("/transport", "Transport", Truck)] : []),
+    ...(canManageTransport ? [navItem("/transport", "Transport", Truck)] : []),
     ...(canViewReports ? [navItem("/reports", "Reports", BarChart3)] : []),
   ];
 
