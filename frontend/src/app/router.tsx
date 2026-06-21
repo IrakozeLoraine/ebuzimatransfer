@@ -64,6 +64,22 @@ const ProfilePage = lazy(() =>
   }))
 );
 
+const ReferralsPage = lazy(() =>
+  import("@/pages/referrals/ReferralsPage").then((m) => ({
+    default: m.ReferralsPage,
+  }))
+);
+const NewReferralPage = lazy(() =>
+  import("@/pages/referrals/NewReferralPage").then((m) => ({
+    default: m.NewReferralPage,
+  }))
+);
+const ReferralDetailPage = lazy(() =>
+  import("@/pages/referrals/ReferralDetailPage").then((m) => ({
+    default: m.ReferralDetailPage,
+  }))
+);
+
 const withSuspense = (element: React.ReactNode) => (
   <Suspense fallback={null}>{element}</Suspense>
 );
@@ -95,6 +111,16 @@ export const router = createBrowserRouter([
               </RoleGuard>
             ),
           },
+          { path: "/referrals", element: withSuspense(<ReferralsPage />) },
+          {
+            path: "/referrals/new",
+            element: (
+              <RoleGuard roles={["REFERRING_CLINICIAN", "SUPER_ADMIN"]}>
+                <NewReferralPage />
+              </RoleGuard>
+            ),
+          },
+          { path: "/referrals/:id", element: withSuspense(<ReferralDetailPage />) },
           {
             path: "/reports",
             element: (

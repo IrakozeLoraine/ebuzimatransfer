@@ -8,9 +8,3 @@ export const formatDateTime = (iso: string) =>
 
 export const timeAgo = (iso: string) =>
   formatDistanceToNow(new Date(iso), { addSuffix: true });
-
-export const URGENCY_LABELS: Record<string, string> = {
-  IMMEDIATE: "Immediate",
-  URGENT: "Urgent",
-  NON_URGENT: "Non-Urgent",
-};
