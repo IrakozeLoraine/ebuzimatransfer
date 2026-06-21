@@ -1,7 +1,5 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getUsers, deactivateUser, updateUserAccountStatus } from "@/api/users.api";
 import { DataTable } from "@/components/organisms/DataTable";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/molecules/ConfirmDialog";
@@ -11,14 +9,12 @@ import type { User } from "@/types/user";
 import { usePermissions } from "@/hooks/usePermissions";
 import { SUPER_ADMIN_ROLES, ACCOUNT_STATUS_LABELS } from "./users/constants";
 import { getUserColumns } from "./users/userColumns";
-import { toast } from "@/components/ui/toaster";
-import { getApiErrorMessage } from "@/utils/apiError";
 import { CreateUserDialog } from "./users/CreateUserDialog";
 import { AssignUserDialog } from "./users/AssignUserDialog";
 import { EditUserDialog } from "./users/EditUserDialog";
+import { useDeactivateUser, useGetAllUsers, useUpdateUserAccountStatus } from "@/hooks/useUser";
 
 export const UsersPage = () => {
-  const qc = useQueryClient();
   const navigate = useNavigate();
   const { isSuperAdmin } = usePermissions();
   const [showCreate, setShowCreate] = useState(false);
@@ -30,10 +26,7 @@ export const UsersPage = () => {
   const [roleFilter, setRoleFilter] = useState(ALL_FILTER);
   const [statusFilter, setStatusFilter] = useState(ALL_FILTER);
 
-  const { data: users = [], isLoading } = useQuery({
-    queryKey: ["users"],
-    queryFn: getUsers,
-  });
+  const { data: users = [], isLoading } = useGetAllUsers();
 
   const filteredUsers = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -61,38 +54,16 @@ export const UsersPage = () => {
     setStatusFilter(ALL_FILTER);
   };
 
-  const { mutate: deactivate } = useMutation({
-    mutationFn: (id: string) => deactivateUser(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["users"] });
-      toast({ variant: "success", title: "User deactivated" });
-      setToDeactivate(null);
-    },
-    onError: (error) => {
-      toast({
-        variant: "destructive",
-        title: "Failed to deactivate user",
-        description: getApiErrorMessage(error),
-      });
-    },
-  });
+  const { mutate: deactivate } = useDeactivateUser({
+    onSuccess: () => setToDeactivate(null),
+    id: toDeactivate!.id,
+  })
 
-  const { mutate: setStatus } = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      updateUserAccountStatus(id, { account_status: status }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["users"] });
-      toast({ variant: "success", title: "Account status updated" });
-      setStatusTarget(null);
-    },
-    onError: (error) => {
-      toast({
-        variant: "destructive",
-        title: "Failed to update status",
-        description: getApiErrorMessage(error),
-      });
-    },
-  });
+  const { mutate: setStatus } = useUpdateUserAccountStatus({
+    id: statusTarget!.id,
+    onSuccess: () => setStatusTarget(null),
+    status: "PASSWORD_RESET_ENABLED"
+  })
 
   const columns = getUserColumns({
     isSuperAdmin,
@@ -183,7 +154,7 @@ export const UsersPage = () => {
         description={`Deactivate ${toDeactivate?.first_name} ${toDeactivate?.last_name}? They will lose system access immediately.`}
         confirmLabel="Deactivate"
         destructive
-        onConfirm={() => toDeactivate && deactivate(toDeactivate.id)}
+        onConfirm={() => toDeactivate && deactivate()}
         onCancel={() => setToDeactivate(null)}
       />
 
@@ -194,7 +165,7 @@ export const UsersPage = () => {
         description={`Allow ${statusTarget?.first_name} ${statusTarget?.last_name} to set a new password on next login?`}
         confirmLabel="Enable Reset"
         destructive={false}
-        onConfirm={() => statusTarget && setStatus({ id: statusTarget.id, status: "PASSWORD_RESET_ENABLED" })}
+        onConfirm={() => statusTarget && setStatus()}
         onCancel={() => setStatusTarget(null)}
       />
     </div>

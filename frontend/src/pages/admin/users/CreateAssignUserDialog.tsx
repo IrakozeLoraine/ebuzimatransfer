@@ -1,8 +1,6 @@
 import { useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { createAndAssignUser } from "@/api/users.api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,11 +12,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "@/components/ui/toaster";
-import { getApiErrorMessage } from "@/utils/apiError";
 import { useFacilities } from "@/hooks/useFacilities";
 import { createAssignSchema, type CreateAssignFormValues } from "@/schemas/user.schema";
 import { FACILITY_ASSIGNABLE_ROLES, getRoleColor } from "./constants";
+import { useCreateAndAssignUser } from "@/hooks/useUser";
 
 interface Props {
   open: boolean;
@@ -39,7 +36,6 @@ export const CreateAssignUserDialog = ({
   initialMedicalId = "",
   initialRoles = [],
 }: Props) => {
-  const qc = useQueryClient();
   const needsFacilityPicker = isSuperAdmin && !fixedFacility;
   const { data: facilities = [], isLoading: loadingFacilities } = useFacilities();
   const form = useForm<CreateAssignFormValues>({ resolver: zodResolver(createAssignSchema) });
@@ -59,26 +55,12 @@ export const CreateAssignUserDialog = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const { mutate: create, isPending } = useMutation({
-    mutationFn: (data: CreateAssignFormValues) =>
-      createAndAssignUser({
-        email: data.email || undefined,
-        medical_id: data.medical_id,
-        first_name: data.first_name,
-        last_name: data.last_name,
-        phone: data.phone || undefined,
-        roles: data.roles,
-        facility_id: fixedFacility?.id ?? data.facility_id,
-      }),
+  const { mutate: create, isPending } = useCreateAndAssignUser({
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["users"] });
-      qc.invalidateQueries({ queryKey: ["facility"] });
-      toast({ variant: "success", title: "User created and assigned" });
       onOpenChange(false);
       form.reset();
     },
-    onError: (error) =>
-      toast({ variant: "destructive", title: "Failed to create user", description: getApiErrorMessage(error) }),
+    fixedFacility: fixedFacility
   });
 
   const onSubmit = (data: CreateAssignFormValues) => {
@@ -174,11 +156,10 @@ export const CreateAssignUserDialog = ({
                         { shouldValidate: true }
                       );
                     }}
-                    className={`rounded-full px-2.5 py-1 text-xs font-medium transition-all ${
-                      selected
-                        ? getRoleColor(r)
-                        : "bg-muted text-muted-foreground ring-1 ring-transparent hover:ring-border"
-                    }`}
+                    className={`rounded-full px-2.5 py-1 text-xs font-medium transition-all ${selected
+                      ? getRoleColor(r)
+                      : "bg-muted text-muted-foreground ring-1 ring-transparent hover:ring-border"
+                      }`}
                   >
                     {r.replace(/_/g, " ")}
                   </button>

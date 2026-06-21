@@ -1,5 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
-import { getReferralReport, getOccupancyReport, exportCsv, exportExcel } from "@/api/reports.api";
+import { exportCsv, exportExcel } from "@/api/reports.api";
 import { StatCard } from "@/components/molecules/StatCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +16,7 @@ import { FileText, CheckCircle, XCircle, Download, TrendingUp } from "lucide-rea
 import { DataTable } from "@/components/organisms/DataTable";
 import { cn } from "@/utils/cn";
 import { OccupancyRow } from "@/types/report";
+import { useGetCapacity, useGetOccupancy } from "@/hooks/useReport";
 
 const getOccupancyColor = (rate: number) => {
   if (rate > 90) return "hsl(0 84% 60%)";
@@ -25,15 +25,9 @@ const getOccupancyColor = (rate: number) => {
 };
 
 export const ReportsPage = () => {
-  const { data: referralReport } = useQuery({
-    queryKey: ["report-referrals"],
-    queryFn: () => getReferralReport(),
-  });
+  const { data: referralReport } = useGetCapacity()
 
-  const { data: occupancy = [] } = useQuery({
-    queryKey: ["report-occupancy"],
-    queryFn: getOccupancyReport,
-  });
+  const { data: occupancy = [] } = useGetOccupancy()
 
   const occupancyColumns = [
     { header: "Facility", accessor: (r: OccupancyRow) => <span className="font-semibold">{r.facility}</span> },

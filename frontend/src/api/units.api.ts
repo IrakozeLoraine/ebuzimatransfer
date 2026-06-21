@@ -1,0 +1,21 @@
+import { api } from "./axios";
+import { CreateUnitPayload, Unit, UpdateUnitPayload } from "@/types/unit";
+
+export const getUnits = async (): Promise<Unit[]> => {
+  const { data } = await api.get<Unit[]>("/units");
+  return data;
+};
+
+export const createUnit = async (payload: CreateUnitPayload): Promise<Unit> => {
+  const { data } = await api.post<Unit>("/units", payload);
+  return data;
+};
+
+export const updateUnit = async (id: string, payload: UpdateUnitPayload): Promise<Unit> => {
+  const { data } = await api.put<Unit>(`/units/${id}`, payload);
+  return data;
+};
+
+export const deleteUnit = async (id: string): Promise<void> => {
+  await api.delete(`/units/${id}`);
+};

@@ -1,16 +1,12 @@
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Pencil, UserPlus, Trash2, ChevronRight, X, KeyRound } from "lucide-react";
-import { useUser, useRemoveUserFromFacility } from "@/hooks/useUser";
+import { useUser, useRemoveUserFromFacility, useDeactivateUser, useUpdateUserAccountStatus } from "@/hooks/useUser";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuthStore } from "@/store/auth.store";
-import { deactivateUser, updateUserAccountStatus } from "@/api/users.api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/molecules/ConfirmDialog";
-import { toast } from "@/components/ui/toaster";
-import { getApiErrorMessage } from "@/utils/apiError";
 import { formatDate } from "@/utils/format";
 import { EditUserDialog } from "./EditUserDialog";
 import { AssignUserDialog } from "./AssignUserDialog";
@@ -19,7 +15,6 @@ import { getRoleColor, ACCOUNT_STATUS_LABELS } from "./constants";
 export const UserDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const qc = useQueryClient();
   const { isSuperAdmin, isFacilityAdmin } = usePermissions();
   const activeFacilityId = useAuthStore((s) => s.user?.active_facility_id);
   const { data: user, isLoading } = useUser(id);
@@ -33,29 +28,16 @@ export const UserDetailPage = () => {
     onSuccess: () => setToRemove(null),
   });
 
-  const { mutate: deactivate } = useMutation({
-    mutationFn: () => deactivateUser(id!),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["user", id] });
-      qc.invalidateQueries({ queryKey: ["users"] });
-      toast({ variant: "success", title: "User deactivated" });
-      setConfirmDeactivate(false);
-    },
-    onError: (error) =>
-      toast({ variant: "destructive", title: "Failed to deactivate user", description: getApiErrorMessage(error) }),
-  });
+  const { mutate: deactivate } = useDeactivateUser({
+    onSuccess: () => setConfirmDeactivate(false),
+    id: id!
+  })
 
-  const { mutate: requestReset } = useMutation({
-    mutationFn: () => updateUserAccountStatus(id!, { account_status: "PASSWORD_RESET_ENABLED" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["user", id] });
-      qc.invalidateQueries({ queryKey: ["users"] });
-      toast({ variant: "success", title: "Password reset enabled" });
-      setConfirmReset(false);
-    },
-    onError: (error) =>
-      toast({ variant: "destructive", title: "Failed to enable password reset", description: getApiErrorMessage(error) }),
-  });
+  const { mutate: requestReset } = useUpdateUserAccountStatus({
+    onSuccess: () => setConfirmReset(false),
+    status: "PASSWORD_RESET_ENABLED",
+    id: id!
+  })
 
   const canRequestReset = !isSuperAdmin && user?.is_active && user?.account_status !== "PASSWORD_RESET_ENABLED";
   // Facility admins may edit identity of users in their own facility; super admins, anyone.

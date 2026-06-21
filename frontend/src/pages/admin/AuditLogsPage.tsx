@@ -1,12 +1,11 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { getAuditLogs } from "@/api/audit.api";
 import { DataTable } from "@/components/organisms/DataTable";
 import { TableToolbar, ALL_FILTER } from "@/components/molecules/TableToolbar";
 import { formatDateTime } from "@/utils/format";
 import { cn } from "@/utils/cn";
 import { usePermissions } from "@/hooks/usePermissions";
 import { AuditLog } from "@/types/audit";
+import { useGetAllAuditLogs } from "@/hooks/useAuditLogs";
 
 const ACTION_COLORS: Record<string, string> = {
   CREATE: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
@@ -29,10 +28,7 @@ export const AuditLogsPage = () => {
   const [actionFilter, setActionFilter] = useState(ALL_FILTER);
   const [entityTypeFilter, setEntityTypeFilter] = useState(ALL_FILTER);
 
-  const { data: logs = [], isLoading } = useQuery({
-    queryKey: ["audit-logs"],
-    queryFn: () => getAuditLogs(),
-  });
+  const { data: logs = [], isLoading } = useGetAllAuditLogs()
 
   const actionOptions = useMemo(
     () =>
