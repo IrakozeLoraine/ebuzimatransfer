@@ -9,25 +9,29 @@ export const usePermissions = () => {
 
   const isSuperAdmin = hasRole("SUPER_ADMIN");
   const isFacilityAdmin = hasRole("FACILITY_ADMIN");
-  const isIcuCoordinator = hasRole("ICU_COORDINATOR");
+  const isICUCoordinator = hasRole("ICU_COORDINATOR");
   const isAdmin = isSuperAdmin || isFacilityAdmin;
+  const isClinician = hasRole("REFERRING_CLINICIAN");
+  const isAmbulance = hasRole("AMBULANCE_COORDINATOR");
 
   const canViewReports = isSuperAdmin;
   const canManageFacilities = isSuperAdmin;
   const canViewAudit = isAdmin;
-  const canManageResources = isAdmin;
-  const canAssignResources = isSuperAdmin;
-  const canAcceptReferral = isSuperAdmin || isFacilityAdmin;
-  const canCreateReferral = isSuperAdmin;
-  const canManageTransport = isSuperAdmin;
-  const canViewResources = isSuperAdmin || isFacilityAdmin || isIcuCoordinator;
+  const canManageResources = isAdmin || isICUCoordinator;
+  const canAssignResources = isAdmin;
+  const canAcceptReferral = isFacilityAdmin || isICUCoordinator;
+  const canCreateReferral = isClinician;
+  const canManageTransport = isAmbulance;
+  const canViewResources = isSuperAdmin || isFacilityAdmin || isICUCoordinator || isAmbulance || isClinician;
 
   return {
     hasRole,
     isSuperAdmin,
     isFacilityAdmin,
-    isIcuCoordinator,
+    isICUCoordinator,
     isAdmin,
+    isClinician,
+    isAmbulance,
     canViewReports,
     canManageFacilities,
     canViewAudit,

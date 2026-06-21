@@ -1,20 +1,11 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useReferral, useAcceptReferral, useRejectReferral } from "@/hooks/useReferrals";
 import { useResources } from "@/hooks/useResources";
 import { StatusBadge } from "@/components/atoms/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -26,7 +17,7 @@ import { ArrowLeft, Check, X, Clock } from "lucide-react";
 import { formatDateTime } from "@/utils/format";
 import { usePermissions } from "@/hooks/usePermissions";
 import { cn } from "@/utils/cn";
-import { rejectReferralSchema, type RejectReferralForm } from "@/schemas/referral.schema";
+import RejectDialog from "./RejectDialog";
 
 const Row = ({ label, value }: { label: string; value: string }) => (
   <div className="flex gap-3">
@@ -45,10 +36,6 @@ export const ReferralDetailPage = () => {
   const { mutate: reject, isPending: rejecting } = useRejectReferral();
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [selectedResourceId, setSelectedResourceId] = useState("");
-
-  const { register, handleSubmit, setValue, formState: { errors } } = useForm<RejectReferralForm>({
-    resolver: zodResolver(rejectReferralSchema),
-  });
 
   const availableResources = resources.filter((r) => r.status === "AVAILABLE");
 
@@ -231,39 +218,7 @@ export const ReferralDetailPage = () => {
       )}
 
       {/* Reject dialog */}
-      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject Referral</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit(onReject)} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>Reason <span className="text-destructive">*</span></Label>
-              <Select onValueChange={(v) => setValue("reason", v)}>
-                <SelectTrigger><SelectValue placeholder="Select reason" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NO_RESOURCE">No Resource Available</SelectItem>
-                  <SelectItem value="NO_CAPACITY">No Capacity</SelectItem>
-                  <SelectItem value="NOT_APPROPRIATE">Not Clinically Appropriate</SelectItem>
-                  <SelectItem value="MISSING_INFO">Missing Information</SelectItem>
-                  <SelectItem value="OTHER">Other</SelectItem>
-                </SelectContent>
-              </Select>
-              {errors.reason && <p className="text-xs text-destructive">{errors.reason.message}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label>Additional comment <span className="text-muted-foreground text-xs">(optional)</span></Label>
-              <Textarea placeholder="Provide additional context…" {...register("comment")} />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setShowRejectDialog(false)}>Cancel</Button>
-              <Button type="submit" variant="destructive" disabled={rejecting}>
-                {rejecting ? "Rejecting…" : "Confirm Rejection"}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <RejectDialog open={showRejectDialog} onOpenChange={setShowRejectDialog} onSubmit={onReject} isSubmitting={rejecting} />
     </div>
   );
 };

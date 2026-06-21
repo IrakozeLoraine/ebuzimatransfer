@@ -1,14 +1,11 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   useResources,
   useUpdateResourceStatus,
-  useCreateResource,
-  useAssignResource,
-  useImportResources,
-  useResourceUsage,
+  useCreateResource
 } from "@/hooks/useResources";
 import { DataTable } from "@/components/organisms/DataTable";
 import { ResourceStatusBadge } from "@/components/atoms/ResourceStatusBadge";
@@ -23,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Upload, ArrowLeftRight, History, Download } from "lucide-react";
+import { Plus, Upload, ArrowLeftRight, History } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuthStore } from "@/store/auth.store";
 import { resourceSchema, type ResourceFormValues } from "@/schemas/resource.schema";
@@ -34,6 +31,9 @@ import { useUnits } from "@/hooks/useUnits";
 import { useFacilities } from "@/hooks/useFacilities";
 import { toast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/utils/apiError";
+import UsageDialog from "./UsageDialog";
+import AssignDialog from "./AssignDialog";
+import ImportDialog from "./ImportDialog";
 
 export const ResourcesPage = () => {
   const { isSuperAdmin, isFacilityAdmin, canManageResources, canAssignResources } = usePermissions();
@@ -353,279 +353,5 @@ export const ResourcesPage = () => {
       />
       <UsageDialog resourceId={usageId} onClose={() => setUsageId(null)} />
     </div>
-  );
-};
-
-/* ---------------- Import dialog ---------------- */
-
-const ImportDialog = ({
-  open,
-  onOpenChange,
-  facilityScoped,
-}: {
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
-  facilityScoped: boolean;
-}) => {
-  const { mutate: importResources, isPending, data: result, reset } = useImportResources();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
-
-  const handleClose = (o: boolean) => {
-    if (!o) {
-      setFile(null);
-      reset();
-    }
-    onOpenChange(o);
-  };
-
-  const handleImport = () => {
-    if (!file) return;
-    importResources(file, {
-      onSuccess: (res) =>
-        toast({
-          variant: res.errors.length ? "warning" : "success",
-          title: `${res.created} resource(s) imported`,
-          description: res.errors.length ? `${res.errors.length} row(s) skipped` : undefined,
-        }),
-      onError: (e) =>
-        toast({ variant: "destructive", title: "Import failed", description: getApiErrorMessage(e) }),
-    });
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Import Resources from Excel</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Upload a <code className="font-mono">.csv</code> or <code className="font-mono">.xlsx</code> file. The
-            first row must be a header with columns:{" "}
-            <span className="font-mono">resource_name</span>, <span className="font-mono">resource_code</span>,{" "}
-            <span className="font-mono">resource_type</span>, <span className="font-mono">quantity</span>,{" "}
-            <span className="font-mono">unit</span>, <span className="font-mono">notes</span>. The{" "}
-            <span className="font-mono">unit</span> column takes the clinical unit's name; rows naming a unit that
-            isn't available here are skipped and reported, while the rest still import.
-            {facilityScoped
-              ? " Resources without a unit are added to your facility's stock."
-              : " Rows without a unit are added to central (unassigned) stock."}
-          </p>
-          <a
-            href="/resource-import-template.csv"
-            download
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Download CSV template
-          </a>
-          <Input
-            ref={fileRef}
-            type="file"
-            accept=".csv,.xlsx"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
-
-          {result && (
-            <div className="rounded-md border p-3 text-xs space-y-2">
-              <p className="font-medium text-emerald-700">{result.created} resource(s) created.</p>
-              {result.errors.length > 0 && (
-                <div className="space-y-1">
-                  <p className="font-medium text-amber-700">Skipped rows:</p>
-                  <ul className="max-h-40 overflow-auto space-y-0.5">
-                    {result.errors.map((err) => (
-                      <li key={err.row} className="text-muted-foreground">
-                        Row {err.row}: {err.message}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" onClick={() => handleClose(false)}>Close</Button>
-            <Button onClick={handleImport} disabled={!file || isPending}>
-              {isPending ? "Importing…" : "Import"}
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-};
-
-/* ---------------- Assign / Transfer dialog ---------------- */
-
-const AssignDialog = ({
-  resource,
-  onClose,
-}: {
-  resource: Resource | null;
-  onClose: () => void;
-}) => {
-  const { data: facilities = [] } = useFacilities();
-  const { mutate: assign, isPending } = useAssignResource();
-  const [facilityId, setFacilityId] = useState<string>("");
-  const [unitId, setUnitId] = useState<string>("");
-
-  // Reset selections whenever a new resource is targeted.
-  const targetKey = resource?.id ?? "";
-  const lastKey = useRef<string>("");
-  if (targetKey !== lastKey.current) {
-    lastKey.current = targetKey;
-    setFacilityId(resource?.facility_id ?? "");
-    setUnitId(resource?.unit_id ?? "");
-  }
-
-  // Units are derived from the target facility's tier (cascading catalog).
-  const { data: facilityUnits = [] } = useUnits(
-    { facility_id: facilityId || undefined },
-    { enabled: !!facilityId }
-  );
-
-  const handleAssign = () => {
-    if (!resource) return;
-    assign(
-      {
-        id: resource.id,
-        payload: {
-          facility_id: facilityId || null,
-          unit_id: unitId || null,
-        },
-      },
-      {
-        onSuccess: () => {
-          toast({ variant: "success", title: facilityId ? "Resource assigned" : "Returned to stock" });
-          onClose();
-        },
-        onError: (e) =>
-          toast({ variant: "destructive", title: "Could not assign resource", description: getApiErrorMessage(e) }),
-      }
-    );
-  };
-
-  return (
-    <Dialog open={!!resource} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{resource?.facility_id ? "Transfer" : "Assign"} Resource</DialogTitle>
-        </DialogHeader>
-        {resource && (
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">{resource.resource_name}</p>
-            <div className="space-y-1.5">
-              <Label>Facility</Label>
-              <Select
-                value={facilityId}
-                onValueChange={(v) => {
-                  setFacilityId(v);
-                  setUnitId("");
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a facility" />
-                </SelectTrigger>
-                <SelectContent>
-                  {facilities.map((f) => (
-                    <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Unit <span className="text-muted-foreground text-xs">(optional)</span></Label>
-              <Select value={unitId} onValueChange={setUnitId} disabled={!facilityId}>
-                <SelectTrigger>
-                  <SelectValue placeholder={facilityId ? "Select a unit" : "Select a facility first"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {facilityUnits.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex justify-between gap-2 pt-1">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setFacilityId("");
-                  setUnitId("");
-                }}
-                disabled={!facilityId && !unitId}
-              >
-                Return to stock
-              </Button>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={onClose}>Cancel</Button>
-                <Button onClick={handleAssign} disabled={isPending}>
-                  {isPending ? "Saving…" : "Save"}
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-};
-
-/* ---------------- Usage dialog ---------------- */
-
-const UsageDialog = ({ resourceId, onClose }: { resourceId: string | null; onClose: () => void }) => {
-  const { data, isLoading } = useResourceUsage(resourceId);
-
-  return (
-    <Dialog open={!!resourceId} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Resource Usage</DialogTitle>
-        </DialogHeader>
-        {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {data && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between rounded-md border p-3">
-              <div>
-                <p className="font-semibold">{data.resource.resource_name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {data.resource.facility_name
-                    ? `${data.resource.facility_name}${data.resource.unit_name ? ` · ${data.resource.unit_name}` : ""}`
-                    : "Unassigned"}
-                </p>
-              </div>
-              <ResourceStatusBadge status={data.resource.status} />
-            </div>
-
-            <div>
-              <p className="mb-2 text-sm font-medium">Reservation history</p>
-              {data.reservations.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No reservations recorded.</p>
-              ) : (
-                <ul className="space-y-2 max-h-72 overflow-auto">
-                  {data.reservations.map((res) => (
-                    <li key={res.id} className="rounded-md border p-2.5 text-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{res.reserved_by_name ?? "Unknown"}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {res.created_at ? new Date(res.created_at).toLocaleString() : "—"}
-                        </span>
-                      </div>
-                      {res.planned_admission_time && (
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Planned admission: {new Date(res.planned_admission_time).toLocaleString()}
-                        </p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
   );
 };
