@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
 import { Providers } from "./app/providers";
 import { router } from "./app/router";
+import { registerServiceWorker } from "./registerSW";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -12,3 +13,5 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </Providers>
   </React.StrictMode>
 );
+
+registerServiceWorker();
