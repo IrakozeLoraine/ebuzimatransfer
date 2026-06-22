@@ -1,5 +1,6 @@
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
+import { MobileSidebar } from "./MobileSidebar";
 import { Header } from "./Header";
 import { useNotificationsWebSocket } from "@/hooks/useWebSocket";
 
@@ -10,9 +11,10 @@ export const AppLayout = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/30">
       <Sidebar />
+      <MobileSidebar />
       <Header />
-      <main className="ml-64 pt-16">
-        <div className="p-7 page-enter">
+      <main className="pt-16 md:ml-64">
+        <div className="p-4 sm:p-6 lg:p-7 page-enter">
           <Outlet />
         </div>
       </main>

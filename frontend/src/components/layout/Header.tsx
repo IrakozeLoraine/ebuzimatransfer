@@ -7,14 +7,16 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Check, ChevronsUpDown, LogOut, Settings } from "lucide-react";
+import { Check, ChevronsUpDown, LogOut, Menu, Settings } from "lucide-react";
 import { Link } from "react-router-dom";
 import { NotificationBell } from "./NotificationBell";
+import { useUiStore } from "@/store/ui.store";
 
 export const Header = () => {
     const user = useAuthStore((s) => s.user);
     const { mutate: doLogout } = useLogout();
     const { mutate: doSwitch, isPending: switching } = useSwitchFacility();
+    const openMobileNav = useUiStore((s) => s.setMobileNavOpen);
 
     const facilities = user?.facilities ?? [];
     const activeFacility = facilities.find((f) => f.id === user?.active_facility_id);
@@ -22,27 +24,37 @@ export const Header = () => {
     return (
         <header
             className={[
-                "fixed top-0 left-64 right-0 z-10 flex h-16 items-center justify-between px-7",
+                "fixed top-0 left-0 right-0 z-10 flex h-16 items-center justify-between gap-2 px-4 md:left-64 md:px-7",
                 "bg-white/80 dark:bg-background/80 backdrop-blur-xl",
                 "border-b border-border/60",
             ].join(" ")}
         >
-            {facilities.length > 1 ? (
+            <div className="flex min-w-0 items-center gap-2">
+                <button
+                    type="button"
+                    onClick={() => openMobileNav(true)}
+                    aria-label="Open navigation menu"
+                    className="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-foreground/70 transition-colors hover:bg-muted md:hidden"
+                >
+                    <Menu className="h-5 w-5" />
+                </button>
+
+                {facilities.length > 1 ? (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <button
                             type="button"
                             disabled={switching}
                             className={[
-                                "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium",
+                                "flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium md:px-3",
                                 "transition-all duration-200 hover:bg-muted outline-none disabled:opacity-60",
                             ].join(" ")}
                         >
-                            <span className="text-muted-foreground">Facility:</span>
-                            <span className="text-foreground max-w-[18rem] truncate">
+                            <span className="hidden text-muted-foreground sm:inline">Facility:</span>
+                            <span className="text-foreground max-w-[40vw] truncate md:max-w-[18rem]">
                                 {activeFacility?.name ?? "Select facility"}
                             </span>
-                            <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
+                            <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
                         </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className="w-72">
@@ -66,8 +78,9 @@ export const Header = () => {
             ) : (
                 <div />
             )}
+            </div>
 
-            <div className="flex items-center gap-1">
+            <div className="flex shrink-0 items-center gap-1">
                 <NotificationBell />
 
                 <DropdownMenu>

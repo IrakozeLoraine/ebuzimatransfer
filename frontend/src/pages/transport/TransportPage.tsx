@@ -11,7 +11,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/responsive-dialog";
 import { formatDateTime } from "@/utils/format";
 import type { Referral } from "@/types/referral";
 import type { TransportEvent, UpdateTransportPayload } from "@/types/transport";

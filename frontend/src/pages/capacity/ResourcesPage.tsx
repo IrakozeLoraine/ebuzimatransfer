@@ -12,7 +12,7 @@ import { ResourceStatusBadge } from "@/components/atoms/ResourceStatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/responsive-dialog";
 import {
   Select,
   SelectContent,
@@ -183,7 +183,7 @@ export const ResourcesPage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Resource Management</h1>
           <p className="text-sm text-muted-foreground mt-0.5">

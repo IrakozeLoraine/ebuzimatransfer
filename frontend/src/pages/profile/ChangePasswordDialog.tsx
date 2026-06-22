@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/responsive-dialog";
 import { useChangePassword } from "@/hooks/useAuth";
 import { changePasswordSchema, type ChangePasswordFormValues } from "@/schemas/profile.schema";
 import { PasswordInput } from "@/components/atoms/PasswordInput";
