@@ -50,6 +50,8 @@ class TransitStats(BaseModel):
     average_minutes: Optional[float] = None
     fastest_minutes: Optional[float] = None
     slowest_minutes: Optional[float] = None
+    # Count of recorded patient arrival conditions, keyed by ArrivalCondition value.
+    arrival_conditions: dict[str, int] = {}
 
 
 class StatusHistoryOut(BaseModel):

@@ -1,7 +1,7 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
@@ -19,8 +19,25 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { formatDateTime } from "@/utils/format";
-import { Ambulance, MapPin, Square } from "lucide-react";
+import { Ambulance, MapPin, Square, Play, RotateCcw } from "lucide-react";
 import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
+
+/** Pans the map to follow a position (used while replaying a journey). */
+const RecenterMap = ({ position }: { position: LatLngExpression | null }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (position) map.panTo(position);
+  }, [position, map]);
+  return null;
+};
+
+const formatDuration = (ms: number): string => {
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const rem = mins % 60;
+  return rem ? `${h}h ${rem}m` : `${h}h`;
+};
 
 // Vite-bundled marker assets (Leaflet's defaults point at relative paths that
 // break under bundlers).
@@ -41,7 +58,7 @@ const RWANDA_CENTER: LatLngExpression = [-1.9403, 29.8739];
 
 export const AmbulanceTrackingPage = () => {
   const { id: referralId } = useParams<{ id: string }>();
-  const { canManageTransport } = usePermissions();
+  const { canManageTransport, isAdmin } = usePermissions();
 
   useAmbulanceWebSocket(referralId);
 
@@ -56,10 +73,58 @@ export const AmbulanceTrackingPage = () => {
   const { active, error: geoError, lastSentAt, sending, start, stop } =
     useLiveLocationShare(referralId);
 
+  const pings = useMemo(() => track?.pings ?? [], [track?.pings]);
+
+  // Journey replay: step the marker through the recorded pings over time.
+  const [replayIdx, setReplayIdx] = useState<number | null>(null);
+  const replayTimer = useRef<number | null>(null);
+  const isReplaying = replayIdx !== null;
+
+  const stopReplay = useCallback(() => {
+    if (replayTimer.current) {
+      clearInterval(replayTimer.current);
+      replayTimer.current = null;
+    }
+    setReplayIdx(null);
+  }, []);
+
+  const startReplay = useCallback(() => {
+    if (pings.length < 2) return;
+    setReplayIdx(0);
+    if (replayTimer.current) clearInterval(replayTimer.current);
+    replayTimer.current = window.setInterval(() => {
+      setReplayIdx((i) => {
+        if (i === null) return null;
+        if (i >= pings.length - 1) {
+          if (replayTimer.current) {
+            clearInterval(replayTimer.current);
+            replayTimer.current = null;
+          }
+          return i;
+        }
+        return i + 1;
+      });
+    }, 700);
+  }, [pings.length]);
+
+  // Stop the timer if the component unmounts mid-replay.
+  useEffect(() => () => {
+    if (replayTimer.current) clearInterval(replayTimer.current);
+  }, []);
+
   const trail: LatLngExpression[] = useMemo(
-    () => (track?.pings ?? []).map((p) => [p.latitude, p.longitude]),
-    [track?.pings]
+    () => pings.map((p) => [p.latitude, p.longitude]),
+    [pings]
   );
+
+  // What the map renders: full live trail, or progressive trail while replaying.
+  const displayTrail = isReplaying ? trail.slice(0, replayIdx + 1) : trail;
+  const marker = isReplaying ? pings[replayIdx] : track?.latest;
+  const journeyMs =
+    pings.length >= 2
+      ? new Date(pings[pings.length - 1].recorded_at).getTime() -
+        new Date(pings[0].recorded_at).getTime()
+      : 0;
 
   const bounds: LatLngBoundsExpression | null = useMemo(() => {
     const pts: LatLngExpression[] = [];
@@ -81,30 +146,53 @@ export const AmbulanceTrackingPage = () => {
         <h1 className="flex items-center gap-2 text-xl font-semibold">
           <Ambulance className="h-5 w-5 text-red-600" /> Ambulance tracking
         </h1>
-        {canManageTransport && (
-          <div className="flex items-center gap-3">
-            {active && (
-              <span className="flex items-center gap-1.5 text-xs font-medium text-red-600">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-600" />
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {/* Journey replay — admins can replay the recorded trail */}
+          {isAdmin && pings.length >= 2 && (
+            isReplaying ? (
+              <>
+                <span className="text-xs text-muted-foreground">
+                  Replaying {(replayIdx ?? 0) + 1}/{pings.length}
+                  {marker ? ` · ${formatDateTime(marker.recorded_at)}` : ""}
                 </span>
-                Live{sending ? " · sending…" : lastSentAt ? ` · sent ${formatDateTime(new Date(lastSentAt).toISOString())}` : ""}
-              </span>
-            )}
-            {active ? (
-              <Button variant="outline" onClick={stop}>
-                <Square className="mr-2 h-4 w-4" />
-                Stop sharing
-              </Button>
+                <Button variant="outline" onClick={stopReplay}>
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Stop replay
+                </Button>
+              </>
             ) : (
-              <Button onClick={start}>
-                <MapPin className="mr-2 h-4 w-4" />
-                Share live location
+              <Button variant="outline" onClick={startReplay}>
+                <Play className="mr-2 h-4 w-4" />
+                Replay journey
               </Button>
-            )}
-          </div>
-        )}
+            )
+          )}
+
+          {canManageTransport && !isReplaying && (
+            <>
+              {active && (
+                <span className="flex items-center gap-1.5 text-xs font-medium text-red-600">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-red-600" />
+                  </span>
+                  Live{sending ? " · sending…" : lastSentAt ? ` · sent ${formatDateTime(new Date(lastSentAt).toISOString())}` : ""}
+                </span>
+              )}
+              {active ? (
+                <Button variant="outline" onClick={stop}>
+                  <Square className="mr-2 h-4 w-4" />
+                  Stop sharing
+                </Button>
+              ) : (
+                <Button onClick={start}>
+                  <MapPin className="mr-2 h-4 w-4" />
+                  Share live location
+                </Button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {geoError && <p className="text-sm text-red-600">{geoError}</p>}
@@ -141,14 +229,21 @@ export const AmbulanceTrackingPage = () => {
                 </Marker>
               )}
 
-              {trail.length >= 2 && (
-                <Polyline positions={trail} pathOptions={{ color: "#dc2626", weight: 3 }} />
+              {displayTrail.length >= 2 && (
+                <Polyline positions={displayTrail} pathOptions={{ color: "#dc2626", weight: 3 }} />
               )}
 
-              {latest && (
-                <Marker position={[latest.latitude, latest.longitude]} icon={ambulanceIcon}>
-                  <Popup>Last seen {formatDateTime(latest.recorded_at)}</Popup>
+              {marker && (
+                <Marker position={[marker.latitude, marker.longitude]} icon={ambulanceIcon}>
+                  <Popup>
+                    {isReplaying ? "Position at " : "Last seen "}
+                    {formatDateTime(marker.recorded_at)}
+                  </Popup>
                 </Marker>
+              )}
+
+              {isReplaying && marker && (
+                <RecenterMap position={[marker.latitude, marker.longitude]} />
               )}
             </MapContainer>
           </div>
@@ -170,7 +265,11 @@ export const AmbulanceTrackingPage = () => {
           </div>
           <div>
             <span className="text-muted-foreground">Positions reported: </span>
-            {track?.pings.length ?? 0}
+            {pings.length}
+          </div>
+          <div>
+            <span className="text-muted-foreground">Journey duration: </span>
+            {journeyMs > 0 ? formatDuration(journeyMs) : "—"}
           </div>
           <div>
             <span className="text-muted-foreground">Last update: </span>

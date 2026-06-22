@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useReferral, useAcceptReferral, useQuickAcceptReferral, useRejectReferral } from "@/hooks/useReferrals";
+import { useReferral, useAcceptReferral, useQuickAcceptReferral, useRejectReferral, useRecordArrivalCondition } from "@/hooks/useReferrals";
+import type { ArrivalCondition } from "@/types/referral";
 import { useResources } from "@/hooks/useResources";
 import { toast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/utils/apiError";
@@ -23,6 +24,23 @@ import { cn } from "@/utils/cn";
 import RejectDialog from "./RejectDialog";
 import { CallCoordinationCard } from "./CallCoordinationCard";
 
+const ARRIVAL_CONDITIONS: { value: ArrivalCondition; label: string }[] = [
+  { value: "STABLE", label: "Stable" },
+  { value: "CRITICAL", label: "Critical" },
+  { value: "DETERIORATED", label: "Deteriorated" },
+  { value: "ARRIVED_DECEASED", label: "Deceased on arrival" },
+];
+
+const ARRIVAL_CONDITION_STYLES: Record<ArrivalCondition, string> = {
+  STABLE: "bg-emerald-100 text-emerald-700",
+  CRITICAL: "bg-amber-100 text-amber-700",
+  DETERIORATED: "bg-orange-100 text-orange-700",
+  ARRIVED_DECEASED: "bg-rose-100 text-rose-700",
+};
+
+const arrivalConditionLabel = (c: string) =>
+  ARRIVAL_CONDITIONS.find((x) => x.value === c)?.label ?? c.replace(/_/g, " ");
+
 const Row = ({ label, value }: { label: string; value: string }) => (
   <div className="flex gap-3">
     <span className="w-36 shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
@@ -39,8 +57,10 @@ export const ReferralDetailPage = () => {
   const { mutate: accept, isPending: accepting } = useAcceptReferral();
   const { mutate: quickAccept, isPending: quickAccepting } = useQuickAcceptReferral();
   const { mutate: reject, isPending: rejecting } = useRejectReferral();
+  const { mutate: recordCondition, isPending: recordingCondition } = useRecordArrivalCondition();
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [selectedResourceId, setSelectedResourceId] = useState("");
+  const [selectedCondition, setSelectedCondition] = useState<ArrivalCondition | "">("");
 
   const availableResources = resources.filter((r) => r.status === "AVAILABLE");
 
@@ -66,6 +86,20 @@ export const ReferralDetailPage = () => {
   const onReject = (data: { reason: string; comment?: string }) => {
     if (!id) return;
     reject({ id, payload: data }, { onSuccess: () => setShowRejectDialog(false) });
+  };
+
+  const handleRecordCondition = () => {
+    if (!id || !selectedCondition) return;
+    recordCondition(
+      { id, condition: selectedCondition },
+      {
+        onSuccess: () => {
+          toast({ variant: "success", title: "Arrival condition recorded" });
+          setSelectedCondition("");
+        },
+        onError: (e) => toast({ variant: "destructive", title: "Could not record", description: getApiErrorMessage(e) }),
+      }
+    );
   };
 
   if (isLoading) {
@@ -182,6 +216,53 @@ export const ReferralDetailPage = () => {
           <CardContent className="space-y-3">
             <Row label="Reason" value={referral.rejection_reason.replace(/_/g, " ")} />
             {referral.rejection_comment && <Row label="Comment" value={referral.rejection_comment} />}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Arrival condition — recorded by the receiving clinician on arrival */}
+      {(referral.status === "ARRIVED" || referral.arrival_condition) && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Ambulance className="h-4 w-4 text-primary" />
+              Patient Arrival Condition
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {referral.arrival_condition ? (
+              <span
+                className={cn(
+                  "inline-flex rounded-full px-3 py-1 text-sm font-medium",
+                  ARRIVAL_CONDITION_STYLES[referral.arrival_condition as ArrivalCondition] ??
+                    "bg-muted text-foreground"
+                )}
+              >
+                {arrivalConditionLabel(referral.arrival_condition)}
+              </span>
+            ) : canAcceptReferral ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="flex-1 space-y-1.5">
+                  <Label className="text-sm font-medium">Record how the patient arrived</Label>
+                  <Select onValueChange={(v) => setSelectedCondition(v as ArrivalCondition)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select condition…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ARRIVAL_CONDITIONS.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={handleRecordCondition} disabled={!selectedCondition || recordingCondition}>
+                  <Check className="mr-2 h-4 w-4" />
+                  {recordingCondition ? "Saving…" : "Record condition"}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Not yet recorded.</p>
+            )}
           </CardContent>
         </Card>
       )}

@@ -6,6 +6,14 @@ export interface OccupancyRow {
     occupancy_rate: number;
 }
 
+export interface TransitStats {
+    completed_journeys: number;
+    average_minutes: number | null;
+    fastest_minutes: number | null;
+    slowest_minutes: number | null;
+    arrival_conditions: Record<string, number>;
+}
+
 export interface DashboardActivityRow {
     id: string;
     resource_name: string;

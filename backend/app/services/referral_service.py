@@ -158,7 +158,37 @@ class ReferralService:
         ``facility_ids`` scopes to journeys whose receiving (accepted) or
         referring facility is in the list; ``None`` covers all facilities.
         """
-        empty = {"completed_journeys": 0, "average_minutes": None, "fastest_minutes": None, "slowest_minutes": None}
+        def _scope(stmt):
+            if facility_ids is not None:
+                stmt = stmt.where(
+                    or_(
+                        Referral.accepted_facility_id.in_(facility_ids),
+                        Referral.referring_facility_id.in_(facility_ids),
+                    )
+                )
+            return stmt
+
+        # Arrival-condition breakdown over all referrals with a recorded condition.
+        arrival_conditions = {c.value: 0 for c in ArrivalCondition}
+        if facility_ids is None or facility_ids:
+            cond_stmt = _scope(
+                select(Referral.arrival_condition, func.count())
+                .where(Referral.arrival_condition.isnot(None))
+                .group_by(Referral.arrival_condition)
+            )
+            for condition, count in (await self.session.execute(cond_stmt)).all():
+                arrival_conditions[condition.value] = count
+
+        empty = {
+            "completed_journeys": 0,
+            "average_minutes": None,
+            "fastest_minutes": None,
+            "slowest_minutes": None,
+            "arrival_conditions": arrival_conditions,
+        }
+        if facility_ids is not None and not facility_ids:
+            return empty
+
         H = ReferralStatusHistory
         enroute = (
             select(H.referral_id, func.min(H.created_at).label("t"))
@@ -172,20 +202,11 @@ class ReferralService:
             .group_by(H.referral_id)
             .subquery()
         )
-        stmt = (
+        stmt = _scope(
             select(enroute.c.t, arrived.c.t)
             .join(arrived, arrived.c.referral_id == enroute.c.referral_id)
             .join(Referral, Referral.id == enroute.c.referral_id)
         )
-        if facility_ids is not None:
-            if not facility_ids:
-                return empty
-            stmt = stmt.where(
-                or_(
-                    Referral.accepted_facility_id.in_(facility_ids),
-                    Referral.referring_facility_id.in_(facility_ids),
-                )
-            )
 
         rows = (await self.session.execute(stmt)).all()
         durations = [
@@ -200,6 +221,7 @@ class ReferralService:
             "average_minutes": round(sum(durations) / len(durations), 1),
             "fastest_minutes": round(min(durations), 1),
             "slowest_minutes": round(max(durations), 1),
+            "arrival_conditions": arrival_conditions,
         }
 
     async def get_transport_queue(self) -> List[Referral]:

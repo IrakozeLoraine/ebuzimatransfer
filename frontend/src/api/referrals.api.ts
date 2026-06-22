@@ -1,5 +1,5 @@
 import { api } from "./axios";
-import type { Referral, CreateReferralPayload, AcceptReferralPayload, RejectReferralPayload } from "@/types/referral";
+import type { Referral, CreateReferralPayload, AcceptReferralPayload, RejectReferralPayload, ArrivalCondition } from "@/types/referral";
 
 export const getReferrals = async (params?: { status?: string; facility_id?: string }): Promise<Referral[]> => {
   const { data } = await api.get<Referral[]>("/referrals", { params });
@@ -33,4 +33,12 @@ export const rejectReferral = async (id: string, payload: RejectReferralPayload)
 
 export const updateReferralStatus = async (id: string, status: string): Promise<void> => {
   await api.patch(`/referrals/${id}/status`, null, { params: { status } });
+};
+
+export const recordArrivalCondition = async (
+  id: string,
+  arrival_condition: ArrivalCondition
+): Promise<Referral> => {
+  const { data } = await api.post<Referral>(`/referrals/${id}/arrival-condition`, { arrival_condition });
+  return data;
 };

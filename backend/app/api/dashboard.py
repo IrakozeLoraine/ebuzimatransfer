@@ -5,7 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_session
 from app.core.permissions import get_current_user
 from app.services.resource_service import ResourceService
+from app.services.referral_service import ReferralService
 from app.schemas.resource import CapacityRow, DashboardActivityRow
+from app.schemas.referral import TransitStats
 
 router = APIRouter()
 
@@ -38,4 +40,15 @@ async def dashboard_activity(
 ):
     return await ResourceService(session).recent_activity(
         facility_ids=_scope_facility_ids(current_user), limit=limit
+    )
+
+
+@router.get("/transit-stats", response_model=TransitStats)
+async def transit_stats(
+    current_user=Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Ambulance journey-duration stats (EN_ROUTE → ARRIVED) for the dashboard."""
+    return await ReferralService(session).transit_stats(
+        facility_ids=_scope_facility_ids(current_user)
     )

@@ -1,4 +1,4 @@
-import { OccupancyRow, DashboardActivityRow } from "@/types/report";
+import { OccupancyRow, DashboardActivityRow, TransitStats } from "@/types/report";
 import { api } from "./axios";
 import type { CapacityRow } from "@/types/facility";
 
@@ -9,6 +9,11 @@ export const getCapacity = async (): Promise<CapacityRow[]> => {
 
 export const getDashboardActivity = async (): Promise<DashboardActivityRow[]> => {
   const { data } = await api.get<DashboardActivityRow[]>("/dashboard/activity");
+  return data;
+};
+
+export const getTransitStats = async (): Promise<TransitStats> => {
+  const { data } = await api.get<TransitStats>("/dashboard/transit-stats");
   return data;
 };
 

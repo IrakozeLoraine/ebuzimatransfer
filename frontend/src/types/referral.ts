@@ -8,6 +8,12 @@ export type ReferralStatus =
   | "REJECTED"
   | "CANCELLED";
 
+export type ArrivalCondition =
+  | "STABLE"
+  | "CRITICAL"
+  | "DETERIORATED"
+  | "ARRIVED_DECEASED";
+
 export interface StatusHistory {
   id: string;
   status: ReferralStatus;

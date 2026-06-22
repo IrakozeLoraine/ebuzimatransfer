@@ -9,7 +9,7 @@ from app.services.audit_service import AuditService
 from app.services.notification_service import NotificationService
 from app.websocket.manager import ws_manager
 from app.models.referral import ReferralStatus
-from app.schemas.referral import ReferralCreate, ReferralOut, ReferralSummary, AcceptReferralRequest, RejectReferralRequest
+from app.schemas.referral import ReferralCreate, ReferralOut, ReferralSummary, AcceptReferralRequest, RejectReferralRequest, ArrivalConditionRequest
 
 router = APIRouter()
 
@@ -157,3 +157,23 @@ async def update_status(
     await session.commit()
     await ws_manager.broadcast_to_channel("referrals", {"event": f"REFERRAL_{status.value}", "referral_id": str(referral_id)})
     return {"success": True, "status": status.value}
+
+
+@router.post("/{referral_id}/arrival-condition", response_model=ReferralOut)
+async def record_arrival_condition(
+    referral_id: uuid.UUID,
+    payload: ArrivalConditionRequest,
+    current_user=Depends(require_roles("CLINICIAN", "FACILITY_ADMIN", "SUPER_ADMIN")),
+    session: AsyncSession = Depends(get_session),
+):
+    """The receiving clinician records the patient's condition on arrival."""
+    svc = ReferralService(session)
+    await svc.set_arrival_condition(referral_id, payload.arrival_condition, current_user.id)
+    await AuditService(session).log(
+        "RECORD_ARRIVAL_CONDITION", "referral", user_id=current_user.id, entity_id=referral_id
+    )
+    await session.commit()
+    await ws_manager.broadcast_to_channel(
+        "referrals", {"event": "REFERRAL_ARRIVAL_CONDITION", "referral_id": str(referral_id)}
+    )
+    return await svc.get(referral_id)

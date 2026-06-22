@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
 import { useCapacity } from "@/hooks/useResources";
-import { useDashboardActivity } from "@/hooks/useReport";
+import { useDashboardActivity, useTransitStats } from "@/hooks/useReport";
 import { usePermissions } from "@/hooks/usePermissions";
 import type { CapacityRow } from "@/types/facility";
 import { useAuthStore } from "@/store/auth.store";
@@ -74,6 +74,21 @@ const columns = [
   },
 ];
 
+const ARRIVAL_CONDITION_META: { key: string; label: string; className: string }[] = [
+  { key: "STABLE", label: "Stable", className: "bg-emerald-100 text-emerald-700" },
+  { key: "CRITICAL", label: "Critical", className: "bg-amber-100 text-amber-700" },
+  { key: "DETERIORATED", label: "Deteriorated", className: "bg-orange-100 text-orange-700" },
+  { key: "ARRIVED_DECEASED", label: "Deceased on arrival", className: "bg-rose-100 text-rose-700" },
+];
+
+const formatMinutes = (m: number | null): string => {
+  if (m === null) return "—";
+  if (m < 60) return `${Math.round(m)} min`;
+  const h = Math.floor(m / 60);
+  const rem = Math.round(m % 60);
+  return rem ? `${h}h ${rem}m` : `${h}h`;
+};
+
 const StatSkeleton = () => (
   <div className="rounded-xl border border-l-4 bg-card p-4 shadow-card">
     <div className="space-y-2">
@@ -96,6 +111,7 @@ export const DashboardPage = () => {
   const navigate = useNavigate();
   const { data = [], isLoading } = useCapacity();
   const { data: activity = [], isLoading: activityLoading } = useDashboardActivity();
+  const { data: transit } = useTransitStats();
 
   const [search, setSearch] = useState("");
   const [unitFilter, setUnitFilter] = useState("");
@@ -241,6 +257,61 @@ export const DashboardPage = () => {
           ))}
         </div>
       )}
+
+      {/* Ambulance transit-time tracking report */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Ambulance transit times</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {transit && transit.completed_journeys > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-l-4 border-l-slate-300 bg-card p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Completed journeys</p>
+                <p className="mt-1.5 text-3xl font-bold tabular-nums text-foreground">{transit.completed_journeys}</p>
+              </div>
+              <div className="rounded-xl border border-l-4 border-l-indigo-400 bg-card p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Average time</p>
+                <p className="mt-1.5 text-3xl font-bold tabular-nums text-indigo-600">{formatMinutes(transit.average_minutes)}</p>
+              </div>
+              <div className="rounded-xl border border-l-4 border-l-emerald-400 bg-card p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Fastest (best)</p>
+                <p className="mt-1.5 text-3xl font-bold tabular-nums text-emerald-600">{formatMinutes(transit.fastest_minutes)}</p>
+              </div>
+              <div className="rounded-xl border border-l-4 border-l-rose-400 bg-card p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Slowest (worst)</p>
+                <p className="mt-1.5 text-3xl font-bold tabular-nums text-rose-600">{formatMinutes(transit.slowest_minutes)}</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No completed ambulance journeys yet. Stats appear once transfers reach the destination.
+            </p>
+          )}
+
+          {/* Patient arrival-condition breakdown */}
+          <div className="mt-5 border-t pt-4">
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Patient arrival condition
+            </p>
+            {transit && ARRIVAL_CONDITION_META.some((c) => (transit.arrival_conditions[c.key] ?? 0) > 0) ? (
+              <div className="flex flex-wrap gap-2">
+                {ARRIVAL_CONDITION_META.map((c) => (
+                  <span
+                    key={c.key}
+                    className={cn("inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium", c.className)}
+                  >
+                    {c.label}
+                    <span className="tabular-nums font-bold">{transit.arrival_conditions[c.key] ?? 0}</span>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No arrival conditions recorded yet.</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Charts row */}
       <div className="grid gap-6 lg:grid-cols-2">

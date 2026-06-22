@@ -7,8 +7,9 @@ import {
   quickAcceptReferral,
   rejectReferral,
   updateReferralStatus,
+  recordArrivalCondition,
 } from "@/api/referrals.api";
-import type { CreateReferralPayload, AcceptReferralPayload, RejectReferralPayload } from "@/types/referral";
+import type { CreateReferralPayload, AcceptReferralPayload, RejectReferralPayload, ArrivalCondition } from "@/types/referral";
 
 export const useReferrals = (params?: { status?: string }) =>
   useQuery({
@@ -73,6 +74,18 @@ export const useUpdateReferralStatus = () => {
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       updateReferralStatus(id, status),
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: ["referrals"] });
+      qc.invalidateQueries({ queryKey: ["referral", id] });
+    },
+  });
+};
+
+export const useRecordArrivalCondition = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, condition }: { id: string; condition: ArrivalCondition }) =>
+      recordArrivalCondition(id, condition),
     onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: ["referrals"] });
       qc.invalidateQueries({ queryKey: ["referral", id] });
