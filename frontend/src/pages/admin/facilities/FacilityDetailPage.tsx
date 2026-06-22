@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Pencil, Building2, Users, UserPlus, X, UserX, UserCheck, Layers } from "lucide-react";
+import { ArrowLeft, Pencil, Building2, Users, UserPlus, X, UserX, UserCheck, Layers, Phone } from "lucide-react";
 import { useFacility, useFacilityUsers } from "@/hooks/useFacilities";
 import { useUnits } from "@/hooks/useUnits";
 import { useRemoveUserFromFacility } from "@/hooks/useUser";
@@ -12,6 +12,7 @@ import { ConfirmDialog } from "@/components/molecules/ConfirmDialog";
 import { DataTable } from "@/components/organisms/DataTable";
 import type { User } from "@/types/user";
 import { FacilityFormDialog } from "./FacilityFormDialog";
+import { FacilityPhoneLinesTab } from "./FacilityPhoneLinesTab";
 import { AssignUserDialog } from "../users/AssignUserDialog";
 import { TYPE_BADGES, facilityTypeLabel } from "./constants";
 import { getRoleColor, ACCOUNT_STATUS_LABELS } from "../users/constants";
@@ -166,6 +167,7 @@ export const FacilityDetailPage = () => {
           { value: "info", label: "Facility Information", icon: <Building2 className="h-4 w-4" /> },
           { value: "users", label: `Assigned Users (${users.length})`, icon: <Users className="h-4 w-4" /> },
           { value: "units", label: `Clinical Units (${units.length})`, icon: <Layers className="h-4 w-4" /> },
+          { value: "phones", label: "Phone Lines", icon: <Phone className="h-4 w-4" /> },
         ]}
       />
 
@@ -230,6 +232,8 @@ export const FacilityDetailPage = () => {
           )}
         </Card>
       )}
+
+      {tab === "phones" && id && <FacilityPhoneLinesTab facilityId={id} />}
 
       <FacilityFormDialog open={showEdit} facility={facility ?? null} onOpenChange={setShowEdit} />
       <AssignUserDialog

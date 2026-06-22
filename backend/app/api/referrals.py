@@ -51,7 +51,16 @@ async def create_referral(
     )
     await AuditService(session).log("CREATE_REFERRAL", "referral", user_id=current_user.id, entity_id=referral.id)
     notif = NotificationService(session)
-    await notif.notify_role("CLINICIAN", "New Referral", f"Referral {referral.referral_number} received", "NEW_REFERRAL")
+    title = "New transfer request"
+    message = f"{referral.referral_number}: {referral.diagnosis} ({referral.urgency})"
+    # Notify the receiving side — clinicians in the requested unit at the destination.
+    if referral.preferred_facility_id and referral.requested_unit_id:
+        await notif.notify_facility_unit(
+            referral.preferred_facility_id, referral.requested_unit_id, "CLINICIAN",
+            title, message, "NEW_REFERRAL", "referral", referral.id, exclude_user_id=current_user.id,
+        )
+    else:
+        await notif.notify_role("CLINICIAN", title, message, "NEW_REFERRAL", "referral", referral.id)
     await session.commit()
     await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_CREATED", "referral_id": str(referral.id)})
     return await svc.get(referral.id)
@@ -76,6 +85,11 @@ async def accept_referral(
     svc = ReferralService(session)
     referral = await svc.accept(referral_id, payload, current_user.id)
     await AuditService(session).log("ACCEPT_REFERRAL", "referral", user_id=current_user.id, entity_id=referral_id)
+    await NotificationService(session).create(
+        referral.created_by, "Transfer request approved",
+        f"{referral.referral_number} was approved — a resource is reserved.",
+        "REFERRAL_ACCEPTED", "referral", referral_id,
+    )
     await session.commit()
     await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_ACCEPTED", "referral_id": str(referral_id)})
     await ws_manager.broadcast_to_channel("capacity", {"event": "RESOURCE_UPDATED"})
@@ -100,6 +114,11 @@ async def quick_accept_referral(
         raise ValidationError("No available resource in the requested unit at your facility")
     referral = await svc.accept(referral_id, AcceptReferralRequest(resource_id=resource_id), current_user.id)
     await AuditService(session).log("ACCEPT_REFERRAL", "referral", user_id=current_user.id, entity_id=referral_id)
+    await NotificationService(session).create(
+        referral.created_by, "Transfer request approved",
+        f"{referral.referral_number} was approved — a resource is reserved.",
+        "REFERRAL_ACCEPTED", "referral", referral_id,
+    )
     await session.commit()
     await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_ACCEPTED", "referral_id": str(referral_id)})
     await ws_manager.broadcast_to_channel("capacity", {"event": "RESOURCE_UPDATED"})
@@ -116,6 +135,11 @@ async def reject_referral(
     svc = ReferralService(session)
     referral = await svc.reject(referral_id, payload, current_user.id)
     await AuditService(session).log("REJECT_REFERRAL", "referral", user_id=current_user.id, entity_id=referral_id)
+    await NotificationService(session).create(
+        referral.created_by, "Transfer request rejected",
+        f"{referral.referral_number}: {payload.reason}",
+        "REFERRAL_REJECTED", "referral", referral_id,
+    )
     await session.commit()
     await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_REJECTED", "referral_id": str(referral_id)})
     return await svc.get(referral_id)

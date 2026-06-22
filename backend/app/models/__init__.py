@@ -12,6 +12,7 @@ from app.models.referral import (
 )
 from app.models.transport import TransportEvent
 from app.models.notification import Notification
+from app.models.call import FacilityPhoneLine, CallLog, PhoneLineType
 
 __all__ = [
     "User", "Role", "UserRole", "UserFacilityRole",
@@ -19,4 +20,5 @@ __all__ = [
     "Resource", "ResourceReservation", "ResourceStatus", "ResourceType",
     "Referral", "ReferralStatus", "ReferralStatusHistory", "ArrivalCondition", "ALLOWED_TRANSITIONS",
     "TransportEvent", "Notification",
+    "FacilityPhoneLine", "CallLog", "PhoneLineType",
 ]

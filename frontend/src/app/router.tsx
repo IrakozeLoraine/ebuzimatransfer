@@ -63,6 +63,11 @@ const ProfilePage = lazy(() =>
     default: m.ProfilePage,
   }))
 );
+const NotificationsPage = lazy(() =>
+  import("@/pages/notifications/NotificationsPage").then((m) => ({
+    default: m.NotificationsPage,
+  }))
+);
 
 const ReferralsPage = lazy(() =>
   import("@/pages/referrals/ReferralsPage").then((m) => ({
@@ -100,6 +105,7 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to="/dashboard" replace /> },
           { path: "/dashboard", element: withSuspense(<DashboardPage />) },
           { path: "/profile", element: withSuspense(<ProfilePage />) },
+          { path: "/notifications", element: withSuspense(<NotificationsPage />) },
           {
             path: "/resources",
             element: (

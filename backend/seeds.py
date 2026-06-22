@@ -18,6 +18,7 @@ from app.models.facility import Facility
 from app.models.unit import Unit
 from app.models.resource import Resource, ResourceReservation, ResourceStatus, ResourceType
 from app.models.referral import Referral, ReferralStatus, ReferralStatusHistory
+from app.models.call import FacilityPhoneLine, PhoneLineType
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +208,8 @@ RESERVATIONS = [
 
 async def clear_data(session: AsyncSession) -> None:
     for table in [
+        "call_logs",
+        "facility_phone_lines",
         "resource_reservations",
         "referral_status_history",
         "transport_events",
@@ -356,6 +359,50 @@ TRANSFERS = [
 ]
 
 
+# Institutional/department call lines per facility (label, number, type). SAMU
+# national ambulance dispatch (912) is added to every facility.
+PHONE_LINES = {
+    CHUK: [
+        ("ER Main Reception", "0786828253", PhoneLineType.EMERGENCY),
+        ("Emergency Team", "+250731117822", PhoneLineType.EMERGENCY),
+    ],
+    KFH: [
+        ("Toll-free Emergency", "3939", PhoneLineType.TOLLFREE),
+        ("International / Mobile", "+250788123200", PhoneLineType.COORDINATION),
+        ("Night Supervisor", "0788530351", PhoneLineType.SUPERVISOR),
+    ],
+    RMH: [
+        ("Toll-free Line", "4060", PhoneLineType.TOLLFREE),
+    ],
+    BUTARO: [
+        ("DH Emergency Coordination", "0783849767", PhoneLineType.COORDINATION),
+    ],
+    RUHENGERI: [
+        ("DH Coordination", "0785061888", PhoneLineType.COORDINATION),
+    ],
+}
+SAMU_DISPATCH = ("SAMU Ambulance Dispatch", "912", PhoneLineType.DISPATCH)
+
+
+async def seed_phone_lines(session: AsyncSession) -> None:
+    """Seed institutional call lines per facility. Idempotent: skips if any exist."""
+    existing = await session.scalar(select(func.count()).select_from(FacilityPhoneLine))
+    if existing:
+        print(f"  ↪ {existing} phone lines already present — skipping.")
+        return
+    fac_by_name = {f.name: f for f in (await session.execute(select(Facility))).scalars()}
+    count = 0
+    for fac_name, lines in PHONE_LINES.items():
+        fac = fac_by_name.get(fac_name)
+        if not fac:
+            continue
+        for label, number, line_type in [*lines, SAMU_DISPATCH]:
+            session.add(FacilityPhoneLine(facility_id=fac.id, label=label, phone_number=number, line_type=line_type))
+            count += 1
+    await session.flush()
+    print(f"  ✓ Created {count} institutional phone lines")
+
+
 async def seed_transfers(session: AsyncSession) -> None:
     """Assign clinicians a clinical unit and seed sample transfer requests.
     Idempotent: skips request creation if any already exist."""
@@ -444,6 +491,15 @@ async def main() -> None:
         print("\n✅ Transfer-request seed complete!\n")
         return
 
+    # Seed only institutional phone lines on top of existing data.
+    if "--phone-lines" in sys.argv:
+        print("\n🌱 Seeding institutional phone lines...\n")
+        async with AsyncSessionLocal() as session:
+            await seed_phone_lines(session)
+            await session.commit()
+        print("\n✅ Phone-line seed complete!\n")
+        return
+
     print("\n🌱 Seeding eBuzimaTransfer database...\n")
     async with AsyncSessionLocal() as session:
         if not force and await already_seeded(session):
@@ -455,6 +511,7 @@ async def main() -> None:
         users = await seed_users(session, roles, facilities)
         await seed_resources(session)
         await seed_transfers(session)
+        await seed_phone_lines(session)
         await session.commit()
 
     print("\n✅ Seed complete!\n")

@@ -21,6 +21,7 @@ import { formatDateTime } from "@/utils/format";
 import { usePermissions } from "@/hooks/usePermissions";
 import { cn } from "@/utils/cn";
 import RejectDialog from "./RejectDialog";
+import { CallCoordinationCard } from "./CallCoordinationCard";
 
 const Row = ({ label, value }: { label: string; value: string }) => (
   <div className="flex gap-3">
@@ -150,6 +151,12 @@ export const ReferralDetailPage = () => {
           <p className="text-sm leading-relaxed text-foreground/80">{referral.reason_for_transfer}</p>
         </CardContent>
       </Card>
+
+      {/* Coordinate the transfer with a call to the destination facility */}
+      <CallCoordinationCard
+        referralId={referral.id}
+        facilityId={referral.accepted_facility_id ?? referral.preferred_facility_id}
+      />
 
       {referral.rejection_reason && (
         <Card className="border-rose-200 bg-rose-50/50">

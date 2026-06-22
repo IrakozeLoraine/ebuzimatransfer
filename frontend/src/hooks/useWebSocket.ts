@@ -41,13 +41,15 @@ export const useReferralsWebSocket = () => {
 };
 
 export const useNotificationsWebSocket = () => {
-  const { accessToken } = useAuthStore();
+  const userId = useAuthStore((s) => s.user?.id);
   const { addNotification } = useNotificationStore();
+  const queryClient = useQueryClient();
   const ws = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    if (!accessToken) return;
-    ws.current = new WebSocket(`${WS_BASE}/ws/notifications?token=${accessToken}`);
+    if (!userId) return;
+    // Notifications are fanned out on the per-user channel `user:{id}`.
+    ws.current = new WebSocket(`${WS_BASE}/ws/user:${userId}`);
     ws.current.onmessage = (e) => {
       const msg = JSON.parse(e.data);
       if (msg.title && msg.message) {
@@ -61,8 +63,10 @@ export const useNotificationsWebSocket = () => {
           is_read: false,
           created_at: new Date().toISOString(),
         });
+        queryClient.invalidateQueries({ queryKey: ["notifications"] });
+        queryClient.invalidateQueries({ queryKey: ["referrals"] });
       }
     };
     return () => ws.current?.close();
-  }, [accessToken, addNotification]);
+  }, [userId, addNotification, queryClient]);
 };

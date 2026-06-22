@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Check, ChevronsUpDown, LogOut, Settings } from "lucide-react";
 import { Link } from "react-router-dom";
+import { NotificationBell } from "./NotificationBell";
 
 export const Header = () => {
     const user = useAuthStore((s) => s.user);
@@ -67,7 +68,7 @@ export const Header = () => {
             )}
 
             <div className="flex items-center gap-1">
-                {/* <NotificationBell /> */}
+                <NotificationBell />
 
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
