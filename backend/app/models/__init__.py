@@ -13,8 +13,10 @@ from app.models.referral import (
 from app.models.transport import TransportEvent
 from app.models.notification import Notification
 from app.models.call import FacilityPhoneLine, CallLog, PhoneLineType
+from app.models.ambulance import AmbulanceLocationPing
 
 __all__ = [
+    "AmbulanceLocationPing",
     "User", "Role", "UserRole", "UserFacilityRole",
     "Facility", "AuditLog", "Unit",
     "Resource", "ResourceReservation", "ResourceStatus", "ResourceType",

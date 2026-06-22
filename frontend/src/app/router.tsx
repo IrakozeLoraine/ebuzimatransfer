@@ -89,6 +89,11 @@ const TransportPage = lazy(() =>
     default: m.TransportPage,
   }))
 );
+const AmbulanceTrackingPage = lazy(() =>
+  import("@/pages/transport/AmbulanceTrackingPage").then((m) => ({
+    default: m.AmbulanceTrackingPage,
+  }))
+);
 
 const withSuspense = (element: React.ReactNode) => (
   <Suspense fallback={null}>{element}</Suspense>
@@ -139,6 +144,10 @@ export const router = createBrowserRouter([
                 <TransportPage />
               </RoleGuard>
             ),
+          },
+          {
+            path: "/transport/:id/track",
+            element: withSuspense(<AmbulanceTrackingPage />),
           },
           {
             path: "/reports",

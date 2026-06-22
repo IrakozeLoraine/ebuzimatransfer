@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Check, X, Clock } from "lucide-react";
+import { ArrowLeft, Check, X, Clock, Ambulance } from "lucide-react";
 import { formatDateTime } from "@/utils/format";
 import { usePermissions } from "@/hooks/usePermissions";
 import { cn } from "@/utils/cn";
@@ -86,6 +86,11 @@ export const ReferralDetailPage = () => {
     canAcceptReferral &&
     (referral.status === "REQUESTED" || referral.status === "UNDER_REVIEW");
 
+  const isInTransit =
+    referral.status === "TRANSPORT_ARRANGED" ||
+    referral.status === "EN_ROUTE" ||
+    referral.status === "ARRIVED";
+
   const TIMELINE_COLORS: Record<string, string> = {
     REQUESTED: "bg-blue-500",
     UNDER_REVIEW: "bg-amber-500",
@@ -113,6 +118,17 @@ export const ReferralDetailPage = () => {
             Created {formatDateTime(referral.created_at)}
           </p>
         </div>
+        {isInTransit && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            onClick={() => navigate(`/transport/${referral.id}/track`)}
+          >
+            <Ambulance className="mr-2 h-4 w-4" />
+            Track ambulance
+          </Button>
+        )}
       </div>
 
       {/* Info cards */}

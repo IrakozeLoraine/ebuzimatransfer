@@ -23,6 +23,25 @@ export const useCapacityWebSocket = () => {
   }, [queryClient]);
 };
 
+export const useAmbulanceWebSocket = (referralId: string | undefined) => {
+  const queryClient = useQueryClient();
+  const ws = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    if (!referralId) return;
+    // Live GPS positions are fanned out on the per-referral channel
+    // `ambulance:{referral_id}`.
+    ws.current = new WebSocket(`${WS_BASE}/ws/ambulance:${referralId}`);
+    ws.current.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.event === "AMBULANCE_PING") {
+        queryClient.invalidateQueries({ queryKey: ["ambulance-track", referralId] });
+      }
+    };
+    return () => ws.current?.close();
+  }, [referralId, queryClient]);
+};
+
 export const useReferralsWebSocket = () => {
   const queryClient = useQueryClient();
   const ws = useRef<WebSocket | null>(null);

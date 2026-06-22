@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel
-from app.models.referral import ReferralStatus
+from app.models.referral import ReferralStatus, ArrivalCondition
 
 
 class ReferralCreate(BaseModel):
@@ -38,6 +38,18 @@ class AcceptReferralRequest(BaseModel):
 class RejectReferralRequest(BaseModel):
     reason: str
     comment: Optional[str] = None
+
+
+class ArrivalConditionRequest(BaseModel):
+    arrival_condition: ArrivalCondition
+
+
+class TransitStats(BaseModel):
+    """Aggregate transit-duration stats (EN_ROUTE → ARRIVED), in minutes."""
+    completed_journeys: int
+    average_minutes: Optional[float] = None
+    fastest_minutes: Optional[float] = None
+    slowest_minutes: Optional[float] = None
 
 
 class StatusHistoryOut(BaseModel):

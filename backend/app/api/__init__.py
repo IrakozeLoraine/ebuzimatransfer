@@ -13,6 +13,7 @@ from app.api import (
     transport,
     notifications,
     calls,
+    ambulance,
 )
 
 router = APIRouter(prefix="/api/v1")
@@ -29,3 +30,4 @@ router.include_router(referrals.router, prefix="/referrals", tags=["Transfer Req
 router.include_router(transport.router, prefix="/transport", tags=["Transport"])
 router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 router.include_router(calls.router, prefix="/calls", tags=["Calls"])
+router.include_router(ambulance.router, prefix="/ambulance", tags=["Ambulance"])

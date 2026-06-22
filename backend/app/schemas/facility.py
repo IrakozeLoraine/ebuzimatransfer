@@ -10,6 +10,8 @@ class FacilityBase(BaseModel):
     location: Optional[str] = None
     province: Optional[str] = None
     district: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class FacilityCreate(FacilityBase):

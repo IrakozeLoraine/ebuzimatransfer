@@ -384,6 +384,29 @@ PHONE_LINES = {
 SAMU_DISPATCH = ("SAMU Ambulance Dispatch", "912", PhoneLineType.DISPATCH)
 
 
+# Approximate GPS coordinates (lat, lng) for the seeded facilities.
+FACILITY_COORDS = {
+    CHUK: (-1.9706, 30.0588),
+    KFH: (-1.9437, 30.1126),
+    RMH: (-1.9920, 30.1056),
+    BUTARO: (-1.4561, 29.8419),
+    RUHENGERI: (-1.4997, 29.6336),
+}
+
+
+async def seed_coords(session: AsyncSession) -> None:
+    """Set facility GPS coordinates (idempotent — always reasserted)."""
+    fac_by_name = {f.name: f for f in (await session.execute(select(Facility))).scalars()}
+    n = 0
+    for name, (lat, lng) in FACILITY_COORDS.items():
+        fac = fac_by_name.get(name)
+        if fac:
+            fac.latitude, fac.longitude = lat, lng
+            n += 1
+    await session.flush()
+    print(f"  ✓ Set coordinates for {n} facilities")
+
+
 async def seed_phone_lines(session: AsyncSession) -> None:
     """Seed institutional call lines per facility. Idempotent: skips if any exist."""
     existing = await session.scalar(select(func.count()).select_from(FacilityPhoneLine))
@@ -491,6 +514,15 @@ async def main() -> None:
         print("\n✅ Transfer-request seed complete!\n")
         return
 
+    # Set facility coordinates on top of existing data.
+    if "--coords" in sys.argv:
+        print("\n🌱 Setting facility coordinates...\n")
+        async with AsyncSessionLocal() as session:
+            await seed_coords(session)
+            await session.commit()
+        print("\n✅ Coordinates set!\n")
+        return
+
     # Seed only institutional phone lines on top of existing data.
     if "--phone-lines" in sys.argv:
         print("\n🌱 Seeding institutional phone lines...\n")
@@ -509,6 +541,7 @@ async def main() -> None:
         roles = await seed_roles(session)
         facilities = await seed_facilities(session)
         users = await seed_users(session, roles, facilities)
+        await seed_coords(session)
         await seed_resources(session)
         await seed_transfers(session)
         await seed_phone_lines(session)

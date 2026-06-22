@@ -2,9 +2,10 @@ from __future__ import annotations
 import uuid
 from typing import List, Optional
 from datetime import datetime
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.exceptions import NotFoundError, InvalidStatusTransitionError
-from app.models.referral import Referral, ReferralStatus, ReferralStatusHistory, ALLOWED_TRANSITIONS
+from app.core.exceptions import NotFoundError, InvalidStatusTransitionError, ValidationError
+from app.models.referral import Referral, ReferralStatus, ReferralStatusHistory, ArrivalCondition, ALLOWED_TRANSITIONS
 from app.repositories.referral_repository import ReferralRepository
 from app.repositories.resource_repository import ResourceRepository
 from app.schemas.referral import ReferralCreate, AcceptReferralRequest, RejectReferralRequest
@@ -137,6 +138,69 @@ class ReferralService:
         await self._record_history(referral_id, ReferralStatus.REJECTED, actor_id, data.comment)
         await self.session.flush()
         return referral
+
+    async def set_arrival_condition(self, referral_id: uuid.UUID, condition: ArrivalCondition, actor_id: uuid.UUID) -> Referral:
+        referral = await self.repo.get_by_id(referral_id)
+        if not referral:
+            raise NotFoundError("Referral")
+        if referral.status != ReferralStatus.ARRIVED:
+            raise ValidationError("Arrival condition can only be recorded once the patient has arrived")
+        referral.arrival_condition = condition
+        await self._record_history(
+            referral_id, ReferralStatus.ARRIVED, actor_id, f"Arrival condition: {condition.value}"
+        )
+        await self.session.flush()
+        return referral
+
+    async def transit_stats(self, facility_ids: Optional[List[uuid.UUID]] = None) -> dict:
+        """Transit duration (EN_ROUTE → ARRIVED) stats over completed journeys.
+
+        ``facility_ids`` scopes to journeys whose receiving (accepted) or
+        referring facility is in the list; ``None`` covers all facilities.
+        """
+        empty = {"completed_journeys": 0, "average_minutes": None, "fastest_minutes": None, "slowest_minutes": None}
+        H = ReferralStatusHistory
+        enroute = (
+            select(H.referral_id, func.min(H.created_at).label("t"))
+            .where(H.status == ReferralStatus.EN_ROUTE)
+            .group_by(H.referral_id)
+            .subquery()
+        )
+        arrived = (
+            select(H.referral_id, func.min(H.created_at).label("t"))
+            .where(H.status == ReferralStatus.ARRIVED)
+            .group_by(H.referral_id)
+            .subquery()
+        )
+        stmt = (
+            select(enroute.c.t, arrived.c.t)
+            .join(arrived, arrived.c.referral_id == enroute.c.referral_id)
+            .join(Referral, Referral.id == enroute.c.referral_id)
+        )
+        if facility_ids is not None:
+            if not facility_ids:
+                return empty
+            stmt = stmt.where(
+                or_(
+                    Referral.accepted_facility_id.in_(facility_ids),
+                    Referral.referring_facility_id.in_(facility_ids),
+                )
+            )
+
+        rows = (await self.session.execute(stmt)).all()
+        durations = [
+            (arr - dep).total_seconds() / 60
+            for dep, arr in rows
+            if dep is not None and arr is not None and arr >= dep
+        ]
+        if not durations:
+            return empty
+        return {
+            "completed_journeys": len(durations),
+            "average_minutes": round(sum(durations) / len(durations), 1),
+            "fastest_minutes": round(min(durations), 1),
+            "slowest_minutes": round(max(durations), 1),
+        }
 
     async def get_transport_queue(self) -> List[Referral]:
         return await self.repo.get_accepted_awaiting_transport()
