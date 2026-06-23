@@ -3,7 +3,7 @@ import {
   getResources,
   createResource,
   updateResourceStatus,
-  assignResource,
+  assignResources,
   importResources,
   getResourceUsage,
   reserveResource,
@@ -11,7 +11,7 @@ import {
 } from "@/api/resources.api";
 import { getCapacity } from "@/api/reports.api";
 import {
-  AssignResourcePayload,
+  BulkAssignResourcePayload,
   CreateResourcePayload,
   ResourceFilters,
   ResourceStatus,
@@ -47,11 +47,10 @@ export const useUpdateResourceStatus = () => {
   });
 };
 
-export const useAssignResource = () => {
+export const useAssignResources = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: AssignResourcePayload }) =>
-      assignResource(id, payload),
+    mutationFn: (payload: BulkAssignResourcePayload) => assignResources(payload),
     onSuccess: () => invalidateResourceData(qc),
   });
 };

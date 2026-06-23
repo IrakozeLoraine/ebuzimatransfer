@@ -36,6 +36,15 @@ class ResourceAssign(BaseModel):
     unit_id: Optional[uuid.UUID] = None
 
 
+class ResourceBulkAssign(BaseModel):
+    """Assign or transfer one or more resources at once. A null facility_id returns
+    them to central stock (super admin only). Facility admins may only set the unit;
+    the facility they belong to is preserved server-side."""
+    resource_ids: List[uuid.UUID]
+    facility_id: Optional[uuid.UUID] = None
+    unit_id: Optional[uuid.UUID] = None
+
+
 class ResourceOut(ResourceBase):
     id: uuid.UUID
     quantity: int

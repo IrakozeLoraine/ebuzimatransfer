@@ -48,7 +48,8 @@ export interface CreateResourcePayload {
     notes?: string;
 }
 
-export interface AssignResourcePayload {
+export interface BulkAssignResourcePayload {
+    resource_ids: string[];
     facility_id?: string | null;
     unit_id?: string | null;
 }

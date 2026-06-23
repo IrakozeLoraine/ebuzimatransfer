@@ -18,6 +18,7 @@ export const usePermissions = () => {
   const canViewAudit = isAdmin;
   const canManageResources = isAdmin || isClinician;
   const canAssignResources = isAdmin;
+  const canUpdateResourceStatus = isFacilityAdmin || isClinician;
   // Any clinician can create a transfer request (referring) and act on one that
   // targets their facility (receiving); admins can too.
   const canCreateReferral = isClinician;
@@ -38,6 +39,7 @@ export const usePermissions = () => {
     canViewAudit,
     canManageResources,
     canAssignResources,
+    canUpdateResourceStatus,
     canAcceptReferral,
     canCreateReferral,
     canManageTransport,

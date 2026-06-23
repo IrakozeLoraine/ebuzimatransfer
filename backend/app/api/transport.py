@@ -41,6 +41,7 @@ async def create_transport(
         ambulance_identifier=payload.ambulance_identifier,
         driver_name=payload.driver_name,
         driver_phone=payload.driver_phone,
+        device_id=payload.device_id,
         created_by=current_user.id,
     )
     session.add(event)
@@ -76,11 +77,12 @@ async def update_transport(
 
     svc = ReferralService(session)
     if payload.arrival_time:
+        # The receiving clinician confirms arrival; the referring clinician is notified.
         referral = await svc.change_status(event.referral_id, ReferralStatus.ARRIVED, current_user.id)
-        await _notify_receiving(
-            session, referral, "Patient has arrived",
-            f"{referral.referral_number}: the patient has arrived.",
-            "REFERRAL_ARRIVED",
+        await NotificationService(session).create(
+            referral.created_by, "Patient has arrived",
+            f"{referral.referral_number}: the patient has arrived at the receiving facility.",
+            "REFERRAL_ARRIVED", "referral", referral.id,
         )
         await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_ARRIVED", "referral_id": str(event.referral_id)})
     elif payload.departure_time:

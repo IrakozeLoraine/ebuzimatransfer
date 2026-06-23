@@ -8,6 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Pagination } from "@/components/molecules/Pagination";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/utils/cn";
 import { FileSearch } from "lucide-react";
 
@@ -15,6 +16,15 @@ export interface Column<T> {
   header: string;
   accessor: keyof T | ((row: T) => React.ReactNode);
   className?: string;
+}
+
+/** Optional multi-row selection: renders a leading checkbox column. */
+export interface TableSelection {
+  selectedIds: Set<string>;
+  /** Toggle a single row by its key. */
+  onToggle: (id: string) => void;
+  /** Toggle all currently-shown rows (passed their keys). */
+  onToggleAll: (ids: string[]) => void;
 }
 
 interface Props<T> {
@@ -28,6 +38,8 @@ interface Props<T> {
   pageSize?: number;
   /** Page-size options shown in the rows-per-page selector. */
   pageSizeOptions?: number[];
+  /** Enables a leading checkbox column for selecting rows. */
+  selection?: TableSelection;
 }
 
 const SkeletonRow = ({ cols }: { cols: number }) => (
@@ -50,15 +62,24 @@ const MobileCard = <T,>({
   row,
   columns,
   onClick,
+  selected,
+  onToggleSelect,
 }: {
   row: T;
   columns: Column<T>[];
   onClick?: (row: T) => void;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }) => (
   <div
     onClick={() => onClick?.(row)}
     className={cn("space-y-2 p-4", onClick && "cursor-pointer active:bg-primary/[0.04]")}
   >
+    {onToggleSelect && (
+      <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+        <Checkbox checked={selected} onCheckedChange={onToggleSelect} aria-label="Select row" />
+      </div>
+    )}
     {columns.map((col) => (
       <div key={String(col.header)} className="flex flex-col md:flex-row items-start justify-between gap-2 gap-3">
         {col.header && (
@@ -92,6 +113,7 @@ export const DataTable = <T,>({
   keyExtractor,
   pageSize,
   pageSizeOptions,
+  selection,
 }: Props<T>) => {
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(pageSize ?? 0);
@@ -110,6 +132,12 @@ export const DataTable = <T,>({
     setSize(next);
     setPage(1);
   };
+
+  // Keys of the rows currently shown (the page), for the select-all control.
+  const pageIds = selection ? pageData.map(keyExtractor) : [];
+  const allSelected =
+    !!selection && pageIds.length > 0 && pageIds.every((id) => selection.selectedIds.has(id));
+  const colCount = columns.length + (selection ? 1 : 0);
 
   const showPagination = !!pageSize && !isLoading && data.length > 0;
 
@@ -134,7 +162,14 @@ export const DataTable = <T,>({
           emptyState
         ) : (
           pageData.map((row) => (
-            <MobileCard key={keyExtractor(row)} row={row} columns={columns} onClick={onRowClick} />
+            <MobileCard
+              key={keyExtractor(row)}
+              row={row}
+              columns={columns}
+              onClick={onRowClick}
+              selected={selection?.selectedIds.has(keyExtractor(row))}
+              onToggleSelect={selection ? () => selection.onToggle(keyExtractor(row)) : undefined}
+            />
           ))
         )}
       </div>
@@ -144,6 +179,15 @@ export const DataTable = <T,>({
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent even:bg-transparent">
+            {selection && (
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={allSelected}
+                  onCheckedChange={() => selection.onToggleAll(pageIds)}
+                  aria-label="Select all rows"
+                />
+              </TableHead>
+            )}
             {columns.map((col) => (
               <TableHead key={String(col.header)} className={col.className}>
                 {col.header}
@@ -154,26 +198,38 @@ export const DataTable = <T,>({
         <TableBody>
           {isLoading ? (
             Array.from({ length: 5 }).map((_, i) => (
-              <SkeletonRow key={i} cols={columns.length} />
+              <SkeletonRow key={i} cols={colCount} />
             ))
           ) : data.length === 0 ? (
             <TableRow className="hover:bg-transparent even:bg-transparent">
-              <TableCell colSpan={columns.length}>{emptyState}</TableCell>
+              <TableCell colSpan={colCount}>{emptyState}</TableCell>
             </TableRow>
           ) : (
-            pageData.map((row) => (
-              <TableRow
-                key={keyExtractor(row)}
-                onClick={() => onRowClick?.(row)}
-                className={cn(onRowClick && "cursor-pointer")}
-              >
-                {columns.map((col) => (
-                  <TableCell key={String(col.header)} className={col.className}>
-                    {renderCell(col, row)}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))
+            pageData.map((row) => {
+              const id = keyExtractor(row);
+              return (
+                <TableRow
+                  key={id}
+                  onClick={() => onRowClick?.(row)}
+                  className={cn(onRowClick && "cursor-pointer")}
+                >
+                  {selection && (
+                    <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selection.selectedIds.has(id)}
+                        onCheckedChange={() => selection.onToggle(id)}
+                        aria-label="Select row"
+                      />
+                    </TableCell>
+                  )}
+                  {columns.map((col) => (
+                    <TableCell key={String(col.header)} className={col.className}>
+                      {renderCell(col, row)}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              );
+            })
           )}
         </TableBody>
       </Table>

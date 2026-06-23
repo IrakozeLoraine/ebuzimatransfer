@@ -10,6 +10,7 @@ import {
   User,
   Search,
   Layers,
+  Radio,
 } from "lucide-react";
 import logo from "@/assets/ebuzimaTransfer.svg";
 import { cn } from "@/utils/cn";
@@ -48,6 +49,7 @@ export const SidebarNav = ({ onNavigate }: Props) => {
     ...(isSuperAdmin || isFacilityAdmin ? [navItem("/admin/users", "Users", Users)] : []),
     ...(canManageFacilities ? [navItem("/admin/facilities", "Facilities", Building2)] : []),
     ...(isSuperAdmin ? [navItem("/admin/units", "Clinical Units", Layers)] : []),
+    ...(isSuperAdmin || isFacilityAdmin ? [navItem("/admin/devices", "GPS Trackers", Radio)] : []),
     ...(canViewAudit ? [navItem("/admin/audit", "Audit Logs", ClipboardList)] : []),
   ];
 

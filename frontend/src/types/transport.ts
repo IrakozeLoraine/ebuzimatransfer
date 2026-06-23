@@ -4,6 +4,7 @@ export interface TransportEvent {
   ambulance_identifier: string;
   driver_name: string | null;
   driver_phone: string | null;
+  device_id: string | null;
   dispatch_time: string | null;
   pickup_time: string | null;
   departure_time: string | null;
@@ -16,6 +17,7 @@ export interface CreateTransportPayload {
   ambulance_identifier: string;
   driver_name?: string;
   driver_phone?: string;
+  device_id?: string;
 }
 
 export interface UpdateTransportPayload {

@@ -1,18 +1,21 @@
 import uuid
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_session
-from app.core.permissions import require_roles, get_current_user
-from app.core.exceptions import NotFoundError
+from app.core.permissions import get_current_user, get_current_device
+from app.core.exceptions import NotFoundError, ConflictError
 from app.models.ambulance import AmbulanceLocationPing
 from app.models.referral import Referral
 from app.models.facility import Facility
+from app.models.transport import TransportEvent
 from app.services.audit_service import AuditService
+from app.services.routing import road_route
 from app.websocket.manager import ws_manager
 from app.schemas.ambulance import (
-    LocationPingCreate,
+    DevicePingCreate,
     LocationPingOut,
     AmbulanceTrack,
     RoutePoint,
@@ -34,24 +37,36 @@ async def _get_referral(session: AsyncSession, referral_id: uuid.UUID) -> Referr
     return referral
 
 
-@router.post("/{referral_id}/pings", response_model=LocationPingOut, status_code=201)
-async def report_ping(
-    referral_id: uuid.UUID,
-    payload: LocationPingCreate,
-    current_user=Depends(require_roles("CLINICIAN", "SUPER_ADMIN")),
+@router.post("/devices/ping", response_model=LocationPingOut, status_code=201)
+async def device_ping(
+    payload: DevicePingCreate,
+    device=Depends(get_current_device),
     session: AsyncSession = Depends(get_session),
 ):
-    """Record a live GPS position for an ambulance in transit (referring clinician)."""
-    await _get_referral(session, referral_id)
+    """Ingest a GPS position from a hardware tracker.
+
+    The device is resolved to the journey it is currently assigned to (the most
+    recent transport event referencing it that has not yet arrived), and the
+    position is recorded against that transfer request.
+    """
+    transport = await session.scalar(
+        select(TransportEvent)
+        .where(TransportEvent.device_id == device.id, TransportEvent.arrival_time.is_(None))
+        .order_by(TransportEvent.created_at.desc())
+    )
+    if not transport:
+        raise ConflictError("This device is not assigned to an active journey")
+
+    referral_id = transport.referral_id
     ping = AmbulanceLocationPing(
         referral_id=referral_id,
         latitude=payload.latitude,
         longitude=payload.longitude,
-        reported_by=current_user.id,
+        device_id=device.id,
     )
     session.add(ping)
     await AuditService(session).log(
-        "REPORT_AMBULANCE_PING", "ambulance", user_id=current_user.id, entity_id=referral_id
+        "REPORT_AMBULANCE_PING", "ambulance", entity_id=referral_id
     )
     await session.commit()
     await session.refresh(ping)
@@ -74,7 +89,8 @@ async def get_track(
     current_user=Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Route endpoints plus the ordered GPS trail for a transfer request."""
+    """Route endpoints, the ordered GPS trail, the planned road route, and a
+    road-routed ETA for a transfer request."""
     referral = await _get_referral(session, referral_id)
 
     origin = await session.get(Facility, referral.referring_facility_id) if referral.referring_facility_id else None
@@ -88,10 +104,50 @@ async def get_track(
     )
     pings = list(result.scalars())
 
+    # Journey timing from the latest transport event for this referral.
+    transport = await session.scalar(
+        select(TransportEvent)
+        .where(TransportEvent.referral_id == referral_id)
+        .order_by(TransportEvent.created_at.desc())
+    )
+    origin_pt = _route_point(origin)
+    destination_pt = _route_point(destination)
+    departure_time = transport.departure_time if transport else None
+    arrival_time = transport.arrival_time if transport else None
+
+    route_geometry = None
+    estimated_arrival_time = None
+    if origin_pt and destination_pt and not arrival_time:
+        # Planned route (origin → destination) for the map overlay.
+        planned = await road_route(
+            origin_pt.latitude, origin_pt.longitude,
+            destination_pt.latitude, destination_pt.longitude,
+        )
+        if planned:
+            route_geometry = planned.geometry
+
+        # ETA from the ambulance's current position (latest ping) to the
+        # destination; before any ping, fall back to the planned-route duration.
+        latest = pings[-1] if pings else None
+        if latest:
+            live = await road_route(
+                latest.latitude, latest.longitude,
+                destination_pt.latitude, destination_pt.longitude,
+            )
+            if live:
+                now = datetime.now(timezone.utc).replace(microsecond=0)
+                estimated_arrival_time = now + timedelta(seconds=live.duration_s)
+        elif planned and departure_time:
+            estimated_arrival_time = departure_time + timedelta(seconds=planned.duration_s)
+
     return AmbulanceTrack(
         referral_id=referral_id,
-        origin=_route_point(origin),
-        destination=_route_point(destination),
+        origin=origin_pt,
+        destination=destination_pt,
         pings=[LocationPingOut.model_validate(p) for p in pings],
         latest=LocationPingOut.model_validate(pings[-1]) if pings else None,
+        route=route_geometry,
+        departure_time=departure_time,
+        estimated_arrival_time=estimated_arrival_time,
+        arrival_time=arrival_time,
     )

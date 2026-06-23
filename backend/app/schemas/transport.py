@@ -10,6 +10,8 @@ class TransportCreate(BaseModel):
     ambulance_identifier: str
     driver_name: Optional[str] = None
     driver_phone: Optional[str] = None
+    # The GPS tracker in this ambulance; its pings drive live tracking.
+    device_id: Optional[uuid.UUID] = None
 
 
 class TransportUpdate(BaseModel):
@@ -28,6 +30,7 @@ class TransportOut(BaseModel):
     ambulance_identifier: str
     driver_name: Optional[str]
     driver_phone: Optional[str]
+    device_id: Optional[uuid.UUID]
     dispatch_time: Optional[datetime]
     pickup_time: Optional[datetime]
     departure_time: Optional[datetime]

@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, File, UploadFile, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_session
-from app.core.permissions import require_role, require_roles, get_current_user
+from app.core.permissions import require_roles, get_current_user
 from app.core.exceptions import ForbiddenError, ValidationError
 from app.models.resource import ResourceStatus
 from app.services.resource_service import ResourceService
@@ -12,7 +12,7 @@ from app.websocket.manager import ws_manager
 from app.schemas.resource import (
     ResourceCreate,
     ResourceStatusUpdate,
-    ResourceAssign,
+    ResourceBulkAssign,
     ResourceOut,
     ResourceUsageOut,
     ResourceImportResult,
@@ -146,27 +146,52 @@ async def get_resource_usage(
     return await ResourceService(session).usage(resource_id)
 
 
-@router.post("/{resource_id}/assign", response_model=ResourceOut)
-async def assign_resource(
-    resource_id: uuid.UUID,
-    payload: ResourceAssign,
-    current_user=Depends(require_role(SUPER_ADMIN)),
+@router.post("/assign", response_model=List[ResourceOut])
+async def assign_resources(
+    payload: ResourceBulkAssign,
+    current_user=Depends(require_roles(SUPER_ADMIN, FACILITY_ADMIN)),
     session: AsyncSession = Depends(get_session),
 ):
+    """Assign/transfer one or more resources in a single action. Super admins can move
+    resources to any facility (or back to central stock); facility admins may only
+    re-assign the clinical unit of resources already in their own facility — the
+    facility itself is never changed for them."""
+    if not payload.resource_ids:
+        raise ValidationError("No resources selected")
+
     svc = ResourceService(session)
-    resource = await svc.assign(resource_id, payload.facility_id, payload.unit_id)
-    await AuditService(session).log(
-        "ASSIGN_RESOURCE",
-        "resource",
-        user_id=current_user.id,
-        entity_id=resource_id,
-        extra={"facility_id": str(payload.facility_id) if payload.facility_id else None},
-    )
+    is_super = _is_super_admin(current_user)
+    facility_ids = {f.id for f in current_user.facilities}
+
+    results = []
+    for resource_id in payload.resource_ids:
+        if is_super:
+            target_facility = payload.facility_id
+            target_unit = payload.unit_id
+        else:
+            # Facility admins may only re-unit resources already in their facility.
+            resource = await svc.get(resource_id)
+            if resource.facility_id not in facility_ids:
+                raise ForbiddenError()
+            target_facility = resource.facility_id
+            target_unit = payload.unit_id
+
+        result = await svc.assign(resource_id, target_facility, target_unit)
+        await AuditService(session).log(
+            "ASSIGN_RESOURCE",
+            "resource",
+            user_id=current_user.id,
+            entity_id=resource_id,
+            extra={"facility_id": str(target_facility) if target_facility else None},
+        )
+        results.append(result)
+
     await session.commit()
-    await ws_manager.broadcast_to_channel(
-        "capacity", {"event": "RESOURCE_ASSIGNED", "resource_id": str(resource_id)}
-    )
-    return resource
+    for result in results:
+        await ws_manager.broadcast_to_channel(
+            "capacity", {"event": "RESOURCE_ASSIGNED", "resource_id": str(result.id)}
+        )
+    return results
 
 
 @router.post("/{resource_id}/reserve", response_model=ResourceOut)

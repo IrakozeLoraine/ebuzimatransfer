@@ -1,5 +1,5 @@
 import {
-  AssignResourcePayload,
+  BulkAssignResourcePayload,
   CreateResourcePayload,
   Resource,
   ResourceFilters,
@@ -24,11 +24,10 @@ export const updateResourceStatus = async (id: string, status: ResourceStatus): 
   return data;
 };
 
-export const assignResource = async (
-  id: string,
-  payload: AssignResourcePayload
-): Promise<Resource> => {
-  const { data } = await api.post<Resource>(`/resources/${id}/assign`, payload);
+export const assignResources = async (
+  payload: BulkAssignResourcePayload
+): Promise<Resource[]> => {
+  const { data } = await api.post<Resource[]>("/resources/assign", payload);
   return data;
 };
 

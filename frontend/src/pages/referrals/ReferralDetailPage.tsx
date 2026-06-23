@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useReferral, useAcceptReferral, useQuickAcceptReferral, useRejectReferral, useRecordArrivalCondition, useArrangeTransport, useUpdateTransport, useMarkArrived } from "@/hooks/useReferrals";
 import type { ArrivalCondition } from "@/types/referral";
 import { useResources } from "@/hooks/useResources";
+import { useDevices } from "@/hooks/useDevices";
 import { useAuthStore } from "@/store/auth.store";
 import { toast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/utils/apiError";
@@ -57,6 +58,7 @@ export const ReferralDetailPage = () => {
   const me = useAuthStore((s) => s.user);
   const { data: referral, isLoading } = useReferral(id!);
   const { data: resources = [] } = useResources();
+  const { data: devices = [] } = useDevices();
   const { mutate: accept, isPending: accepting } = useAcceptReferral();
   const { mutate: quickAccept, isPending: quickAccepting } = useQuickAcceptReferral();
   const { mutate: reject, isPending: rejecting } = useRejectReferral();
@@ -70,8 +72,10 @@ export const ReferralDetailPage = () => {
   const [ambulanceId, setAmbulanceId] = useState("");
   const [driverName, setDriverName] = useState("");
   const [driverPhone, setDriverPhone] = useState("");
+  const [deviceId, setDeviceId] = useState("");
 
   const availableResources = resources.filter((r) => r.status === "AVAILABLE");
+  const activeDevices = devices.filter((d) => d.is_active);
 
   const handleAccept = () => {
     if (!selectedResourceId || !id) return;
@@ -114,11 +118,11 @@ export const ReferralDetailPage = () => {
   const handleArrangeTransport = () => {
     if (!id || !ambulanceId.trim()) return;
     arrangeTransport(
-      { referral_id: id, ambulance_identifier: ambulanceId.trim(), driver_name: driverName || undefined, driver_phone: driverPhone || undefined },
+      { referral_id: id, ambulance_identifier: ambulanceId.trim(), driver_name: driverName || undefined, driver_phone: driverPhone || undefined, device_id: deviceId || undefined },
       {
         onSuccess: () => {
           toast({ variant: "success", title: "Transport arranged", description: "The receiving facility has been notified." });
-          setAmbulanceId(""); setDriverName(""); setDriverPhone("");
+          setAmbulanceId(""); setDriverName(""); setDriverPhone(""); setDeviceId("");
         },
         onError: (e) => toast({ variant: "destructive", title: "Could not arrange transport", description: getApiErrorMessage(e) }),
       }
@@ -307,6 +311,22 @@ export const ReferralDetailPage = () => {
                     <Label className="text-xs">Driver phone</Label>
                     <Input value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} />
                   </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">GPS tracker</Label>
+                    <Select value={deviceId} onValueChange={setDeviceId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={activeDevices.length ? "Select a tracker" : "No trackers registered"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeDevices.map((d) => (
+                          <SelectItem key={d.id} value={d.id}>{d.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-muted-foreground">
+                      Live tracking uses the assigned ambulance's hardware tracker.
+                    </p>
+                  </div>
                 </div>
                 <Button onClick={handleArrangeTransport} disabled={!ambulanceId.trim() || arranging}>
                   <Truck className="mr-2 h-4 w-4" />
@@ -315,25 +335,26 @@ export const ReferralDetailPage = () => {
               </div>
             )}
 
-            {/* Referring clinician: progress the journey */}
+            {/* Referring clinician: dispatch the ambulance */}
             {isReferringSide && transport && referral.status === "TRANSPORT_ARRANGED" && (
               <Button onClick={() => setTransportTime(transport.id, "departure_time", "Patient marked en route")} disabled={updatingTransport}>
                 <Navigation className="mr-2 h-4 w-4" />
                 {updatingTransport ? "Updating…" : "Mark departed (en route)"}
               </Button>
             )}
-            {isReferringSide && transport && referral.status === "EN_ROUTE" && (
+
+            {/* Receiving clinician: confirm the patient arrived at their facility.
+                Works whether or not a tracked ambulance was used. Notifies the referring side. */}
+            {isReceivingSide && transport && referral.status === "EN_ROUTE" && (
               <Button onClick={() => setTransportTime(transport.id, "arrival_time", "Patient marked as arrived")} disabled={updatingTransport}>
                 <Check className="mr-2 h-4 w-4" />
-                {updatingTransport ? "Updating…" : "Mark arrived"}
+                {updatingTransport ? "Updating…" : "Mark patient arrived"}
               </Button>
             )}
-
-            {/* Receiving clinician: confirm arrival for a transfer with no tracked transport */}
             {isReceivingSide && referral.status === "ACCEPTED" && (
               <div className="space-y-2 border-t pt-3">
                 <p className="text-xs text-muted-foreground">
-                  If the patient arrived without a tracked ambulance, confirm arrival here — the referring facility will be notified.
+                  Confirm arrival once the patient reaches your facility — the referring facility will be notified.
                 </p>
                 <Button variant="outline" onClick={handleMarkArrived} disabled={markingArrived}>
                   <Check className="mr-2 h-4 w-4" />
@@ -454,7 +475,7 @@ export const ReferralDetailPage = () => {
           {/* One-click approve for fast decisions */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium">Quick decision</p>
+              <p className="text-sm font-medium">Provide Decision</p>
               <p className="text-xs text-muted-foreground">
                 Approve auto-reserves an available resource in the requested unit at your facility.
               </p>
@@ -466,7 +487,7 @@ export const ReferralDetailPage = () => {
                 className="bg-primary text-white hover:brightness-110 shadow-sm"
               >
                 <Zap className="mr-2 h-4 w-4" />
-                {quickAccepting ? "Approving…" : "Quick Approve"}
+                {quickAccepting ? "Approving…" : "Approve"}
               </Button>
               <Button variant="destructive" onClick={() => setShowRejectDialog(true)}>
                 <X className="mr-2 h-4 w-4" />

@@ -11,6 +11,10 @@ class TransportEvent(Base, UUIDMixin, TimestampMixin):
 
     referral_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("referrals.id", ondelete="CASCADE"), nullable=False)
     ambulance_identifier: Mapped[str] = mapped_column(String(50), nullable=False)
+    # The GPS tracker assigned to this journey; its pings drive live tracking.
+    device_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ambulance_devices.id", ondelete="SET NULL"), nullable=True
+    )
     driver_name: Mapped[str | None] = mapped_column(String(100))
     driver_phone: Mapped[str | None] = mapped_column(String(20))
     dispatch_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

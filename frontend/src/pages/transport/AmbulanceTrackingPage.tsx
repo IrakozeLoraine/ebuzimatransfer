@@ -9,8 +9,6 @@ import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import { getAmbulanceTrack } from "@/api/ambulance.api";
 import { useAmbulanceWebSocket } from "@/hooks/useWebSocket";
-import { useLiveLocationShare } from "@/hooks/useLiveLocation";
-import { usePermissions } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -19,7 +17,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { formatDateTime } from "@/utils/format";
-import { Ambulance, MapPin, Square, Play, RotateCcw } from "lucide-react";
+import { Ambulance, Play, RotateCcw } from "lucide-react";
 import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 
 /** Pans the map to follow a position (used while replaying a journey). */
@@ -58,7 +56,6 @@ const RWANDA_CENTER: LatLngExpression = [-1.9403, 29.8739];
 
 export const AmbulanceTrackingPage = () => {
   const { id: referralId } = useParams<{ id: string }>();
-  const { canManageTransport } = usePermissions();
 
   useAmbulanceWebSocket(referralId);
 
@@ -70,10 +67,13 @@ export const AmbulanceTrackingPage = () => {
     refetchInterval: 20_000,
   });
 
-  const { active, error: geoError, lastSentAt, sending, start, stop } =
-    useLiveLocationShare(referralId);
-
   const pings = useMemo(() => track?.pings ?? [], [track?.pings]);
+
+  // Planned road route (origin → destination) from OSRM, drawn under the trail.
+  const plannedRoute = useMemo<LatLngExpression[]>(
+    () => (track?.route ?? []).map(([lat, lng]) => [lat, lng]),
+    [track?.route]
+  );
 
   // Journey replay: step the marker through the recorded pings over time.
   const [replayIdx, setReplayIdx] = useState<number | null>(null);
@@ -120,11 +120,11 @@ export const AmbulanceTrackingPage = () => {
   // What the map renders: full live trail, or progressive trail while replaying.
   const displayTrail = isReplaying ? trail.slice(0, replayIdx + 1) : trail;
   const marker = isReplaying ? pings[replayIdx] : track?.latest;
-  const journeyMs =
-    pings.length >= 2
-      ? new Date(pings[pings.length - 1].recorded_at).getTime() -
-        new Date(pings[0].recorded_at).getTime()
-      : 0;
+  // Journey timing comes from the transport event (start = departure, actual = arrival).
+  const startMs = track?.departure_time ? new Date(track.departure_time).getTime() : null;
+  const actualArrivalMs = track?.arrival_time ? new Date(track.arrival_time).getTime() : null;
+  // Duration = arrival − departure once arrived, otherwise elapsed so far.
+  const journeyMs = startMs ? (actualArrivalMs ?? Date.now()) - startMs : 0;
 
   const bounds: LatLngBoundsExpression | null = useMemo(() => {
     const pts: LatLngExpression[] = [];
@@ -168,34 +168,18 @@ export const AmbulanceTrackingPage = () => {
             )
           )}
 
-          {canManageTransport && !isReplaying && (
-            <>
-              {active && (
-                <span className="flex items-center gap-1.5 text-xs font-medium text-red-600">
-                  <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-red-600" />
-                  </span>
-                  Live{sending ? " · sending…" : lastSentAt ? ` · sent ${formatDateTime(new Date(lastSentAt).toISOString())}` : ""}
-                </span>
-              )}
-              {active ? (
-                <Button variant="outline" onClick={stop}>
-                  <Square className="mr-2 h-4 w-4" />
-                  Stop sharing
-                </Button>
-              ) : (
-                <Button onClick={start}>
-                  <MapPin className="mr-2 h-4 w-4" />
-                  Share live location
-                </Button>
-              )}
-            </>
+          {/* Live status is driven by the ambulance's hardware tracker. */}
+          {latest && !isReplaying && (
+            <span className="flex items-center gap-1.5 text-xs font-medium text-red-600">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-red-600" />
+              </span>
+              Tracking · last fix {formatDateTime(latest.recorded_at)}
+            </span>
           )}
         </div>
       </div>
-
-      {geoError && <p className="text-sm text-red-600">{geoError}</p>}
 
       <Card>
         <CardContent className="p-0">
@@ -227,6 +211,14 @@ export const AmbulanceTrackingPage = () => {
                 <Marker position={[track.destination.latitude, track.destination.longitude]}>
                   <Popup>Destination: {track.destination.name}</Popup>
                 </Marker>
+              )}
+
+              {/* Planned road route (origin → destination), under the live trail. */}
+              {!isReplaying && plannedRoute.length >= 2 && (
+                <Polyline
+                  positions={plannedRoute}
+                  pathOptions={{ color: "#2563eb", weight: 4, opacity: 0.4, dashArray: "6 8" }}
+                />
               )}
 
               {displayTrail.length >= 2 && (
@@ -264,12 +256,24 @@ export const AmbulanceTrackingPage = () => {
             {track?.destination?.name ?? "—"}
           </div>
           <div>
-            <span className="text-muted-foreground">Positions reported: </span>
-            {pings.length}
+            <span className="text-muted-foreground">Start time: </span>
+            {track?.departure_time ? formatDateTime(track.departure_time) : "Not departed"}
+          </div>
+          <div>
+            <span className="text-muted-foreground">Estimated arrival: </span>
+            {track?.estimated_arrival_time ? formatDateTime(track.estimated_arrival_time) : "—"}
+          </div>
+          <div>
+            <span className="text-muted-foreground">Actual arrival: </span>
+            {track?.arrival_time ? formatDateTime(track.arrival_time) : "In transit"}
           </div>
           <div>
             <span className="text-muted-foreground">Journey duration: </span>
-            {journeyMs > 0 ? formatDuration(journeyMs) : "—"}
+            {journeyMs > 0 ? `${formatDuration(journeyMs)}${actualArrivalMs ? "" : " so far"}` : "—"}
+          </div>
+          <div>
+            <span className="text-muted-foreground">Positions reported: </span>
+            {pings.length}
           </div>
           <div>
             <span className="text-muted-foreground">Last update: </span>

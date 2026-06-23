@@ -19,9 +19,23 @@ export interface AmbulanceTrack {
   destination: RoutePoint | null;
   pings: LocationPing[];
   latest: LocationPing | null;
+  /** Planned road route (origin → destination) as ordered [lat, lng] points. */
+  route: [number, number][] | null;
+  /** Journey timing. ETA is computed by real road routing (OSRM). */
+  departure_time: string | null;
+  estimated_arrival_time: string | null;
+  arrival_time: string | null;
 }
 
-export interface ReportPingPayload {
-  latitude: number;
-  longitude: number;
+export interface AmbulanceDevice {
+  id: string;
+  label: string;
+  facility_id: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+/** Returned once at creation — includes the plaintext key to flash onto the device. */
+export interface AmbulanceDeviceCreated extends AmbulanceDevice {
+  api_key: string;
 }

@@ -53,6 +53,11 @@ const UnitsCatalogPage = lazy(() =>
     default: m.UnitsCatalogPage,
   }))
 );
+const DevicesPage = lazy(() =>
+  import("@/pages/admin/DevicesPage").then((m) => ({
+    default: m.DevicesPage,
+  }))
+);
 const FindResourcesPage = lazy(() =>
   import("@/pages/transfers/FindResourcesPage").then((m) => ({
     default: m.FindResourcesPage,
@@ -167,6 +172,14 @@ export const router = createBrowserRouter([
             element: (
               <RoleGuard roles={["SUPER_ADMIN"]}>
                 <UnitsCatalogPage />
+              </RoleGuard>
+            ),
+          },
+          {
+            path: "/admin/devices",
+            element: (
+              <RoleGuard roles={["SUPER_ADMIN", "FACILITY_ADMIN"]}>
+                <DevicesPage />
               </RoleGuard>
             ),
           },

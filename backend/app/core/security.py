@@ -1,5 +1,7 @@
+import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 from jose import JWTError, jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
@@ -17,6 +19,22 @@ def verify_password(plain: str, hashed: str) -> bool:
         return ph.verify(hashed, plain)
     except (VerifyMismatchError, VerificationError, InvalidHashError):
         return False
+
+
+def hash_device_key(plain: str) -> str:
+    """Hash a device API key for storage/lookup.
+
+    Device keys are high-entropy random tokens (unlike passwords), so a fast,
+    deterministic SHA-256 is both safe and queryable by equality — letting us
+    authenticate a device in a single indexed lookup.
+    """
+    return hashlib.sha256(plain.encode()).hexdigest()
+
+
+def generate_device_key() -> Tuple[str, str]:
+    """Return a (plaintext, hash) pair for a new device. Plaintext is shown once."""
+    plain = "dev_" + secrets.token_urlsafe(32)
+    return plain, hash_device_key(plain)
 
 
 def _create_token(data: Dict[str, Any], expires_delta: timedelta) -> str:

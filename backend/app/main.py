@@ -12,7 +12,13 @@ from app.websocket.manager import ws_manager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    yield
+    # Start the Redis-backed WebSocket fan-out so broadcasts reach clients on
+    # any worker, then tear it down on shutdown.
+    await ws_manager.start()
+    try:
+        yield
+    finally:
+        await ws_manager.stop()
 
 
 limiter = Limiter(key_func=get_remote_address)

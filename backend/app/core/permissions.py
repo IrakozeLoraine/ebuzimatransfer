@@ -1,13 +1,32 @@
-from fastapi import Depends
+from fastapi import Depends, Header
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.security import decode_token
+from app.core.security import decode_token, hash_device_key
 from app.core.exceptions import UnauthorizedError, ForbiddenError
 from app.db.session import get_session
 from typing import List
 import uuid
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+
+async def get_current_device(
+    x_device_key: str = Header(..., alias="X-Device-Key"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Authenticate a hardware GPS tracker by its API key (sent as ``X-Device-Key``)."""
+    from app.models.ambulance import AmbulanceDevice
+
+    device = await session.scalar(
+        select(AmbulanceDevice).where(
+            AmbulanceDevice.api_key_hash == hash_device_key(x_device_key),
+            AmbulanceDevice.is_active.is_(True),
+        )
+    )
+    if not device:
+        raise UnauthorizedError("Invalid or inactive device key")
+    return device
 
 
 async def get_current_user(

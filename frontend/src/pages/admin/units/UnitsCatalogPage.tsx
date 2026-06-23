@@ -134,7 +134,7 @@ export const UnitsCatalogPage = () => {
         isLoading={isLoading}
         keyExtractor={(u) => u.id}
         emptyMessage="No units match your filters"
-        pageSize={15}
+        pageSize={10}
       />
 
       <UnitFormDialog open={showForm} unit={editing} onOpenChange={setShowForm} />
