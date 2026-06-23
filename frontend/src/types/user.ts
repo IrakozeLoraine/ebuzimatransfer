@@ -8,7 +8,6 @@ export interface User {
   last_name: string;
   phone: string | null;
   location: string | null;
-  unit_id: string | null;
   is_active: boolean;
   account_status: string;
   /** Roles grouped by facility. */
@@ -37,10 +36,14 @@ export interface UpdateUserPayload {
 export interface AssignUserPayload {
   medical_id: string;
   roles: string[];
+  /** Clinical units the user works in at this facility. */
+  unit_ids?: string[];
 }
 
 export interface CreateAssignPayload extends CreateUserPayload {
   roles: string[];
+  /** Clinical units the user works in at this facility. */
+  unit_ids?: string[];
   /** Required for super admins; facility admins use their own active facility. */
   facility_id?: string;
 }

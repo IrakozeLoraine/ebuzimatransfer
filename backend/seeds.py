@@ -8,17 +8,19 @@ import asyncio
 import sys
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal
 from app.core.security import hash_password
-from app.models.user import Role, User, UserRole, UserFacilityRole, AccountStatus
+from app.models.user import Role, User, UserRole, UserFacilityRole, UserFacilityUnit, AccountStatus
 from app.models.facility import Facility
 from app.models.unit import Unit
 from app.models.resource import Resource, ResourceReservation, ResourceStatus, ResourceType
 from app.models.referral import Referral, ReferralStatus, ReferralStatusHistory
 from app.models.call import FacilityPhoneLine, PhoneLineType
+from app.models.transport import TransportEvent
+from app.models.ambulance import AmbulanceLocationPing
 
 
 # ---------------------------------------------------------------------------
@@ -212,10 +214,12 @@ async def clear_data(session: AsyncSession) -> None:
         "facility_phone_lines",
         "resource_reservations",
         "referral_status_history",
+        "ambulance_location_pings",
         "transport_events",
         "notifications",
         "resources",
         "referrals",
+        "user_facility_units",
         "user_facility_roles",
         "users",
         "facilities",
@@ -333,13 +337,14 @@ async def seed_resources(session: AsyncSession) -> None:
     print(f"  ✓ Created {reservations} reservations")
 
 
-# Clinical-unit membership for the seeded clinicians (medical_id -> unit name),
-# plus sample transfer requests across facilities in varied statuses.
+# Per-facility clinical-unit membership for the seeded clinicians
+# (medical_id -> list of (facility, unit) the clinician works in). A clinician can
+# work in several units, scoped per facility — RC-CHUK-001 covers two CHUK units.
 CLINICIAN_UNITS = {
-    "RC-BUT-001": "Accident & Emergency (A&E) Unit",   # Butaro (district)
-    "RC-CHUK-001": ICU_HDU,                              # CHUK
-    "IC-CHUK-001": ICU_HDU,                              # CHUK
-    "IC-KFH-001": ICU_HDU,                               # King Faisal
+    "RC-BUT-001": [(BUTARO, "Accident & Emergency (A&E) Unit")],
+    "RC-CHUK-001": [(CHUK, ICU_HDU), (CHUK, "Neurosurgery Unit")],
+    "IC-CHUK-001": [(CHUK, ICU_HDU)],
+    "IC-KFH-001": [(KFH, ICU_HDU)],
 }
 
 TRANSFERS = [
@@ -356,6 +361,10 @@ TRANSFERS = [
      "diagnosis": "Status epilepticus", "acuity_level": "MEDIUM", "urgency": "URGENT",
      "reason": "Pediatric ICU", "vent": False, "status": ReferralStatus.REJECTED,
      "rejection_reason": "No pediatric ICU bed available"},
+    {"created_by": "RC-BUT-001", "from": BUTARO, "to": CHUK, "origin_unit": "Accident & Emergency (A&E) Unit",
+     "requested_unit": ICU_HDU, "patient_code": "PT-0004", "age_band": "ADULT", "sex": "M",
+     "diagnosis": "Acute myocardial infarction", "acuity_level": "HIGH", "urgency": "IMMEDIATE",
+     "reason": "Cath lab + coronary ICU", "vent": False, "status": ReferralStatus.EN_ROUTE},
 ]
 
 
@@ -426,6 +435,68 @@ async def seed_phone_lines(session: AsyncSession) -> None:
     print(f"  ✓ Created {count} institutional phone lines")
 
 
+# In-transit ambulance for the EN_ROUTE transfer — drives the live tracking map.
+# (patient_code of the referral it serves, vehicle, driver, coordinator medical_id)
+AMBULANCE = {
+    "patient_code": "PT-0004",
+    "ambulance_identifier": "RAD 432 H",
+    "driver_name": "Theogene Niyonzima",
+    "driver_phone": "+250788111432",
+    "coordinator_mid": "AC-RWA-001",
+    "origin": BUTARO,
+    "destination": CHUK,
+}
+
+
+async def seed_ambulance(session: AsyncSession) -> None:
+    """Seed an in-transit ambulance: a transport event plus a GPS trail running
+    from the origin facility toward the destination (~60% of the way there) so the
+    live tracking map has data. Idempotent: skips if any location pings exist."""
+    existing = await session.scalar(select(func.count()).select_from(AmbulanceLocationPing))
+    if existing:
+        print(f"  ↪ {existing} ambulance pings already present — skipping.")
+        return
+
+    referral = await session.scalar(
+        select(Referral).where(Referral.patient_code == AMBULANCE["patient_code"])
+    )
+    coordinator = await session.scalar(
+        select(User).where(User.medical_id == AMBULANCE["coordinator_mid"])
+    )
+    if referral is None or coordinator is None:
+        print("  ⚠ No EN_ROUTE referral / coordinator found — skipping ambulance seed.")
+        return
+
+    now = datetime.now(timezone.utc)
+    session.add(TransportEvent(
+        referral_id=referral.id,
+        ambulance_identifier=AMBULANCE["ambulance_identifier"],
+        driver_name=AMBULANCE["driver_name"],
+        driver_phone=AMBULANCE["driver_phone"],
+        dispatch_time=now - timedelta(minutes=70),
+        pickup_time=now - timedelta(minutes=55),
+        departure_time=now - timedelta(minutes=50),
+        created_by=coordinator.id,
+    ))
+
+    (o_lat, o_lng) = FACILITY_COORDS[AMBULANCE["origin"]]
+    (d_lat, d_lng) = FACILITY_COORDS[AMBULANCE["destination"]]
+    steps = 8          # number of pings
+    progress = 0.6     # fraction of the route already covered
+    for i in range(steps + 1):
+        frac = progress * i / steps
+        # Slight lateral wiggle so the trail doesn't look like a ruler line.
+        jitter = 0.004 * (1 if i % 2 else -1) * (i / steps)
+        session.add(AmbulanceLocationPing(
+            referral_id=referral.id,
+            latitude=round(o_lat + (d_lat - o_lat) * frac + jitter, 5),
+            longitude=round(o_lng + (d_lng - o_lng) * frac, 5),
+            reported_by=coordinator.id,
+            recorded_at=now - timedelta(minutes=round(50 * (1 - i / steps))),
+        ))
+    print(f"  ✓ Created 1 transport event + {steps + 1} ambulance pings")
+
+
 async def seed_transfers(session: AsyncSession) -> None:
     """Assign clinicians a clinical unit and seed sample transfer requests.
     Idempotent: skips request creation if any already exist."""
@@ -433,14 +504,25 @@ async def seed_transfers(session: AsyncSession) -> None:
     unit_by_name = {u.name: u for u in (await session.execute(select(Unit))).scalars()}
     user_by_mid = {u.medical_id: u for u in (await session.execute(select(User))).scalars()}
 
-    # Clinical-unit membership (idempotent — always reasserted).
-    for mid, unit_name in CLINICIAN_UNITS.items():
+    # Per-facility clinical-unit membership (idempotent — replace existing rows).
+    member_ids = [user_by_mid[mid].id for mid in CLINICIAN_UNITS if mid in user_by_mid]
+    if member_ids:
+        await session.execute(
+            delete(UserFacilityUnit).where(UserFacilityUnit.user_id.in_(member_ids))
+        )
+    memberships = 0
+    for mid, units in CLINICIAN_UNITS.items():
         user = user_by_mid.get(mid)
-        unit = unit_by_name.get(unit_name)
-        if user and unit:
-            user.unit_id = unit.id
+        if not user:
+            continue
+        for fac_name, unit_name in units:
+            fac = fac_by_name.get(fac_name)
+            unit = unit_by_name.get(unit_name)
+            if fac and unit:
+                session.add(UserFacilityUnit(user_id=user.id, facility_id=fac.id, unit_id=unit.id))
+                memberships += 1
     await session.flush()
-    print(f"  ✓ Assigned clinical units to {len(CLINICIAN_UNITS)} clinicians")
+    print(f"  ✓ Assigned {memberships} unit memberships to {len(CLINICIAN_UNITS)} clinicians")
 
     existing = await session.scalar(select(func.count()).select_from(Referral))
     if existing:
@@ -470,7 +552,9 @@ async def seed_transfers(session: AsyncSession) -> None:
             created_by=creator.id,
             referring_facility_id=frm.id,
             preferred_facility_id=to.id,
-            accepted_facility_id=to.id if t["status"] == ReferralStatus.ACCEPTED else None,
+            accepted_facility_id=to.id if t["status"] in (
+                ReferralStatus.ACCEPTED, ReferralStatus.EN_ROUTE, ReferralStatus.ARRIVED
+            ) else None,
             origin_unit_id=unit_by_name[t["origin_unit"]].id if t["origin_unit"] in unit_by_name else None,
             requested_unit_id=unit_by_name[t["requested_unit"]].id if t["requested_unit"] in unit_by_name else None,
         )
@@ -532,6 +616,15 @@ async def main() -> None:
         print("\n✅ Phone-line seed complete!\n")
         return
 
+    # Seed only the in-transit ambulance (transport event + GPS trail) on top of existing data.
+    if "--ambulance" in sys.argv:
+        print("\n🌱 Seeding in-transit ambulance...\n")
+        async with AsyncSessionLocal() as session:
+            await seed_ambulance(session)
+            await session.commit()
+        print("\n✅ Ambulance seed complete!\n")
+        return
+
     print("\n🌱 Seeding eBuzimaTransfer database...\n")
     async with AsyncSessionLocal() as session:
         if not force and await already_seeded(session):
@@ -545,6 +638,7 @@ async def main() -> None:
         await seed_resources(session)
         await seed_transfers(session)
         await seed_phone_lines(session)
+        await seed_ambulance(session)
         await session.commit()
 
     print("\n✅ Seed complete!\n")

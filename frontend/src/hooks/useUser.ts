@@ -101,8 +101,8 @@ export const useAssignUser = ({ onSuccess, onNotFound, fixedUser, fixedFacility 
             // A specific facility (fixed or picked by a super admin) → targeted endpoint;
             // otherwise a facility admin assigns within their own active facility.
             return facilityId
-                ? assignUserToSpecificFacility(facilityId, { medical_id, roles: data.roles })
-                : assignUserToFacility({ medical_id, roles: data.roles });
+                ? assignUserToSpecificFacility(facilityId, { medical_id, roles: data.roles, unit_ids: data.unit_ids })
+                : assignUserToFacility({ medical_id, roles: data.roles, unit_ids: data.unit_ids });
         },
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ["users"] });
@@ -143,6 +143,7 @@ export const useCreateAndAssignUser = ({ onSuccess, fixedFacility }: {
                 last_name: data.last_name,
                 phone: data.phone || undefined,
                 roles: data.roles,
+                unit_ids: data.unit_ids,
                 facility_id: fixedFacility?.id ?? data.facility_id,
             }),
         onSuccess: () => {

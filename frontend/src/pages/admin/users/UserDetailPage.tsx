@@ -70,7 +70,7 @@ export const UserDetailPage = () => {
         <ArrowLeft className="mr-1 h-4 w-4" /> Back to users
       </Button>
 
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col md:flex-row items-start justify-between gap-2 gap-4">
         <div className="flex items-center gap-4">
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-r-0 border-primary text-lg font-bold text-primary">
             {user?.first_name?.[0]}{user?.last_name?.[0]}
@@ -81,7 +81,7 @@ export const UserDetailPage = () => {
           </div>
         </div>
         {user && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap justify-center md:justify-start gap-2">
             <Button variant="outline" onClick={() => setAssigning(true)}>
               <UserPlus className="mr-2 h-4 w-4" /> Assign to Facility
             </Button>
@@ -168,6 +168,16 @@ export const UserDetailPage = () => {
                       </span>
                     ))}
                   </div>
+                  {fr.units.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Units</span>
+                      {fr.units.map((u) => (
+                        <span key={u.id} className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-blue-200">
+                          {u.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

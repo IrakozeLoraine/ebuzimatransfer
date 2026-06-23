@@ -318,7 +318,7 @@ export const ReferralDetailPage = () => {
               <Button
                 onClick={handleQuickApprove}
                 disabled={quickAccepting}
-                className="bg-gradient-to-r from-emerald-500 to-green-600 text-white hover:brightness-110 shadow-sm"
+                className="bg-primary text-white hover:brightness-110 shadow-sm"
               >
                 <Zap className="mr-2 h-4 w-4" />
                 {quickAccepting ? "Approving…" : "Quick Approve"}

@@ -46,6 +46,33 @@ class UserFacilityRole(Base, UUIDMixin):
     facility: Mapped["Facility | None"] = relationship("Facility", lazy="joined")
 
 
+class UserFacilityUnit(Base, UUIDMixin):
+    """A clinician's membership in a clinical unit at a specific facility.
+
+    A clinician can work in several units at one facility, and in different
+    units across facilities — so membership is keyed on (user, facility, unit).
+    """
+
+    __tablename__ = "user_facility_units"
+    __table_args__ = (
+        UniqueConstraint("user_id", "facility_id", "unit_id", name="uq_user_facility_unit"),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    facility_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("facilities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    unit_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("units.id", ondelete="CASCADE"), nullable=False
+    )
+
+    user: Mapped["User"] = relationship("User", back_populates="facility_units")
+    facility: Mapped["Facility"] = relationship("Facility", lazy="joined")
+    unit: Mapped["Unit"] = relationship("Unit", lazy="joined")
+
+
 class User(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "users"
 
@@ -53,9 +80,6 @@ class User(Base, UUIDMixin, TimestampMixin):
     medical_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
     phone: Mapped[str | None] = mapped_column(String(20))
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    unit_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("units.id"), nullable=True
-    )
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -66,6 +90,12 @@ class User(Base, UUIDMixin, TimestampMixin):
 
     facility_roles: Mapped[list[UserFacilityRole]] = relationship(
         "UserFacilityRole",
+        back_populates="user",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+    )
+    facility_units: Mapped[list[UserFacilityUnit]] = relationship(
+        "UserFacilityUnit",
         back_populates="user",
         lazy="selectin",
         cascade="all, delete-orphan",
@@ -99,6 +129,17 @@ class User(Base, UUIDMixin, TimestampMixin):
     def effective_role_names(self, active_facility_id: uuid.UUID | None) -> list[str]:
         """Roles in effect for the active facility: global grants plus that facility's grants."""
         return sorted(set(self.global_role_names) | set(self.roles_for_facility(active_facility_id)))
+
+    def units_for_facility(self, facility_id: uuid.UUID | None) -> list["UserFacilityUnit"]:
+        """The clinical units this clinician works in at the given facility."""
+        if facility_id is None:
+            return []
+        return [fu for fu in self.facility_units if fu.facility_id == facility_id]
+
+    @property
+    def unit_ids(self) -> list[uuid.UUID]:
+        """All clinical units this clinician works in, across every facility."""
+        return list({fu.unit_id for fu in self.facility_units})
 
 
 # Avoid circular imports

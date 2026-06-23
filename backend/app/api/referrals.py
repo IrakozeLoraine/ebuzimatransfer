@@ -43,11 +43,17 @@ async def create_referral(
     session: AsyncSession = Depends(get_session),
 ):
     svc = ReferralService(session)
+    active_facility_id = _active_facility_id(current_user)
+    # Derive the originating unit from the clinician's units at their active facility.
+    # If they work in exactly one, attribute the request to it; if several, leave it
+    # unset rather than guessing (the receiving side scopes on the requested unit).
+    units = current_user.units_for_facility(active_facility_id)
+    origin_unit_id = units[0].unit_id if len(units) == 1 else None
     referral = await svc.create(
         payload,
         current_user.id,
-        _active_facility_id(current_user),
-        origin_unit_id=getattr(current_user, "unit_id", None),
+        active_facility_id,
+        origin_unit_id=origin_unit_id,
     )
     await AuditService(session).log("CREATE_REFERRAL", "referral", user_id=current_user.id, entity_id=referral.id)
     notif = NotificationService(session)

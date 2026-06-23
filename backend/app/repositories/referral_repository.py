@@ -71,18 +71,18 @@ class ReferralRepository(BaseRepository[Referral]):
     async def list_for_clinician(
         self,
         user_id: uuid.UUID,
-        unit_id: Optional[uuid.UUID],
+        unit_ids: Optional[List[uuid.UUID]],
         status: Optional[ReferralStatus] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> List[Referral]:
-        """A clinician's own requests plus any sharing their clinical unit
+        """A clinician's own requests plus any sharing a clinical unit they work in
         (origin unit outbound, or requested unit inbound)."""
         from sqlalchemy import or_
         conds = [Referral.created_by == user_id]
-        if unit_id is not None:
-            conds.append(Referral.origin_unit_id == unit_id)
-            conds.append(Referral.requested_unit_id == unit_id)
+        if unit_ids:
+            conds.append(Referral.origin_unit_id.in_(unit_ids))
+            conds.append(Referral.requested_unit_id.in_(unit_ids))
         stmt = select(Referral).options(selectinload(Referral.status_history)).where(or_(*conds))
         if status:
             stmt = stmt.where(Referral.status == status)

@@ -61,7 +61,7 @@ async def create_and_assign_user(
             from app.core.exceptions import ForbiddenError
             raise ForbiddenError("No facility associated with this admin")
 
-    user = await svc.create_and_assign(payload, facility_id, payload.roles)
+    user = await svc.create_and_assign(payload, facility_id, payload.roles, payload.unit_ids)
     await AuditService(session).log("CREATE_USER", "user", user_id=current_user.id, entity_id=user.id)
     await session.commit()
     return UserOut.from_user(user)
@@ -84,7 +84,7 @@ async def assign_user_to_facility(
         from app.core.exceptions import ForbiddenError
         raise ForbiddenError("No facility associated with this admin")
 
-    user = await svc.assign_roles(payload.medical_id, facility_id, payload.roles)
+    user = await svc.assign_roles(payload.medical_id, facility_id, payload.roles, payload.unit_ids)
     await AuditService(session).log("ASSIGN_USER", "user", user_id=current_user.id, entity_id=user.id)
     await session.commit()
     return UserOut.from_user(user)
@@ -98,7 +98,7 @@ async def assign_user_to_specific_facility(
     session: AsyncSession = Depends(get_session),
 ):
     svc = UserService(session)
-    user = await svc.assign_roles(payload.medical_id, facility_id, payload.roles)
+    user = await svc.assign_roles(payload.medical_id, facility_id, payload.roles, payload.unit_ids)
     await AuditService(session).log("ASSIGN_USER", "user", user_id=current_user.id, entity_id=user.id)
     await session.commit()
     return UserOut.from_user(user)

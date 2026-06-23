@@ -25,7 +25,7 @@ export const ProfilePage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col md:flex-row items-start justify-between gap-2 gap-4">
         <div className="flex items-center gap-4">
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-r-0 border-primary text-lg font-bold text-primary">
             {user.first_name?.[0]}{user.last_name?.[0]}
@@ -35,7 +35,7 @@ export const ProfilePage = () => {
             <p className="text-sm text-muted-foreground mt-0.5">{user.medical_id}</p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap justify-center md:justify-start gap-2">
           <Button variant="outline" onClick={() => setChangingPassword(true)}>
             <KeyRound className="mr-2 h-4 w-4" /> Change Password
           </Button>

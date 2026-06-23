@@ -4,7 +4,7 @@ from typing import List
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.notification import Notification
-from app.models.user import User, UserFacilityRole, Role
+from app.models.user import User, UserFacilityRole, UserFacilityUnit, Role
 from app.websocket.manager import ws_manager
 
 
@@ -115,7 +115,11 @@ class NotificationService:
             )
         )
         if unit_id is not None:
-            stmt = stmt.where(User.unit_id == unit_id)
+            stmt = stmt.join(
+                UserFacilityUnit,
+                (UserFacilityUnit.user_id == User.id)
+                & (UserFacilityUnit.facility_id == facility_id),
+            ).where(UserFacilityUnit.unit_id == unit_id)
         result = await self.session.execute(stmt.distinct())
         for user in result.scalars().all():
             if exclude_user_id and user.id == exclude_user_id:

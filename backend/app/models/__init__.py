@@ -1,4 +1,4 @@
-from app.models.user import User, Role, UserRole, UserFacilityRole
+from app.models.user import User, Role, UserRole, UserFacilityRole, UserFacilityUnit
 from app.models.facility import Facility
 from app.models.audit_log import AuditLog
 from app.models.unit import Unit
@@ -17,7 +17,7 @@ from app.models.ambulance import AmbulanceLocationPing
 
 __all__ = [
     "AmbulanceLocationPing",
-    "User", "Role", "UserRole", "UserFacilityRole",
+    "User", "Role", "UserRole", "UserFacilityRole", "UserFacilityUnit",
     "Facility", "AuditLog", "Unit",
     "Resource", "ResourceReservation", "ResourceStatus", "ResourceType",
     "Referral", "ReferralStatus", "ReferralStatusHistory", "ArrivalCondition", "ALLOWED_TRANSITIONS",

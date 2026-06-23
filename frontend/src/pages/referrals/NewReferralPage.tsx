@@ -32,7 +32,7 @@ const SectionHeader = ({
   step: number;
 }) => (
   <div className="flex items-center gap-3">
-    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-primary to-emerald-500 text-white text-xs font-bold shadow-glow-sm">
+    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white text-xs font-bold shadow-glow-sm">
       {step}
     </div>
     <div className="flex items-center gap-2">

@@ -17,7 +17,9 @@ import { assignUserSchema, type AssignUserFormValues } from "@/schemas/user.sche
 import { useFacilities } from "@/hooks/useFacilities";
 import { FACILITY_ASSIGNABLE_ROLES, getRoleColor } from "./constants";
 import { CreateAssignUserDialog } from "./CreateAssignUserDialog";
+import { UnitMultiSelect } from "./UnitMultiSelect";
 import { useAssignUser } from "@/hooks/useUser";
+import { useAuthStore } from "@/store/auth.store";
 
 interface Props {
   open: boolean;
@@ -38,8 +40,12 @@ export const AssignUserDialog = ({
   fixedFacility = null,
 }: Props) => {
   const form = useForm<AssignUserFormValues>({ resolver: zodResolver(assignUserSchema) });
+  const activeFacilityId = useAuthStore((s) => s.user?.active_facility_id);
   // Only the super-admin facility picker needs the list; skip the query otherwise.
   const needsFacilityPicker = isSuperAdmin && !fixedFacility;
+  // Resolve which facility the unit picker should offer units for.
+  const unitFacilityId = fixedFacility?.id ?? form.watch("facility_id") ?? activeFacilityId ?? undefined;
+  const showUnits = (form.watch("roles") ?? []).includes("CLINICIAN");
   const { data: facilities = [], isLoading: loadingFacilities } = useFacilities();
   // When the entered Medical ID doesn't match anyone, offer to create them.
   const [notFound, setNotFound] = useState(false);
@@ -162,6 +168,14 @@ export const AssignUserDialog = ({
                 <p className="text-xs text-destructive">{form.formState.errors.roles.message}</p>
               )}
             </div>
+
+            {showUnits && (
+              <UnitMultiSelect
+                facilityId={unitFacilityId}
+                value={form.watch("unit_ids") ?? []}
+                onChange={(next) => form.setValue("unit_ids", next)}
+              />
+            )}
 
             {notFound && !fixedUser && (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">

@@ -34,7 +34,7 @@ export const StatCard = ({
         className
       )}
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col md:flex-row items-start justify-between gap-2 gap-4">
         <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
           <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">{value}</p>

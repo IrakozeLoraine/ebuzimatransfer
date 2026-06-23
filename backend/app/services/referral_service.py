@@ -48,7 +48,7 @@ class ReferralService:
         """List transfer requests visible to ``viewer``:
         - super admin: all
         - facility admin / ambulance coordinator: those touching their facilities
-        - clinician: their own + any sharing their clinical unit (either side)
+        - clinician: their own + any sharing a clinical unit they work in (either side)
         """
         roles = set(getattr(viewer, "effective_roles", []))
         if "SUPER_ADMIN" in roles:
@@ -57,7 +57,7 @@ class ReferralService:
             facility_ids = [f.id for f in getattr(viewer, "facilities", [])]
             return await self.repo.list_for_facilities(facility_ids, status=status, limit=limit, offset=offset)
         return await self.repo.list_for_clinician(
-            viewer.id, getattr(viewer, "unit_id", None), status=status, limit=limit, offset=offset
+            viewer.id, getattr(viewer, "unit_ids", None), status=status, limit=limit, offset=offset
         )
 
     async def get(self, referral_id: uuid.UUID) -> Referral:

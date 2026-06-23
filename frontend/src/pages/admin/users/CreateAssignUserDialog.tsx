@@ -15,7 +15,9 @@ import {
 import { useFacilities } from "@/hooks/useFacilities";
 import { createAssignSchema, type CreateAssignFormValues } from "@/schemas/user.schema";
 import { FACILITY_ASSIGNABLE_ROLES, getRoleColor } from "./constants";
+import { UnitMultiSelect } from "./UnitMultiSelect";
 import { useCreateAndAssignUser } from "@/hooks/useUser";
+import { useAuthStore } from "@/store/auth.store";
 
 interface Props {
   open: boolean;
@@ -38,13 +40,17 @@ export const CreateAssignUserDialog = ({
 }: Props) => {
   const needsFacilityPicker = isSuperAdmin && !fixedFacility;
   const { data: facilities = [], isLoading: loadingFacilities } = useFacilities();
+  const activeFacilityId = useAuthStore((s) => s.user?.active_facility_id);
   const form = useForm<CreateAssignFormValues>({ resolver: zodResolver(createAssignSchema) });
+  const unitFacilityId = fixedFacility?.id ?? form.watch("facility_id") ?? activeFacilityId ?? undefined;
+  const showUnits = (form.watch("roles") ?? []).includes("CLINICIAN");
 
   useEffect(() => {
     if (open) {
       form.reset({
         medical_id: initialMedicalId,
         roles: initialRoles,
+        unit_ids: [],
         first_name: "",
         last_name: "",
         email: "",
@@ -170,6 +176,14 @@ export const CreateAssignUserDialog = ({
               <p className="text-xs text-destructive">{form.formState.errors.roles.message}</p>
             )}
           </div>
+
+          {showUnits && (
+            <UnitMultiSelect
+              facilityId={unitFacilityId}
+              value={form.watch("unit_ids") ?? []}
+              onChange={(next) => form.setValue("unit_ids", next)}
+            />
+          )}
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

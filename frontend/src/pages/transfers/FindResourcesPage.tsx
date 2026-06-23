@@ -105,15 +105,17 @@ export const FindResourcesPage = () => {
           {byFacility.map((group) => (
             <Card key={group.facility} className="p-4">
               <div className="mb-3 flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-                <h2 className="font-semibold">{group.facility}</h2>
-                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                  {group.rows.length} available
-                </span>
+                <Building2 className="h-6 w-6 md:h-4 md:w-4 text-muted-foreground" />
+                <div className="flex flex-col md:flex-row md:items-center md:gap-2">
+                  <h2 className="font-semibold">{group.facility}</h2>
+                  <span className="w-fit rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                    {group.rows.length} available
+                  </span>
+                </div>
               </div>
               <ul>
                 {group.rows.map((r) => (
-                  <li key={r.id} className="flex items-center justify-between py-2 border-b border-b-neutral-100 last:border-0">
+                  <li key={r.id} className="flex flex-col md:flex-row gap-2 md:items-center justify-between py-2 border-b border-b-neutral-100 last:border-0">
                     <div>
                       <p className="text-sm font-medium">{r.resource_name}</p>
                       <p className="font-mono text-xs text-muted-foreground">
@@ -122,7 +124,7 @@ export const FindResourcesPage = () => {
                       </p>
                     </div>
                     {canCreateReferral && (
-                      <Button size="sm" variant="outline" className="border-primary text-primary bg-white cursor-pointer" onClick={() => requestTransfer(r)}>
+                      <Button size="sm" variant="outline" className="w-fit border-primary text-primary bg-white cursor-pointer" onClick={() => requestTransfer(r)}>
                         <ArrowLeftRight className="mr-1.5 h-3.5 w-3.5" />
                         Request Transfer
                       </Button>

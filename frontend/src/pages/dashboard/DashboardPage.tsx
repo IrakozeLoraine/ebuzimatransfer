@@ -181,7 +181,7 @@ export const DashboardPage = () => {
   return (
     <div className="space-y-7">
       {/* Greeting header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col md:flex-row items-start justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
             {getGreeting()}, {user?.first_name ?? "there"} 👋
@@ -191,7 +191,7 @@ export const DashboardPage = () => {
           </p>
         </div>
         {totalResources > 0 && (
-          <div className="text-right">
+          <div className="self-end text-right">
             <p className="text-xs text-muted-foreground">Overall occupancy</p>
             <p
               className={cn(
@@ -295,7 +295,7 @@ export const DashboardPage = () => {
               Patient arrival condition
             </p>
             {transit && ARRIVAL_CONDITION_META.some((c) => (transit.arrival_conditions[c.key] ?? 0) > 0) ? (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap justify-center md:justify-start gap-2">
                 {ARRIVAL_CONDITION_META.map((c) => (
                   <span
                     key={c.key}

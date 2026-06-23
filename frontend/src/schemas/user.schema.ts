@@ -16,6 +16,7 @@ export const assignUserSchema = z.object({
   medical_id: z.string().optional(),
   facility_id: z.string().optional(),
   roles: z.array(z.string({ message: "Role is required" }), { message: "Select at least one role" }).min(1, "Select at least one role"),
+  unit_ids: z.array(z.string()).optional(),
 });
 
 export const createAssignSchema = z.object({
@@ -28,6 +29,7 @@ export const createAssignSchema = z.object({
   phone: z.string().optional(),
   facility_id: z.string().optional(),
   roles: z.array(z.string(), { message: "Select at least one role" }).min(1, "Select at least one role"),
+  unit_ids: z.array(z.string()).optional(),
 });
 
 export const editUserSchema = z.object({

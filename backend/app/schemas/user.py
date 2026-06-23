@@ -27,10 +27,18 @@ class FacilityRef(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class UnitRef(BaseModel):
+    id: uuid.UUID
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
 class FacilityRolesOut(BaseModel):
-    """The roles a user holds at one facility."""
+    """The roles a user holds — and the clinical units they work in — at one facility."""
     facility: FacilityRef
     roles: List[str]
+    units: List[UnitRef] = []
 
 
 class UserBase(BaseModel):
@@ -39,7 +47,6 @@ class UserBase(BaseModel):
     last_name: str
     phone: Optional[str] = None
     location: Optional[str] = None
-    unit_id: Optional[uuid.UUID] = None
     medical_id: str
 
     @field_validator("email", mode="before")
@@ -63,6 +70,7 @@ class UserCreateAssign(UserCreate):
     ``facility_id`` is required for super admins; facility admins use their own.
     """
     roles: List[str]
+    unit_ids: List[uuid.UUID] = []
     facility_id: Optional[uuid.UUID] = None
 
     @field_validator("roles")
@@ -81,7 +89,6 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = None
     phone: Optional[str] = None
     location: Optional[str] = None
-    unit_id: Optional[uuid.UUID] = None
     email: Optional[EmailStr] = None
 
     @field_validator("email", mode="before")
@@ -121,6 +128,7 @@ class UserStatusUpdate(BaseModel):
 class UserAssignRequest(BaseModel):
     medical_id: str
     roles: List[str]
+    unit_ids: List[uuid.UUID] = []
 
     @field_validator("roles")
     @classmethod
@@ -134,7 +142,7 @@ class UserAssignRequest(BaseModel):
 
 
 def _facility_roles(user) -> List[FacilityRolesOut]:
-    """Group a user's facility-scoped grants by facility."""
+    """Group a user's facility-scoped role grants and unit memberships by facility."""
     grouped: dict[uuid.UUID, FacilityRolesOut] = {}
     for fr in user.facility_roles:
         if fr.facility is None:
@@ -147,6 +155,20 @@ def _facility_roles(user) -> List[FacilityRolesOut]:
             )
         elif fr.role.name not in entry.roles:
             entry.roles.append(fr.role.name)
+
+    # Attach the clinical units the user works in at each facility. A unit may be
+    # set for a facility the user has no role grant at, so create the entry if missing.
+    for fu in getattr(user, "facility_units", []):
+        if fu.facility is None or fu.unit is None:
+            continue
+        entry = grouped.get(fu.facility_id)
+        if entry is None:
+            entry = grouped[fu.facility_id] = FacilityRolesOut(
+                facility=FacilityRef(id=fu.facility.id, name=fu.facility.name),
+                roles=[],
+            )
+        if all(u.id != fu.unit_id for u in entry.units):
+            entry.units.append(UnitRef(id=fu.unit.id, name=fu.unit.name))
     return list(grouped.values())
 
 
@@ -171,7 +193,6 @@ class UserOut(UserBase):
             last_name=user.last_name,
             phone=user.phone,
             location=user.location,
-            unit_id=user.unit_id,
             is_active=user.is_active,
             account_status=user.account_status,
             facility_roles=_facility_roles(user),
@@ -189,7 +210,7 @@ class UserMe(BaseModel):
     last_name: str
     phone: Optional[str] = None
     location: Optional[str] = None
-    unit_id: Optional[uuid.UUID] = None
+    unit_ids: List[uuid.UUID] = []
     roles: List[str]
     active_facility_id: Optional[uuid.UUID] = None
     facilities: List[FacilityRef] = []
@@ -212,7 +233,7 @@ class UserMe(BaseModel):
             last_name=user.last_name,
             phone=user.phone,
             location=user.location,
-            unit_id=user.unit_id,
+            unit_ids=[fu.unit_id for fu in user.units_for_facility(active_facility_id)],
             roles=roles,
             active_facility_id=active_facility_id,
             facilities=[FacilityRef(id=f.id, name=f.name) for f in user.facilities],

@@ -146,7 +146,7 @@ export const FacilityDetailPage = () => {
         <ArrowLeft className="mr-1 h-4 w-4" /> Back to facilities
       </Button>
 
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col md:flex-row items-start justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold">{facility?.name ?? "…"}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">

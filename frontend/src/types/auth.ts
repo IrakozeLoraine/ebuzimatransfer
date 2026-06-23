@@ -21,9 +21,16 @@ export interface FacilityRef {
   name: string;
 }
 
+export interface UnitRef {
+  id: string;
+  name: string;
+}
+
 export interface FacilityRoles {
   facility: FacilityRef;
   roles: string[];
+  /** Clinical units the user works in at this facility. */
+  units: UnitRef[];
 }
 
 export interface UserMe {
@@ -34,7 +41,8 @@ export interface UserMe {
   last_name: string;
   phone: string | null;
   location: string | null;
-  unit_id: string | null;
+  /** Clinical units the user works in at their active facility. */
+  unit_ids: string[];
   /** Roles effective in the active facility (global grants + active-facility grants). */
   roles: string[];
   active_facility_id: string | null;

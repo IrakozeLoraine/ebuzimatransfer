@@ -40,6 +40,49 @@ const SkeletonRow = ({ cols }: { cols: number }) => (
   </TableRow>
 );
 
+const renderCell = <T,>(col: Column<T>, row: T): React.ReactNode =>
+  typeof col.accessor === "function"
+    ? col.accessor(row)
+    : String(row[col.accessor] ?? "");
+
+// Stacked card shown instead of a table row on phones — avoids horizontal scrolling.
+const MobileCard = <T,>({
+  row,
+  columns,
+  onClick,
+}: {
+  row: T;
+  columns: Column<T>[];
+  onClick?: (row: T) => void;
+}) => (
+  <div
+    onClick={() => onClick?.(row)}
+    className={cn("space-y-2 p-4", onClick && "cursor-pointer active:bg-primary/[0.04]")}
+  >
+    {columns.map((col) => (
+      <div key={String(col.header)} className="flex flex-col md:flex-row items-start justify-between gap-2 gap-3">
+        {col.header && (
+          <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            {col.header}
+          </span>
+        )}
+        <span className="min-w-0 text-right text-sm">{renderCell(col, row)}</span>
+      </div>
+    ))}
+  </div>
+);
+
+const MobileSkeletonCard = ({ rows }: { rows: number }) => (
+  <div className="space-y-2 p-4">
+    {Array.from({ length: rows }).map((_, i) => (
+      <div key={i} className="flex items-center justify-between gap-3">
+        <div className="h-3 w-16 rounded-md shimmer" />
+        <div className="h-4 w-28 rounded-md shimmer" />
+      </div>
+    ))}
+  </div>
+);
+
 export const DataTable = <T,>({
   columns,
   data,
@@ -70,8 +113,34 @@ export const DataTable = <T,>({
 
   const showPagination = !!pageSize && !isLoading && data.length > 0;
 
+  const emptyState = (
+    <div className="flex flex-col items-center gap-3 py-14 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+        <FileSearch className="h-6 w-6 text-muted-foreground/50" />
+      </div>
+      <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+    </div>
+  );
+
   return (
     <div className="rounded-xl border border-border/60 bg-card shadow-card overflow-hidden">
+      {/* Mobile: stacked cards (no horizontal scrolling) */}
+      <div className="divide-y divide-border/50 md:hidden">
+        {isLoading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <MobileSkeletonCard key={i} rows={Math.min(columns.length, 4)} />
+          ))
+        ) : data.length === 0 ? (
+          emptyState
+        ) : (
+          pageData.map((row) => (
+            <MobileCard key={keyExtractor(row)} row={row} columns={columns} onClick={onRowClick} />
+          ))
+        )}
+      </div>
+
+      {/* Desktop: full table */}
+      <div className="hidden md:block">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent even:bg-transparent">
@@ -89,14 +158,7 @@ export const DataTable = <T,>({
             ))
           ) : data.length === 0 ? (
             <TableRow className="hover:bg-transparent even:bg-transparent">
-              <TableCell colSpan={columns.length} className="py-14">
-                <div className="flex flex-col items-center gap-3 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                    <FileSearch className="h-6 w-6 text-muted-foreground/50" />
-                  </div>
-                  <p className="text-sm text-muted-foreground">{emptyMessage}</p>
-                </div>
-              </TableCell>
+              <TableCell colSpan={columns.length}>{emptyState}</TableCell>
             </TableRow>
           ) : (
             pageData.map((row) => (
@@ -107,9 +169,7 @@ export const DataTable = <T,>({
               >
                 {columns.map((col) => (
                   <TableCell key={String(col.header)} className={col.className}>
-                    {typeof col.accessor === "function"
-                      ? col.accessor(row)
-                      : String(row[col.accessor] ?? "")}
+                    {renderCell(col, row)}
                   </TableCell>
                 ))}
               </TableRow>
@@ -117,6 +177,7 @@ export const DataTable = <T,>({
           )}
         </TableBody>
       </Table>
+      </div>
 
       {showPagination && (
         <Pagination

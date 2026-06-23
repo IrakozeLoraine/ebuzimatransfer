@@ -5,8 +5,9 @@ from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password
 from app.core.exceptions import ConflictError, NotFoundError, ForbiddenError
-from app.models.user import User, AccountStatus, UserFacilityRole
+from app.models.user import User, AccountStatus, UserFacilityRole, UserFacilityUnit
 from app.models.facility import Facility
+from app.models.unit import Unit
 from app.repositories.user_repository import UserRepository
 from app.schemas.user import UserCreate, UserUpdate
 
@@ -53,8 +54,15 @@ class UserService:
     async def list_users_for_facility(self, facility_id: uuid.UUID) -> List[User]:
         return await self.repo.list_by_facility(facility_id)
 
-    async def assign_roles(self, medical_id: str, facility_id: uuid.UUID, roles: List[str]) -> User:
-        """Grant the given roles to a user at a facility, replacing that facility's existing grants."""
+    async def assign_roles(
+        self,
+        medical_id: str,
+        facility_id: uuid.UUID,
+        roles: List[str],
+        unit_ids: List[uuid.UUID] | None = None,
+    ) -> User:
+        """Grant the given roles (and clinical-unit memberships) to a user at a
+        facility, replacing that facility's existing grants and units."""
         user = await self.repo.get_by_medical_id(medical_id)
         if not user:
             raise NotFoundError("User with that medical ID")
@@ -72,13 +80,29 @@ class UserService:
             user.facility_roles.append(
                 UserFacilityRole(facility=facility, role=role)
             )
+
+        # Replace the clinical units the user works in at this facility.
+        user.facility_units = [fu for fu in user.facility_units if fu.facility_id != facility_id]
+        for unit_id in dict.fromkeys(unit_ids or []):
+            unit = await self.session.get(Unit, unit_id)
+            if unit is None:
+                raise NotFoundError("Unit")
+            user.facility_units.append(
+                UserFacilityUnit(facility=facility, unit=unit)
+            )
         await self.session.flush()
         return user
 
-    async def create_and_assign(self, data: UserCreate, facility_id: uuid.UUID, roles: List[str]) -> User:
-        """Create a new identity, then grant the given roles at the facility."""
+    async def create_and_assign(
+        self,
+        data: UserCreate,
+        facility_id: uuid.UUID,
+        roles: List[str],
+        unit_ids: List[uuid.UUID] | None = None,
+    ) -> User:
+        """Create a new identity, then grant the given roles/units at the facility."""
         user = await self.create_user(data)
-        return await self.assign_roles(user.medical_id, facility_id, roles)
+        return await self.assign_roles(user.medical_id, facility_id, roles, unit_ids)
 
     async def remove_from_facility(self, user_id: uuid.UUID, facility_id: uuid.UUID) -> User:
         user = await self.get_user(user_id)
@@ -121,8 +145,7 @@ class UserService:
             user.phone = data.phone
         if "location" in fields_set:
             user.location = data.location
-        if "unit_id" in fields_set:
-            user.unit_id = data.unit_id
+        # Clinical-unit membership is managed per-facility via assign_roles, not here.
         # Required fields are only overwritten when a value is actually provided.
         if data.first_name is not None:
             user.first_name = data.first_name
