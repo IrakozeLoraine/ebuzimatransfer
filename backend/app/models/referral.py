@@ -29,7 +29,9 @@ class ArrivalCondition(str, PyEnum):
 ALLOWED_TRANSITIONS: dict[ReferralStatus, list[ReferralStatus]] = {
     ReferralStatus.REQUESTED: [ReferralStatus.UNDER_REVIEW, ReferralStatus.ACCEPTED, ReferralStatus.REJECTED, ReferralStatus.CANCELLED],
     ReferralStatus.UNDER_REVIEW: [ReferralStatus.ACCEPTED, ReferralStatus.REJECTED, ReferralStatus.CANCELLED],
-    ReferralStatus.ACCEPTED: [ReferralStatus.TRANSPORT_ARRANGED, ReferralStatus.CANCELLED],
+    # ACCEPTED can go straight to ARRIVED when the transfer uses no tracked transport
+    # (the receiving clinician simply confirms the patient arrived).
+    ReferralStatus.ACCEPTED: [ReferralStatus.TRANSPORT_ARRANGED, ReferralStatus.ARRIVED, ReferralStatus.CANCELLED],
     ReferralStatus.TRANSPORT_ARRANGED: [ReferralStatus.EN_ROUTE, ReferralStatus.CANCELLED],
     ReferralStatus.EN_ROUTE: [ReferralStatus.ARRIVED],
     ReferralStatus.ARRIVED: [],

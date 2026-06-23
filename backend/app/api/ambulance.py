@@ -38,10 +38,10 @@ async def _get_referral(session: AsyncSession, referral_id: uuid.UUID) -> Referr
 async def report_ping(
     referral_id: uuid.UUID,
     payload: LocationPingCreate,
-    current_user=Depends(require_roles("AMBULANCE_COORDINATOR", "SUPER_ADMIN")),
+    current_user=Depends(require_roles("CLINICIAN", "SUPER_ADMIN")),
     session: AsyncSession = Depends(get_session),
 ):
-    """Record a live GPS position for an ambulance in transit."""
+    """Record a live GPS position for an ambulance in transit (referring clinician)."""
     await _get_referral(session, referral_id)
     ping = AmbulanceLocationPing(
         referral_id=referral_id,

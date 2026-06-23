@@ -22,6 +22,17 @@ export interface StatusHistory {
   created_at: string;
 }
 
+export interface ReferralTransport {
+  id: string;
+  ambulance_identifier: string;
+  driver_name: string | null;
+  driver_phone: string | null;
+  dispatch_time: string | null;
+  pickup_time: string | null;
+  departure_time: string | null;
+  arrival_time: string | null;
+}
+
 export interface Referral {
   id: string;
   referral_number: string;
@@ -48,6 +59,7 @@ export interface Referral {
   created_at: string;
   updated_at: string;
   status_history: StatusHistory[];
+  transport_events: ReferralTransport[];
 }
 
 export interface CreateReferralPayload {

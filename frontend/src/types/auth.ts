@@ -60,5 +60,4 @@ export interface UpdateProfilePayload {
 export type UserRole =
   | "CLINICIAN"
   | "FACILITY_ADMIN"
-  | "AMBULANCE_COORDINATOR"
   | "SUPER_ADMIN";

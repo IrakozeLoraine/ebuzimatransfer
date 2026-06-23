@@ -7,7 +7,6 @@ from pydantic import BaseModel, EmailStr, field_validator
 
 VALID_ROLES = {
     "CLINICIAN",
-    "AMBULANCE_COORDINATOR",
     "FACILITY_ADMIN",
     "SUPER_ADMIN",
 }

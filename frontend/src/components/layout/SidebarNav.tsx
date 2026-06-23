@@ -3,7 +3,6 @@ import {
   LayoutDashboard,
   Package,
   FileText,
-  Truck,
   BarChart3,
   Users,
   Building2,
@@ -34,7 +33,6 @@ export const SidebarNav = ({ onNavigate }: Props) => {
     canManageFacilities,
     canViewAudit,
     canViewResources,
-    canManageTransport,
   } = usePermissions();
   const user = useAuthStore((s) => s.user);
 
@@ -43,7 +41,6 @@ export const SidebarNav = ({ onNavigate }: Props) => {
     ...(canViewResources ? [navItem("/find-resources", "Resource Lookup", Search)] : []),
     ...(canViewResources ? [navItem("/resources", "Resources", Package)] : []),
     navItem("/transfer-requests", "Transfer Requests", FileText),
-    ...(canManageTransport ? [navItem("/transport", "Transport", Truck)] : []),
     ...(canViewReports ? [navItem("/reports", "Reports", BarChart3)] : []),
   ];
 

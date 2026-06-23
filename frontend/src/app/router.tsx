@@ -84,11 +84,6 @@ const ReferralDetailPage = lazy(() =>
     default: m.ReferralDetailPage,
   }))
 );
-const TransportPage = lazy(() =>
-  import("@/pages/transport/TransportPage").then((m) => ({
-    default: m.TransportPage,
-  }))
-);
 const AmbulanceTrackingPage = lazy(() =>
   import("@/pages/transport/AmbulanceTrackingPage").then((m) => ({
     default: m.AmbulanceTrackingPage,
@@ -137,14 +132,6 @@ export const router = createBrowserRouter([
             ),
           },
           { path: "/transfer-requests/:id", element: withSuspense(<ReferralDetailPage />) },
-          {
-            path: "/transport",
-            element: (
-              <RoleGuard roles={["AMBULANCE_COORDINATOR", "SUPER_ADMIN"]}>
-                <TransportPage />
-              </RoleGuard>
-            ),
-          },
           {
             path: "/transport/:id/track",
             element: withSuspense(<AmbulanceTrackingPage />),

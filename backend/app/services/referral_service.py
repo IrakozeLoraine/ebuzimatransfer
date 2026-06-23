@@ -53,7 +53,7 @@ class ReferralService:
         roles = set(getattr(viewer, "effective_roles", []))
         if "SUPER_ADMIN" in roles:
             return await self.repo.list_with_filters(status=status, limit=limit, offset=offset)
-        if roles & {"FACILITY_ADMIN", "AMBULANCE_COORDINATOR"}:
+        if "FACILITY_ADMIN" in roles:
             facility_ids = [f.id for f in getattr(viewer, "facilities", [])]
             return await self.repo.list_for_facilities(facility_ids, status=status, limit=limit, offset=offset)
         return await self.repo.list_for_clinician(

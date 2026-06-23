@@ -58,7 +58,7 @@ const RWANDA_CENTER: LatLngExpression = [-1.9403, 29.8739];
 
 export const AmbulanceTrackingPage = () => {
   const { id: referralId } = useParams<{ id: string }>();
-  const { canManageTransport, isAdmin } = usePermissions();
+  const { canManageTransport } = usePermissions();
 
   useAmbulanceWebSocket(referralId);
 
@@ -147,8 +147,8 @@ export const AmbulanceTrackingPage = () => {
           <Ambulance className="h-5 w-5 text-red-600" /> Ambulance tracking
         </h1>
         <div className="flex flex-wrap items-center justify-end gap-3">
-          {/* Journey replay — admins can replay the recorded trail */}
-          {isAdmin && pings.length >= 2 && (
+          {/* Journey replay — both the referring and receiving clinician can replay */}
+          {pings.length >= 2 && (
             isReplaying ? (
               <>
                 <span className="text-xs text-muted-foreground">

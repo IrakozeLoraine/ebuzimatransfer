@@ -64,6 +64,19 @@ class StatusHistoryOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TransportEventRef(BaseModel):
+    id: uuid.UUID
+    ambulance_identifier: str
+    driver_name: Optional[str] = None
+    driver_phone: Optional[str] = None
+    dispatch_time: Optional[datetime] = None
+    pickup_time: Optional[datetime] = None
+    departure_time: Optional[datetime] = None
+    arrival_time: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
 class ReferralOut(BaseModel):
     id: uuid.UUID
     referral_number: str
@@ -90,6 +103,7 @@ class ReferralOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     status_history: List[StatusHistoryOut] = []
+    transport_events: List[TransportEventRef] = []
 
     model_config = {"from_attributes": True}
 

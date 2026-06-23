@@ -1,35 +1,41 @@
 import uuid
-from typing import List
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.session import get_session
-from app.core.permissions import require_roles, get_current_user
+from app.core.permissions import require_roles
+from app.core.exceptions import NotFoundError
 from app.models.transport import TransportEvent
-from app.models.referral import ReferralStatus
+from app.models.referral import Referral, ReferralStatus
 from app.services.referral_service import ReferralService
 from app.services.audit_service import AuditService
+from app.services.notification_service import NotificationService
 from app.websocket.manager import ws_manager
 from app.schemas.transport import TransportCreate, TransportUpdate, TransportOut
 
 router = APIRouter()
 
 
-@router.get("/queue", response_model=List)
-async def transport_queue(
-    current_user=Depends(require_roles("AMBULANCE_COORDINATOR", "SUPER_ADMIN")),
-    session: AsyncSession = Depends(get_session),
-):
-    svc = ReferralService(session)
-    return await svc.get_transport_queue()
+async def _notify_receiving(session: AsyncSession, referral: Referral, title: str, message: str, event_type: str) -> None:
+    """Notify the receiving facility's clinicians (in the requested unit) about a
+    transport update. Falls back to all the facility's clinicians if no unit is set."""
+    receiving_facility_id = referral.accepted_facility_id or referral.preferred_facility_id
+    if not receiving_facility_id:
+        return
+    await NotificationService(session).notify_facility_unit(
+        receiving_facility_id, referral.requested_unit_id, "CLINICIAN",
+        title, message, event_type, "referral", referral.id,
+    )
 
 
 @router.post("", response_model=TransportOut, status_code=201)
 async def create_transport(
     payload: TransportCreate,
-    current_user=Depends(require_roles("AMBULANCE_COORDINATOR", "SUPER_ADMIN")),
+    current_user=Depends(require_roles("CLINICIAN", "SUPER_ADMIN")),
     session: AsyncSession = Depends(get_session),
 ):
+    """The referring clinician arranges transport (their hospital's ambulance) for
+    an accepted request, and notifies the receiving hospital a patient is coming."""
     event = TransportEvent(
         referral_id=payload.referral_id,
         ambulance_identifier=payload.ambulance_identifier,
@@ -40,7 +46,12 @@ async def create_transport(
     session.add(event)
 
     svc = ReferralService(session)
-    await svc.change_status(payload.referral_id, ReferralStatus.TRANSPORT_ARRANGED, current_user.id)
+    referral = await svc.change_status(payload.referral_id, ReferralStatus.TRANSPORT_ARRANGED, current_user.id)
+    await _notify_receiving(
+        session, referral, "Incoming patient — transport arranged",
+        f"{referral.referral_number}: transport arranged ({payload.ambulance_identifier}).",
+        "REFERRAL_TRANSPORT_ARRANGED",
+    )
     await AuditService(session).log("CREATE_TRANSPORT", "transport", user_id=current_user.id, entity_id=payload.referral_id)
     await session.commit()
     await session.refresh(event)
@@ -52,25 +63,34 @@ async def create_transport(
 async def update_transport(
     transport_id: uuid.UUID,
     payload: TransportUpdate,
-    current_user=Depends(require_roles("AMBULANCE_COORDINATOR", "SUPER_ADMIN")),
+    current_user=Depends(require_roles("CLINICIAN", "SUPER_ADMIN")),
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(select(TransportEvent).where(TransportEvent.id == transport_id))
     event = result.scalar_one_or_none()
     if not event:
-        from app.core.exceptions import NotFoundError
         raise NotFoundError("Transport event")
 
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(event, field, value)
 
+    svc = ReferralService(session)
     if payload.arrival_time:
-        svc = ReferralService(session)
-        await svc.change_status(event.referral_id, ReferralStatus.ARRIVED, current_user.id)
+        referral = await svc.change_status(event.referral_id, ReferralStatus.ARRIVED, current_user.id)
+        await _notify_receiving(
+            session, referral, "Patient has arrived",
+            f"{referral.referral_number}: the patient has arrived.",
+            "REFERRAL_ARRIVED",
+        )
         await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_ARRIVED", "referral_id": str(event.referral_id)})
     elif payload.departure_time:
-        svc = ReferralService(session)
-        await svc.change_status(event.referral_id, ReferralStatus.EN_ROUTE, current_user.id)
+        referral = await svc.change_status(event.referral_id, ReferralStatus.EN_ROUTE, current_user.id)
+        await _notify_receiving(
+            session, referral, "Patient en route",
+            f"{referral.referral_number}: the patient is en route.",
+            "REFERRAL_EN_ROUTE",
+        )
+        await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_EN_ROUTE", "referral_id": str(event.referral_id)})
 
     await session.commit()
     return event

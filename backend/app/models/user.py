@@ -149,14 +149,14 @@ from app.models.audit_log import AuditLog
 class UserRole:
     # A single clinician role; whether a clinician is "referring" or "receiving"
     # is derived from the facility/tier they are working in for a given request.
+    # Transport is arranged by the referring clinician (each hospital runs its own
+    # ambulances), so there is no dedicated transport role.
     CLINICIAN = "CLINICIAN"
-    AMBULANCE_COORDINATOR = "AMBULANCE_COORDINATOR"
     FACILITY_ADMIN = "FACILITY_ADMIN"
     SUPER_ADMIN = "SUPER_ADMIN"
 
     ALL = [
         CLINICIAN,
-        AMBULANCE_COORDINATOR,
         FACILITY_ADMIN,
         SUPER_ADMIN,
     ]

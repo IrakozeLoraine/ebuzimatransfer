@@ -137,16 +137,6 @@ USERS = [
         "roles": [UserRole.CLINICIAN],
         "facility_indices": [3],  # Butaro
     },
-    {
-        "medical_id": "AC-RWA-001",
-        "email": "ambulance@ebuzimatransfer.rw",
-        "first_name": "Eric",
-        "last_name": "Bizimana",
-        "phone": "+250788000006",
-        "password": "Pass@1234",
-        "roles": [UserRole.AMBULANCE_COORDINATOR],
-        "facility_indices": [],
-    },
 ]
 
 
@@ -436,13 +426,14 @@ async def seed_phone_lines(session: AsyncSession) -> None:
 
 
 # In-transit ambulance for the EN_ROUTE transfer — drives the live tracking map.
-# (patient_code of the referral it serves, vehicle, driver, coordinator medical_id)
+# The referring clinician runs their hospital's ambulance and reports positions.
+# (patient_code of the referral it serves, vehicle, driver, referring clinician's medical_id)
 AMBULANCE = {
     "patient_code": "PT-0004",
     "ambulance_identifier": "RAD 432 H",
     "driver_name": "Theogene Niyonzima",
     "driver_phone": "+250788111432",
-    "coordinator_mid": "AC-RWA-001",
+    "reporter_mid": "RC-BUT-001",  # referring clinician (Butaro A&E)
     "origin": BUTARO,
     "destination": CHUK,
 }
@@ -460,11 +451,11 @@ async def seed_ambulance(session: AsyncSession) -> None:
     referral = await session.scalar(
         select(Referral).where(Referral.patient_code == AMBULANCE["patient_code"])
     )
-    coordinator = await session.scalar(
-        select(User).where(User.medical_id == AMBULANCE["coordinator_mid"])
+    reporter = await session.scalar(
+        select(User).where(User.medical_id == AMBULANCE["reporter_mid"])
     )
-    if referral is None or coordinator is None:
-        print("  ⚠ No EN_ROUTE referral / coordinator found — skipping ambulance seed.")
+    if referral is None or reporter is None:
+        print("  ⚠ No EN_ROUTE referral / referring clinician found — skipping ambulance seed.")
         return
 
     now = datetime.now(timezone.utc)
@@ -476,7 +467,7 @@ async def seed_ambulance(session: AsyncSession) -> None:
         dispatch_time=now - timedelta(minutes=70),
         pickup_time=now - timedelta(minutes=55),
         departure_time=now - timedelta(minutes=50),
-        created_by=coordinator.id,
+        created_by=reporter.id,
     ))
 
     (o_lat, o_lng) = FACILITY_COORDS[AMBULANCE["origin"]]
@@ -491,7 +482,7 @@ async def seed_ambulance(session: AsyncSession) -> None:
             referral_id=referral.id,
             latitude=round(o_lat + (d_lat - o_lat) * frac + jitter, 5),
             longitude=round(o_lng + (d_lng - o_lng) * frac, 5),
-            reported_by=coordinator.id,
+            reported_by=reporter.id,
             recorded_at=now - timedelta(minutes=round(50 * (1 - i / steps))),
         ))
     print(f"  ✓ Created 1 transport event + {steps + 1} ambulance pings")

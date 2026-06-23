@@ -155,7 +155,7 @@ async def reject_referral(
 async def update_status(
     referral_id: uuid.UUID,
     status: ReferralStatus = Query(...),
-    current_user=Depends(require_roles("CLINICIAN", "AMBULANCE_COORDINATOR", "FACILITY_ADMIN", "SUPER_ADMIN")),
+    current_user=Depends(require_roles("CLINICIAN", "FACILITY_ADMIN", "SUPER_ADMIN")),
     session: AsyncSession = Depends(get_session),
 ):
     svc = ReferralService(session)
@@ -163,6 +163,27 @@ async def update_status(
     await session.commit()
     await ws_manager.broadcast_to_channel("referrals", {"event": f"REFERRAL_{status.value}", "referral_id": str(referral_id)})
     return {"success": True, "status": status.value}
+
+
+@router.post("/{referral_id}/mark-arrived", response_model=ReferralOut)
+async def mark_arrived(
+    referral_id: uuid.UUID,
+    current_user=Depends(require_roles("CLINICIAN", "FACILITY_ADMIN", "SUPER_ADMIN")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Confirm a patient arrived for a transfer that used no tracked transport.
+    The receiving clinician records arrival; the referring clinician is notified."""
+    svc = ReferralService(session)
+    referral = await svc.change_status(referral_id, ReferralStatus.ARRIVED, current_user.id)
+    await AuditService(session).log("MARK_ARRIVED", "referral", user_id=current_user.id, entity_id=referral_id)
+    await NotificationService(session).create(
+        referral.created_by, "Patient has arrived",
+        f"{referral.referral_number}: the receiving facility confirmed the patient arrived.",
+        "REFERRAL_ARRIVED", "referral", referral_id,
+    )
+    await session.commit()
+    await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_ARRIVED", "referral_id": str(referral_id)})
+    return await svc.get(referral_id)
 
 
 @router.post("/{referral_id}/arrival-condition", response_model=ReferralOut)

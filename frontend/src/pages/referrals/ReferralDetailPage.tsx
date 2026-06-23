@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useReferral, useAcceptReferral, useQuickAcceptReferral, useRejectReferral, useRecordArrivalCondition } from "@/hooks/useReferrals";
+import { useReferral, useAcceptReferral, useQuickAcceptReferral, useRejectReferral, useRecordArrivalCondition, useArrangeTransport, useUpdateTransport, useMarkArrived } from "@/hooks/useReferrals";
 import type { ArrivalCondition } from "@/types/referral";
 import { useResources } from "@/hooks/useResources";
+import { useAuthStore } from "@/store/auth.store";
 import { toast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/utils/apiError";
-import { Zap } from "lucide-react";
+import { Zap, Truck, Navigation } from "lucide-react";
 import { StatusBadge } from "@/components/atoms/StatusBadge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -51,16 +53,23 @@ const Row = ({ label, value }: { label: string; value: string }) => (
 export const ReferralDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { canAcceptReferral } = usePermissions();
+  const { canAcceptReferral, isSuperAdmin } = usePermissions();
+  const me = useAuthStore((s) => s.user);
   const { data: referral, isLoading } = useReferral(id!);
   const { data: resources = [] } = useResources();
   const { mutate: accept, isPending: accepting } = useAcceptReferral();
   const { mutate: quickAccept, isPending: quickAccepting } = useQuickAcceptReferral();
   const { mutate: reject, isPending: rejecting } = useRejectReferral();
   const { mutate: recordCondition, isPending: recordingCondition } = useRecordArrivalCondition();
+  const { mutate: arrangeTransport, isPending: arranging } = useArrangeTransport();
+  const { mutate: updateTransport, isPending: updatingTransport } = useUpdateTransport(id!);
+  const { mutate: markArrived, isPending: markingArrived } = useMarkArrived();
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [selectedResourceId, setSelectedResourceId] = useState("");
   const [selectedCondition, setSelectedCondition] = useState<ArrivalCondition | "">("");
+  const [ambulanceId, setAmbulanceId] = useState("");
+  const [driverName, setDriverName] = useState("");
+  const [driverPhone, setDriverPhone] = useState("");
 
   const availableResources = resources.filter((r) => r.status === "AVAILABLE");
 
@@ -102,6 +111,37 @@ export const ReferralDetailPage = () => {
     );
   };
 
+  const handleArrangeTransport = () => {
+    if (!id || !ambulanceId.trim()) return;
+    arrangeTransport(
+      { referral_id: id, ambulance_identifier: ambulanceId.trim(), driver_name: driverName || undefined, driver_phone: driverPhone || undefined },
+      {
+        onSuccess: () => {
+          toast({ variant: "success", title: "Transport arranged", description: "The receiving facility has been notified." });
+          setAmbulanceId(""); setDriverName(""); setDriverPhone("");
+        },
+        onError: (e) => toast({ variant: "destructive", title: "Could not arrange transport", description: getApiErrorMessage(e) }),
+      }
+    );
+  };
+
+  const setTransportTime = (transportId: string, field: "departure_time" | "arrival_time", successMsg: string) =>
+    updateTransport(
+      { id: transportId, payload: { [field]: new Date().toISOString() } },
+      {
+        onSuccess: () => toast({ variant: "success", title: successMsg }),
+        onError: (e) => toast({ variant: "destructive", title: "Could not update transport", description: getApiErrorMessage(e) }),
+      }
+    );
+
+  const handleMarkArrived = () => {
+    if (!id) return;
+    markArrived(id, {
+      onSuccess: () => toast({ variant: "success", title: "Marked as arrived", description: "The referring facility has been notified." }),
+      onError: (e) => toast({ variant: "destructive", title: "Could not mark arrived", description: getApiErrorMessage(e) }),
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="max-w-3xl space-y-6">
@@ -124,6 +164,23 @@ export const ReferralDetailPage = () => {
     referral.status === "TRANSPORT_ARRANGED" ||
     referral.status === "EN_ROUTE" ||
     referral.status === "ARRIVED";
+
+  // The latest transport record (if the referring clinician arranged one).
+  const transport = referral.transport_events?.[referral.transport_events.length - 1] ?? null;
+  const receivingFacilityId = referral.accepted_facility_id ?? referral.preferred_facility_id;
+  const myFacility = me?.active_facility_id ?? null;
+  const myUnits = me?.unit_ids ?? [];
+
+  // Which side of the transfer the current user is on. Super admins can act on both.
+  const isReferringSide =
+    isSuperAdmin ||
+    referral.created_by === me?.id ||
+    (!!referral.referring_facility_id && referral.referring_facility_id === myFacility) ||
+    (!!referral.origin_unit_id && myUnits.includes(referral.origin_unit_id));
+  const isReceivingSide =
+    isSuperAdmin ||
+    (!!receivingFacilityId && receivingFacilityId === myFacility) ||
+    (!!referral.requested_unit_id && myUnits.includes(referral.requested_unit_id));
 
   const TIMELINE_COLORS: Record<string, string> = {
     REQUESTED: "bg-blue-500",
@@ -152,7 +209,7 @@ export const ReferralDetailPage = () => {
             Created {formatDateTime(referral.created_at)}
           </p>
         </div>
-        {isInTransit && (
+        {transport && isInTransit && (
           <Button
             variant="outline"
             size="sm"
@@ -207,6 +264,94 @@ export const ReferralDetailPage = () => {
         referralId={referral.id}
         facilityId={referral.accepted_facility_id ?? referral.preferred_facility_id}
       />
+
+      {/* Transport — arranged by the referring clinician (their hospital's ambulance).
+          The receiving clinician can confirm arrival when no tracked transport is used. */}
+      {(referral.status === "ACCEPTED" || isInTransit) && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Truck className="h-4 w-4 text-primary" />
+              Transport
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Existing transport details */}
+            {transport && (
+              <div className="space-y-1.5 rounded-lg bg-muted/40 p-3 text-sm">
+                <Row label="Ambulance" value={transport.ambulance_identifier} />
+                {transport.driver_name && <Row label="Driver" value={transport.driver_name} />}
+                {transport.driver_phone && <Row label="Driver phone" value={transport.driver_phone} />}
+                {transport.departure_time && <Row label="Departed" value={formatDateTime(transport.departure_time)} />}
+                {transport.arrival_time && <Row label="Arrived" value={formatDateTime(transport.arrival_time)} />}
+              </div>
+            )}
+
+            {/* Referring clinician: arrange transport when accepted */}
+            {isReferringSide && referral.status === "ACCEPTED" && !transport && (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Arrange your hospital's ambulance to send the patient. The receiving facility will be notified.
+                  If no ambulance is used, the receiving facility can confirm arrival instead.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Ambulance ID <span className="text-destructive">*</span></Label>
+                    <Input placeholder="e.g. RAD 432 H" value={ambulanceId} onChange={(e) => setAmbulanceId(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Driver name</Label>
+                    <Input value={driverName} onChange={(e) => setDriverName(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Driver phone</Label>
+                    <Input value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} />
+                  </div>
+                </div>
+                <Button onClick={handleArrangeTransport} disabled={!ambulanceId.trim() || arranging}>
+                  <Truck className="mr-2 h-4 w-4" />
+                  {arranging ? "Arranging…" : "Arrange transport"}
+                </Button>
+              </div>
+            )}
+
+            {/* Referring clinician: progress the journey */}
+            {isReferringSide && transport && referral.status === "TRANSPORT_ARRANGED" && (
+              <Button onClick={() => setTransportTime(transport.id, "departure_time", "Patient marked en route")} disabled={updatingTransport}>
+                <Navigation className="mr-2 h-4 w-4" />
+                {updatingTransport ? "Updating…" : "Mark departed (en route)"}
+              </Button>
+            )}
+            {isReferringSide && transport && referral.status === "EN_ROUTE" && (
+              <Button onClick={() => setTransportTime(transport.id, "arrival_time", "Patient marked as arrived")} disabled={updatingTransport}>
+                <Check className="mr-2 h-4 w-4" />
+                {updatingTransport ? "Updating…" : "Mark arrived"}
+              </Button>
+            )}
+
+            {/* Receiving clinician: confirm arrival for a transfer with no tracked transport */}
+            {isReceivingSide && referral.status === "ACCEPTED" && (
+              <div className="space-y-2 border-t pt-3">
+                <p className="text-xs text-muted-foreground">
+                  If the patient arrived without a tracked ambulance, confirm arrival here — the referring facility will be notified.
+                </p>
+                <Button variant="outline" onClick={handleMarkArrived} disabled={markingArrived}>
+                  <Check className="mr-2 h-4 w-4" />
+                  {markingArrived ? "Saving…" : "Mark patient arrived"}
+                </Button>
+              </div>
+            )}
+
+            {/* Both sides can follow / replay the journey when there's a tracked ambulance */}
+            {transport && isInTransit && (
+              <Button variant="outline" onClick={() => navigate(`/transport/${referral.id}/track`)}>
+                <Ambulance className="mr-2 h-4 w-4" />
+                Track ambulance
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {referral.rejection_reason && (
         <Card className="border-rose-200 bg-rose-50/50">

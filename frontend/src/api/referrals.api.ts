@@ -42,3 +42,8 @@ export const recordArrivalCondition = async (
   const { data } = await api.post<Referral>(`/referrals/${id}/arrival-condition`, { arrival_condition });
   return data;
 };
+
+export const markReferralArrived = async (id: string): Promise<Referral> => {
+  const { data } = await api.post<Referral>(`/referrals/${id}/mark-arrived`);
+  return data;
+};

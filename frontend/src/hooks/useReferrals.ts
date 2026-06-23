@@ -8,8 +8,11 @@ import {
   rejectReferral,
   updateReferralStatus,
   recordArrivalCondition,
+  markReferralArrived,
 } from "@/api/referrals.api";
+import { createTransport, updateTransport } from "@/api/transport.api";
 import type { CreateReferralPayload, AcceptReferralPayload, RejectReferralPayload, ArrivalCondition } from "@/types/referral";
+import type { CreateTransportPayload, UpdateTransportPayload } from "@/types/transport";
 
 export const useReferrals = (params?: { status?: string }) =>
   useQuery({
@@ -87,6 +90,43 @@ export const useRecordArrivalCondition = () => {
     mutationFn: ({ id, condition }: { id: string; condition: ArrivalCondition }) =>
       recordArrivalCondition(id, condition),
     onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: ["referrals"] });
+      qc.invalidateQueries({ queryKey: ["referral", id] });
+    },
+  });
+};
+
+// Referring clinician arranges transport (their hospital's ambulance).
+export const useArrangeTransport = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CreateTransportPayload) => createTransport(payload),
+    onSuccess: (_, { referral_id }) => {
+      qc.invalidateQueries({ queryKey: ["referrals"] });
+      qc.invalidateQueries({ queryKey: ["referral", referral_id] });
+    },
+  });
+};
+
+// Referring clinician records departure / arrival on the transport event.
+export const useUpdateTransport = (referralId: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: UpdateTransportPayload }) =>
+      updateTransport(id, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["referrals"] });
+      qc.invalidateQueries({ queryKey: ["referral", referralId] });
+    },
+  });
+};
+
+// Receiving clinician confirms arrival for a transfer with no tracked transport.
+export const useMarkArrived = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => markReferralArrived(id),
+    onSuccess: (_, id) => {
       qc.invalidateQueries({ queryKey: ["referrals"] });
       qc.invalidateQueries({ queryKey: ["referral", id] });
     },
