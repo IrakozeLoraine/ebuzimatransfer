@@ -1,0 +1,24 @@
+name: ambulance_tracker
+description: GPS tracker app installed in ambulances — reports position for active transfers.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.0
+  geolocator: ^13.0.1
+  shared_preferences: ^2.3.2
+  wakelock_plus: ^1.2.8
+  mobile_scanner: ^7.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
