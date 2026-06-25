@@ -1,8 +1,10 @@
 import { api } from "./axios";
 import type {
   AmbulanceTrack,
-  AmbulanceDevice,
-  AmbulanceDeviceCreated,
+  Ambulance,
+  AmbulanceCredentials,
+  CreateAmbulancePayload,
+  UpdateAmbulancePayload,
 } from "@/types/ambulance";
 
 export const getAmbulanceTrack = async (referralId: string): Promise<AmbulanceTrack> => {
@@ -10,23 +12,30 @@ export const getAmbulanceTrack = async (referralId: string): Promise<AmbulanceTr
   return data;
 };
 
-export const listDevices = async (): Promise<AmbulanceDevice[]> => {
-  const { data } = await api.get<AmbulanceDevice[]>("/devices");
+export const listAmbulances = async (available = false): Promise<Ambulance[]> => {
+  const { data } = await api.get<Ambulance[]>("/ambulances", {
+    params: available ? { available: true } : {},
+  });
   return data;
 };
 
-export const createDevice = async (payload: {
-  label: string;
-  facility_id?: string;
-}): Promise<AmbulanceDeviceCreated> => {
-  const { data } = await api.post<AmbulanceDeviceCreated>("/devices", payload);
+export const createAmbulance = async (
+  payload: CreateAmbulancePayload
+): Promise<AmbulanceCredentials> => {
+  const { data } = await api.post<AmbulanceCredentials>("/ambulances", payload);
   return data;
 };
 
-export const setDeviceActive = async (
+export const updateAmbulance = async (
   id: string,
-  isActive: boolean
-): Promise<AmbulanceDevice> => {
-  const { data } = await api.patch<AmbulanceDevice>(`/devices/${id}?is_active=${isActive}`);
+  payload: UpdateAmbulancePayload
+): Promise<Ambulance> => {
+  const { data } = await api.patch<Ambulance>(`/ambulances/${id}`, payload);
+  return data;
+};
+
+/** Regenerate the driver password; the response carries the new one-time password. */
+export const resetAmbulancePassword = async (id: string): Promise<AmbulanceCredentials> => {
+  const { data } = await api.post<AmbulanceCredentials>(`/ambulances/${id}/reset-password`);
   return data;
 };

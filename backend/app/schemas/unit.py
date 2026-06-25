@@ -1,6 +1,6 @@
 from __future__ import annotations
 import uuid
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, field_validator
 from app.core.tiers import TIER_ORDER
 
@@ -46,3 +46,13 @@ class UnitOut(BaseModel):
     is_active: bool
 
     model_config = {"from_attributes": True}
+
+
+class UnitImportError(BaseModel):
+    row: int
+    message: str
+
+
+class UnitImportResult(BaseModel):
+    created: int
+    errors: List[UnitImportError] = []

@@ -1,4 +1,4 @@
-import { createUser, updateUser, getUser, removeUserFromFacility, assignUserToSpecificFacility, assignUserToFacility, createAndAssignUser, deactivateUser, updateUserAccountStatus, getUsers } from "@/api/users.api";
+import { createUser, updateUser, getUser, removeUserFromFacility, assignUserToSpecificFacility, assignUserToFacility, createAndAssignUser, deactivateUser, updateUserAccountStatus, getUsers, importUsers } from "@/api/users.api";
 import { toast } from "@/components/ui/toaster";
 import { AssignUserFormValues, CreateAssignFormValues, EditUserFormValues, UserFormValues } from "@/schemas/user.schema";
 import { getApiErrorMessage } from "@/utils/apiError";
@@ -7,6 +7,20 @@ import { isAxiosError } from "axios";
 
 export const useUser = (id: string | undefined) =>
     useQuery({ queryKey: ["user", id], queryFn: () => getUser(id!), enabled: !!id });
+
+/** Bulk import users at a facility. Super admins pass a facilityId; facility
+ *  admins omit it and the server uses their own facility. */
+export const useImportUsers = (facilityId?: string) => {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (file: File) => importUsers(file, facilityId),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["users"] });
+            qc.invalidateQueries({ queryKey: ["user"] });
+            qc.invalidateQueries({ queryKey: ["facility"] });
+        },
+    });
+};
 
 export const useRemoveUserFromFacility = ({ onSuccess }: { onSuccess?: () => void } = {}) => {
     const qc = useQueryClient();

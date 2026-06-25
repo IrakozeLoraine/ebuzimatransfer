@@ -168,6 +168,18 @@ export const AuditLogsPage = () => {
         keyExtractor={(l) => l.id}
         emptyMessage="No audit logs match your filters"
         pageSize={10}
+        exportable={{
+          filename: "audit-logs",
+          columns: [
+            { header: "Action", value: (l) => l.action?.replace(/_/g, " ") },
+            { header: "Entity Type", value: (l) => l.entity_type?.replace(/_/g, " ") },
+            { header: "Entity", value: (l) => l.entity ?? "" },
+            { header: "User", value: (l) => l.user?.name ?? "System" },
+            { header: "User Email", value: (l) => l.user?.email ?? "" },
+            { header: "IP Address", value: (l) => l.ip_address ?? "" },
+            { header: "Timestamp", value: (l) => formatDateTime(l.created_at) },
+          ],
+        }}
       />
     </div>
   );

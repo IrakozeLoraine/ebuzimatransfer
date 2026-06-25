@@ -95,7 +95,7 @@ export const UserDetailPage = () => {
                 <Pencil className="mr-2 h-4 w-4" /> Edit
               </Button>
             )}
-            {isSuperAdmin && user.is_active && (
+            {isSuperAdmin && !user.global_roles.includes("SUPER_ADMIN") && user.is_active && (
               <Button
                 variant="outline"
                 className="text-destructive hover:text-destructive hover:bg-destructive/10"

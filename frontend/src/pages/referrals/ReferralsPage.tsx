@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useReferrals } from "@/hooks/useReferrals";
 import { DataTable } from "@/components/organisms/DataTable";
 import { StatusBadge } from "@/components/atoms/StatusBadge";
@@ -27,7 +27,11 @@ const URGENCY_COLORS: Record<string, string> = {
 export const ReferralsPage = () => {
   const navigate = useNavigate();
   const { canCreateReferral } = usePermissions();
-  const [category, setCategory] = useState<(typeof CATEGORIES)[number]["key"]>("PENDING");
+  const [searchParams] = useSearchParams();
+  // Allow deep-linking to a tab, e.g. /transfer-requests?category=APPROVED.
+  const requestedCategory = searchParams.get("category")?.toUpperCase();
+  const initialCategory = CATEGORIES.find((c) => c.key === requestedCategory)?.key ?? "PENDING";
+  const [category, setCategory] = useState<(typeof CATEGORIES)[number]["key"]>(initialCategory);
   const [search, setSearch] = useState("");
 
   const { data: referrals = [], isLoading } = useReferrals();
@@ -127,6 +131,18 @@ export const ReferralsPage = () => {
         onRowClick={(r) => navigate(`/transfer-requests/${r.id}`)}
         keyExtractor={(r) => r.id}
         emptyMessage={`No ${category.toLowerCase()} transfer requests`}
+        pageSize={10}
+        exportable={{
+          filename: "transfer-requests",
+          columns: [
+            { header: "Ref #", value: (r) => r.referral_number },
+            { header: "Patient Code", value: (r) => r.patient_code },
+            { header: "Diagnosis", value: (r) => r.diagnosis },
+            { header: "Urgency", value: (r) => r.urgency.replace(/_/g, " ") },
+            { header: "Status", value: (r) => r.status.replace(/_/g, " ") },
+            { header: "Created", value: (r) => formatDateTime(r.created_at) },
+          ],
+        }}
       />
     </div>
   );

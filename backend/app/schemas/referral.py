@@ -17,8 +17,10 @@ class ReferralCreate(BaseModel):
     reason_for_transfer: str
     ventilator_needed: bool = False
     high_flow_oxygen_needed: bool = False
-    preferred_facility_id: Optional[uuid.UUID] = None
-    requested_unit_id: Optional[uuid.UUID] = None
+    # The destination is required so a request is always routed to a specific
+    # facility + unit (and only that side's staff can approve it).
+    preferred_facility_id: uuid.UUID
+    requested_unit_id: uuid.UUID
 
 
 class ReferralUpdate(BaseModel):
@@ -57,7 +59,8 @@ class TransitStats(BaseModel):
 class StatusHistoryOut(BaseModel):
     id: uuid.UUID
     status: ReferralStatus
-    changed_by: uuid.UUID
+    # Null when the change came from an ambulance driver (no staff user).
+    changed_by: Optional[uuid.UUID] = None
     comment: Optional[str]
     created_at: datetime
 

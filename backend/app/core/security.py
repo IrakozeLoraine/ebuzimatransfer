@@ -1,13 +1,24 @@
-import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Tuple
+from typing import Any, Dict
 from jose import JWTError, jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
 from app.core.config import settings
 
 ph = PasswordHasher()
+
+# Excludes look-alike characters (0/O, 1/l/I) so a password read off a screen or
+# QR card can't be mistyped.
+_PASSWORD_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
+
+
+def generate_password(blocks: int = 3, block_size: int = 4) -> str:
+    """A strong, human-readable password for ambulance driver logins, grouped into
+    dash-separated blocks (e.g. ``Xy7k-9Qmn-aa3T``). The admin reveals it once and
+    gives it to the driver — or, more conveniently, hands over the setup QR code."""
+    raw = "".join(secrets.choice(_PASSWORD_ALPHABET) for _ in range(blocks * block_size))
+    return "-".join(raw[i : i + block_size] for i in range(0, len(raw), block_size))
 
 
 def hash_password(plain: str) -> str:
@@ -19,22 +30,6 @@ def verify_password(plain: str, hashed: str) -> bool:
         return ph.verify(hashed, plain)
     except (VerifyMismatchError, VerificationError, InvalidHashError):
         return False
-
-
-def hash_device_key(plain: str) -> str:
-    """Hash a device API key for storage/lookup.
-
-    Device keys are high-entropy random tokens (unlike passwords), so a fast,
-    deterministic SHA-256 is both safe and queryable by equality — letting us
-    authenticate a device in a single indexed lookup.
-    """
-    return hashlib.sha256(plain.encode()).hexdigest()
-
-
-def generate_device_key() -> Tuple[str, str]:
-    """Return a (plaintext, hash) pair for a new device. Plaintext is shown once."""
-    plain = "dev_" + secrets.token_urlsafe(32)
-    return plain, hash_device_key(plain)
 
 
 def _create_token(data: Dict[str, Any], expires_delta: timedelta) -> str:
@@ -54,6 +49,15 @@ def create_access_token(
             "type": "access",
         },
         timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+
+
+def create_driver_token(ambulance_id: str) -> str:
+    """A long-lived access token for an ambulance's driver app. The subject is the
+    ambulance id; ``type: driver`` keeps it distinct from staff access tokens."""
+    return _create_token(
+        {"sub": ambulance_id, "type": "driver"},
+        timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
 
 

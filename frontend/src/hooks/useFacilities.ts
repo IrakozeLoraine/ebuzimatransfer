@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getFacilities, getFacility, getFacilityUsers, createFacility, updateFacility, deleteFacility } from "@/api/facilities.api";
+import { getFacilities, getFacility, getFacilityUsers, createFacility, updateFacility, deleteFacility, reactivateFacility, importFacilities } from "@/api/facilities.api";
 import type { Facility } from "@/types/facility";
 import { toast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/utils/apiError";
@@ -48,18 +48,44 @@ export const useUpdateFacility = () => {
   });
 };
 
+export const useReactivateFacility = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => reactivateFacility(id),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ["facilities"] });
+      qc.invalidateQueries({ queryKey: ["facility", id] });
+      toast({ variant: "success", title: "Facility reactivated" });
+    },
+    onError: (error) =>
+      toast({
+        variant: "destructive",
+        title: "Failed to reactivate facility",
+        description: getApiErrorMessage(error),
+      }),
+  });
+};
+
+export const useImportFacilities = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => importFacilities(file),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["facilities"] }),
+  });
+};
+
 export const useDeleteFacility = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteFacility(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["facilities"] });
-      toast({ variant: "success", title: "Facility deleted" });
+      toast({ variant: "success", title: "Facility deactivated" });
     },
     onError: (error) =>
       toast({
         variant: "destructive",
-        title: "Failed to delete facility",
+        title: "Failed to deactivate facility",
         description: getApiErrorMessage(error),
       }),
   });

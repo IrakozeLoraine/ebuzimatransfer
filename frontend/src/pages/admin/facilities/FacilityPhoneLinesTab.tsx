@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Phone, Trash2, Plus } from "lucide-react";
+import { Phone, Trash2, Plus, Upload } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ import { usePhoneLines, useCreatePhoneLine, useDeletePhoneLine } from "@/hooks/u
 import { toast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/utils/apiError";
 import type { PhoneLineType } from "@/types/call";
+import { PhoneLineImportDialog } from "./PhoneLineImportDialog";
 
 const TYPES: { value: PhoneLineType; label: string }[] = [
   { value: "EMERGENCY", label: "Emergency" },
@@ -25,7 +26,14 @@ const TYPES: { value: PhoneLineType; label: string }[] = [
   { value: "OTHER", label: "Other" },
 ];
 
-export const FacilityPhoneLinesTab = ({ facilityId }: { facilityId: string }) => {
+export const FacilityPhoneLinesTab = ({
+  facilityId,
+  disabled = false,
+}: {
+  facilityId: string;
+  /** When the facility is deactivated, block adding new lines. */
+  disabled?: boolean;
+}) => {
   const { data: lines = [], isLoading } = usePhoneLines(facilityId, false);
   const { mutate: create, isPending: creating } = useCreatePhoneLine(facilityId);
   const { mutate: remove } = useDeletePhoneLine(facilityId);
@@ -33,9 +41,10 @@ export const FacilityPhoneLinesTab = ({ facilityId }: { facilityId: string }) =>
   const [label, setLabel] = useState("");
   const [phone, setPhone] = useState("");
   const [type, setType] = useState<PhoneLineType>("COORDINATION");
+  const [showImport, setShowImport] = useState(false);
 
   const add = () => {
-    if (!label.trim() || !phone.trim()) return;
+    if (disabled || !label.trim() || !phone.trim()) return;
     create(
       { label: label.trim(), phone_number: phone.trim(), line_type: type },
       {
@@ -51,10 +60,16 @@ export const FacilityPhoneLinesTab = ({ facilityId }: { facilityId: string }) =>
 
   return (
     <div className="space-y-4">
+      {!disabled && (
       <Card className="p-5">
-        <p className="mb-4 text-sm text-muted-foreground">
-          Institutional / department lines clinicians can call from the web to coordinate transfers. Every call is logged.
-        </p>
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Institutional / department lines clinicians can call from the web to coordinate transfers. Every call is logged.
+          </p>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={() => setShowImport(true)}>
+            <Upload className="mr-1.5 h-4 w-4" /> Import
+          </Button>
+        </div>
         <div className="grid gap-3 sm:grid-cols-[1fr_1fr_180px_auto] sm:items-end">
           <div className="space-y-1.5">
             <Label>Label</Label>
@@ -80,6 +95,7 @@ export const FacilityPhoneLinesTab = ({ facilityId }: { facilityId: string }) =>
           </Button>
         </div>
       </Card>
+      )}
 
       <Card className="p-5">
         {isLoading ? (
@@ -113,6 +129,8 @@ export const FacilityPhoneLinesTab = ({ facilityId }: { facilityId: string }) =>
           </ul>
         )}
       </Card>
+
+      <PhoneLineImportDialog open={showImport} onOpenChange={setShowImport} facilityId={facilityId} />
     </div>
   );
 };

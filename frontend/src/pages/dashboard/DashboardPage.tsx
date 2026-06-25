@@ -1,14 +1,20 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatCard } from "@/components/molecules/StatCard";
+import { ExportButtons } from "@/components/molecules/ExportButtons";
 import { DataTable } from "@/components/organisms/DataTable";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
 import { useCapacity } from "@/hooks/useResources";
-import { useDashboardActivity, useTransitStats } from "@/hooks/useReport";
+import { useTransitStats } from "@/hooks/useReport";
 import { usePermissions } from "@/hooks/usePermissions";
+import { getFacilities } from "@/api/facilities.api";
+import { getReferrals } from "@/api/referrals.api";
+import type { ExportColumn } from "@/utils/export";
 import type { CapacityRow } from "@/types/facility";
 import { useAuthStore } from "@/store/auth.store";
 import { cn } from "@/utils/cn";
@@ -18,19 +24,6 @@ const getGreeting = () => {
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
-};
-
-const timeAgo = (iso: string | null) => {
-  if (!iso) return "";
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.round(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.round(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
 };
 
 const columns = [
@@ -81,6 +74,27 @@ const ARRIVAL_CONDITION_META: { key: string; label: string; className: string }[
   { key: "ARRIVED_DECEASED", label: "Deceased on arrival", className: "bg-rose-100 text-rose-700" },
 ];
 
+// Statuses that count as "accepted" — anything past the receiving side's approval.
+const ACCEPTED_STATUSES = ["ACCEPTED", "TRANSPORT_ARRANGED", "EN_ROUTE", "ARRIVED"];
+
+// Summary sections (overview, transit) export as a simple metric/value table.
+type MetricRow = { metric: string; value: string | number };
+const METRIC_COLUMNS: ExportColumn<MetricRow>[] = [
+  { header: "Metric", value: (r) => r.metric },
+  { header: "Value", value: (r) => r.value },
+];
+
+const capacityExportColumns: ExportColumn<CapacityRow>[] = [
+  { header: "Hospital", value: (r) => r.facility },
+  { header: "Unit", value: (r) => r.unit_type },
+  { header: "Total", value: (r) => r.total },
+  { header: "Available", value: (r) => r.available },
+  { header: "Occupied", value: (r) => r.occupied },
+  { header: "Reserved", value: (r) => r.reserved },
+  { header: "Out of Service", value: (r) => r.out_of_service },
+  { header: "Occupancy %", value: (r) => (r.total > 0 ? Math.round((r.occupied / r.total) * 100) : 0) },
+];
+
 const formatMinutes = (m: number | null): string => {
   if (m === null) return "—";
   if (m < 60) return `${Math.round(m)} min`;
@@ -110,8 +124,19 @@ export const DashboardPage = () => {
   const { isSuperAdmin, canViewResources } = usePermissions();
   const navigate = useNavigate();
   const { data = [], isLoading } = useCapacity();
-  const { data: activity = [], isLoading: activityLoading } = useDashboardActivity();
   const { data: transit } = useTransitStats();
+
+  // Platform-wide analytics — super admin only (folds in the old Reports page).
+  const { data: facilities = [] } = useQuery({
+    queryKey: ["facilities"],
+    queryFn: getFacilities,
+    enabled: isSuperAdmin,
+  });
+  const { data: referrals = [] } = useQuery({
+    queryKey: ["referrals", undefined],
+    queryFn: () => getReferrals(),
+    enabled: isSuperAdmin,
+  });
 
   const [search, setSearch] = useState("");
   const [unitFilter, setUnitFilter] = useState("");
@@ -123,6 +148,13 @@ export const DashboardPage = () => {
     : facilityName
       ? `at ${facilityName}`
       : "at your facility";
+
+  // Referral analytics derived from the full request list (super admin).
+  const totalReferrals = referrals.length;
+  const acceptedReferrals = referrals.filter((r) => ACCEPTED_STATUSES.includes(r.status)).length;
+  const rejectedReferrals = referrals.filter((r) => r.status === "REJECTED").length;
+  const decidedReferrals = acceptedReferrals + rejectedReferrals;
+  const acceptanceRate = decidedReferrals > 0 ? Math.round((acceptedReferrals / decidedReferrals) * 100) : 0;
 
   // Distinct units present in the capacity data, for the unit filter dropdown.
   const unitOptions = useMemo(
@@ -178,6 +210,36 @@ export const DashboardPage = () => {
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [filtered, groupBy]);
 
+  // Export datasets for each dashboard section.
+  const platformOverviewRows: MetricRow[] = [
+    { metric: "Facilities", value: facilities.length },
+    { metric: "Total Transfers", value: totalReferrals },
+    { metric: "Accepted", value: acceptedReferrals },
+    { metric: "Rejected", value: rejectedReferrals },
+    { metric: "Acceptance Rate", value: `${acceptanceRate}%` },
+  ];
+
+  const resourceSummaryRows: MetricRow[] = [
+    { metric: "Total Resources", value: totalResources },
+    { metric: "Available", value: available },
+    { metric: "Occupied", value: occupied },
+    { metric: "Reserved", value: reserved },
+    { metric: "Overall Occupancy", value: `${overallRate}%` },
+  ];
+
+  const transitRows: MetricRow[] = transit
+    ? [
+        { metric: "Completed journeys", value: transit.completed_journeys },
+        { metric: "Average time (min)", value: transit.average_minutes ?? "—" },
+        { metric: "Fastest time (min)", value: transit.fastest_minutes ?? "—" },
+        { metric: "Slowest time (min)", value: transit.slowest_minutes ?? "—" },
+        ...ARRIVAL_CONDITION_META.map((c) => ({
+          metric: `Arrivals — ${c.label}`,
+          value: transit.arrival_conditions[c.key] ?? 0,
+        })),
+      ]
+    : [];
+
   return (
     <div className="space-y-7">
       {/* Greeting header */}
@@ -205,18 +267,33 @@ export const DashboardPage = () => {
         )}
       </div>
 
+      {/* Platform overview — super admin only */}
+      {isSuperAdmin && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-foreground">Platform overview</h2>
+            <ExportButtons filename="platform-overview" columns={METRIC_COLUMNS} rows={platformOverviewRows} />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            <StatCard label="Facilities" value={facilities.length} onClick={() => navigate("/admin/facilities")} />
+            <StatCard label="Total Transfers" value={totalReferrals} onClick={() => navigate("/transfer-requests")} />
+            <StatCard label="Accepted" value={acceptedReferrals} onClick={() => navigate("/transfer-requests?category=APPROVED")} />
+            <StatCard label="Rejected" value={rejectedReferrals} onClick={() => navigate("/transfer-requests?category=REJECTED")} />
+            <StatCard label="Acceptance Rate" value={`${acceptanceRate}%`} onClick={() => navigate("/transfer-requests")} />
+          </div>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        {isSuperAdmin && (
-          <div className="w-full space-y-1.5 sm:max-w-xs">
-            <Label>Search</Label>
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by facility or unit…"
-            />
-          </div>
-        )}
+        <div className="w-full space-y-1.5 sm:max-w-xs">
+          <Label>Search</Label>
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={isSuperAdmin ? "Search by facility or unit…" : "Search by unit…"}
+          />
+        </div>
         <div className="w-full space-y-1.5 sm:max-w-xs">
           <Label>Filter by unit</Label>
           <Combobox
@@ -230,14 +307,24 @@ export const DashboardPage = () => {
         </div>
       </div>
 
-      {/* Stat cards */}
-      {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => <StatSkeleton key={i} />)}
+      {/* Resource summary */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-foreground">Resource summary</h2>
+          <ExportButtons
+            filename="resource-summary"
+            columns={METRIC_COLUMNS}
+            rows={resourceSummaryRows}
+            disabled={isLoading}
+          />
         </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {summaryCards.map(({ label, value, accent, valueClass, status }) => (
+        {isLoading ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => <StatSkeleton key={i} />)}
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {summaryCards.map(({ label, value, accent, valueClass, status }) => (
             <button
               key={label}
               type="button"
@@ -254,34 +341,44 @@ export const DashboardPage = () => {
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
               <p className={cn("mt-1.5 text-3xl font-bold tabular-nums", valueClass)}>{value}</p>
             </button>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Ambulance transit-time tracking report */}
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
           <CardTitle className="text-base">Ambulance transit times</CardTitle>
+          <ExportButtons
+            filename="ambulance-transit-times"
+            columns={METRIC_COLUMNS}
+            rows={transitRows}
+            disabled={transitRows.length === 0}
+          />
         </CardHeader>
         <CardContent>
           {transit && transit.completed_journeys > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-xl border border-l-4 border-l-slate-300 bg-card p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Completed journeys</p>
-                <p className="mt-1.5 text-3xl font-bold tabular-nums text-foreground">{transit.completed_journeys}</p>
-              </div>
-              <div className="rounded-xl border border-l-4 border-l-indigo-400 bg-card p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Average time</p>
-                <p className="mt-1.5 text-3xl font-bold tabular-nums text-indigo-600">{formatMinutes(transit.average_minutes)}</p>
-              </div>
-              <div className="rounded-xl border border-l-4 border-l-emerald-400 bg-card p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Fastest (best)</p>
-                <p className="mt-1.5 text-3xl font-bold tabular-nums text-emerald-600">{formatMinutes(transit.fastest_minutes)}</p>
-              </div>
-              <div className="rounded-xl border border-l-4 border-l-rose-400 bg-card p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Slowest (worst)</p>
-                <p className="mt-1.5 text-3xl font-bold tabular-nums text-rose-600">{formatMinutes(transit.slowest_minutes)}</p>
-              </div>
+              {[
+                { label: "Completed journeys", value: transit.completed_journeys, accent: "border-l-slate-300", valueClass: "text-foreground" },
+                { label: "Average time", value: formatMinutes(transit.average_minutes), accent: "border-l-indigo-400", valueClass: "text-indigo-600" },
+                { label: "Fastest (best)", value: formatMinutes(transit.fastest_minutes), accent: "border-l-emerald-400", valueClass: "text-emerald-600" },
+                { label: "Slowest (worst)", value: formatMinutes(transit.slowest_minutes), accent: "border-l-rose-400", valueClass: "text-rose-600" },
+              ].map(({ label, value, accent, valueClass }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => navigate("/transfer-requests?category=APPROVED")}
+                  className={cn(
+                    "rounded-xl border border-l-4 bg-card p-4 text-left shadow-card transition-all duration-200 cursor-pointer hover:shadow-card-hover hover:-translate-y-px",
+                    accent
+                  )}
+                >
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+                  <p className={cn("mt-1.5 text-3xl font-bold tabular-nums", valueClass)}>{value}</p>
+                </button>
+              ))}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
@@ -313,48 +410,13 @@ export const DashboardPage = () => {
         </CardContent>
       </Card>
 
-      {/* Charts row */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-semibold">Recent Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {activityLoading ? (
-              <ChartSkeleton />
-            ) : activity.length === 0 ? (
-              <p className="py-12 text-center text-sm text-muted-foreground">
-                No transfer requests yet.
-              </p>
-            ) : (
-              <ul className="max-h-64 space-y-3 overflow-auto">
-                {activity.map((a) => (
-                  <li key={a.id} className="flex items-start gap-3">
-                    <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-400" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm">
-                        <span className="font-medium">{a.reserved_by_name ?? "Someone"}</span>{" "}
-                        requested a transfer for{" "}
-                        <span className="font-medium">{a.resource_name}</span>
-                        {isSuperAdmin && a.facility_name ? ` at ${a.facility_name}` : ""}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {a.unit_name ? `${a.unit_name} · ` : ""}
-                        {timeAgo(a.created_at)}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-            <CardTitle className="text-sm font-semibold">
-              Resource Capacity by {groupBy === "facility" ? "Facility" : "Unit"}
-            </CardTitle>
+      {/* Capacity chart */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+          <CardTitle className="text-sm font-semibold">
+            Resource Capacity by {groupBy === "facility" ? "Facility" : "Unit"}
+          </CardTitle>
+          <div className="flex items-center gap-2">
             {isSuperAdmin && (
               <div className="flex rounded-md border p-0.5">
                 {(["unit", "facility"] as const).map((g) => (
@@ -372,36 +434,47 @@ export const DashboardPage = () => {
                 ))}
               </div>
             )}
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <ChartSkeleton />
-            ) : chartData.length === 0 ? (
-              <p className="py-12 text-center text-sm text-muted-foreground">No capacity data</p>
-            ) : (
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={chartData} barSize={12}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(210 20% 92%)" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} stroke="hsl(215 15% 65%)" />
-                  <YAxis tick={{ fontSize: 10 }} stroke="hsl(215 15% 65%)" />
-                  <Tooltip
-                    contentStyle={{
-                      background: "hsl(0 0% 100%)",
-                      border: "1px solid hsl(210 20% 88%)",
-                      borderRadius: "10px",
-                      boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
-                      fontSize: "12px",
-                    }}
-                  />
-                  <Bar dataKey="Available" fill="hsl(142 72% 42%)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Occupied" fill="hsl(0 84% 60%)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Reserved" fill="hsl(38 92% 50%)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            <ExportButtons
+              filename={`resource-capacity-by-${groupBy}`}
+              columns={[
+                { header: groupBy === "facility" ? "Facility" : "Unit", value: (d) => d.name },
+                { header: "Available", value: (d) => d.Available },
+                { header: "Occupied", value: (d) => d.Occupied },
+                { header: "Reserved", value: (d) => d.Reserved },
+              ]}
+              rows={chartData}
+              disabled={isLoading}
+            />
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <ChartSkeleton />
+          ) : chartData.length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">No capacity data</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={chartData} barSize={16}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(210 20% 92%)" />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} stroke="hsl(215 15% 65%)" />
+                <YAxis tick={{ fontSize: 10 }} stroke="hsl(215 15% 65%)" />
+                <Tooltip
+                  contentStyle={{
+                    background: "hsl(0 0% 100%)",
+                    border: "1px solid hsl(210 20% 88%)",
+                    borderRadius: "10px",
+                    boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+                    fontSize: "12px",
+                  }}
+                />
+                <Bar dataKey="Available" fill="hsl(142 72% 42%)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Occupied" fill="hsl(0 84% 60%)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Reserved" fill="hsl(38 92% 50%)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Detailed capacity table */}
       <div className="space-y-3">
@@ -412,6 +485,8 @@ export const DashboardPage = () => {
           isLoading={isLoading}
           keyExtractor={(r) => `${r.facility_id}-${r.unit_type}`}
           emptyMessage="No capacity data matches your filters"
+          pageSize={10}
+          exportable={{ filename: "capacity-by-facility-unit", columns: capacityExportColumns }}
         />
       </div>
     </div>

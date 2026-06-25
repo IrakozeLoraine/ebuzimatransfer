@@ -3,6 +3,7 @@ import {
   getPhoneLines,
   createPhoneLine,
   deletePhoneLine,
+  importPhoneLines,
   logCall,
   getCalls,
 } from "@/api/calls.api";
@@ -27,6 +28,14 @@ export const useDeletePhoneLine = (facilityId: string) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deletePhoneLine(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["phone-lines", facilityId] }),
+  });
+};
+
+export const useImportPhoneLines = (facilityId: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => importPhoneLines(facilityId, file),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["phone-lines", facilityId] }),
   });
 };

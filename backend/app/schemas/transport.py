@@ -6,31 +6,20 @@ from pydantic import BaseModel
 
 
 class TransportCreate(BaseModel):
+    """The referring clinician assigns one of their facility's available
+    ambulances to an accepted transfer. Plate and driver details come from the
+    ambulance record — nothing is typed by hand."""
     referral_id: uuid.UUID
-    ambulance_identifier: str
-    driver_name: Optional[str] = None
-    driver_phone: Optional[str] = None
-    # The GPS tracker in this ambulance; its pings drive live tracking.
-    device_id: Optional[uuid.UUID] = None
-
-
-class TransportUpdate(BaseModel):
-    ambulance_identifier: Optional[str] = None
-    driver_name: Optional[str] = None
-    driver_phone: Optional[str] = None
-    dispatch_time: Optional[datetime] = None
-    pickup_time: Optional[datetime] = None
-    departure_time: Optional[datetime] = None
-    arrival_time: Optional[datetime] = None
+    ambulance_id: uuid.UUID
 
 
 class TransportOut(BaseModel):
     id: uuid.UUID
     referral_id: uuid.UUID
+    ambulance_id: Optional[uuid.UUID]
     ambulance_identifier: str
     driver_name: Optional[str]
     driver_phone: Optional[str]
-    device_id: Optional[uuid.UUID]
     dispatch_time: Optional[datetime]
     pickup_time: Optional[datetime]
     departure_time: Optional[datetime]

@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from app.models.resource import ResourceStatus, ResourceType
 
 
@@ -17,7 +17,6 @@ class ResourceBase(BaseModel):
 
 class ResourceCreate(ResourceBase):
     quantity: int = 1
-    status: ResourceStatus = ResourceStatus.AVAILABLE
 
 
 class ResourceUpdate(BaseModel):
@@ -26,8 +25,30 @@ class ResourceUpdate(BaseModel):
     notes: Optional[str] = None
 
 
-class ResourceStatusUpdate(BaseModel):
-    status: ResourceStatus
+class ResourceCountsUpdate(BaseModel):
+    """Set how many of a resource group's units fall into each non-available
+    bucket. AVAILABLE is derived, so it is not sent. The counts must be
+    non-negative and must not exceed the group's quantity."""
+    occupied: int = 0
+    reserved: int = 0
+    out_of_service: int = 0
+
+    @model_validator(mode="after")
+    def _non_negative(self):
+        if self.occupied < 0 or self.reserved < 0 or self.out_of_service < 0:
+            raise ValueError("Counts cannot be negative")
+        return self
+
+
+class ResourceUnitCount(BaseModel):
+    """A number of units to add to or remove from a resource group."""
+    count: int
+
+    @model_validator(mode="after")
+    def _positive(self):
+        if self.count < 1:
+            raise ValueError("Count must be at least 1")
+        return self
 
 
 class ResourceAssign(BaseModel):
@@ -39,16 +60,28 @@ class ResourceAssign(BaseModel):
 class ResourceBulkAssign(BaseModel):
     """Assign or transfer one or more resources at once. A null facility_id returns
     them to central stock (super admin only). Facility admins may only set the unit;
-    the facility they belong to is preserved server-side."""
+    the facility they belong to is preserved server-side. ``quantity`` is the number
+    of units to move from each selected resource (clamped to what's movable); null
+    moves every movable unit."""
     resource_ids: List[uuid.UUID]
     facility_id: Optional[uuid.UUID] = None
     unit_id: Optional[uuid.UUID] = None
+    quantity: Optional[int] = None
+
+    @model_validator(mode="after")
+    def _positive_quantity(self):
+        if self.quantity is not None and self.quantity < 1:
+            raise ValueError("Quantity must be at least 1")
+        return self
 
 
 class ResourceOut(ResourceBase):
     id: uuid.UUID
     quantity: int
-    status: Optional[ResourceStatus] = None
+    occupied: int = 0
+    reserved: int = 0
+    out_of_service: int = 0
+    available: int = 0
     facility_name: Optional[str] = None
     unit_name: Optional[str] = None
 

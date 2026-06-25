@@ -3,7 +3,8 @@ import {
   getUnits,
   createUnit,
   updateUnit,
-  deleteUnit
+  deleteUnit,
+  importUnits
 } from "@/api/units.api";
 import { CreateUnitPayload, UnitListParams, UpdateUnitPayload } from "@/types/unit";
 
@@ -42,6 +43,14 @@ export const useDeleteUnit = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteUnit(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["units"] }),
+  });
+};
+
+export const useImportUnits = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => importUnits(file),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["units"] }),
   });
 };

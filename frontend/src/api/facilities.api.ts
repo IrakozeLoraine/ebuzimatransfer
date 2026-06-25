@@ -1,5 +1,5 @@
 import { api } from "./axios";
-import type { Facility } from "@/types/facility";
+import type { Facility, FacilityImportResult } from "@/types/facility";
 import type { User } from "@/types/user";
 
 export const getFacilities = async (): Promise<Facility[]> => {
@@ -29,4 +29,18 @@ export const updateFacility = async (id: string, payload: Partial<Facility>): Pr
 
 export const deleteFacility = async (id: string): Promise<void> => {
   await api.delete(`/facilities/${id}`);
+};
+
+export const reactivateFacility = async (id: string): Promise<Facility> => {
+  const { data } = await api.put<Facility>(`/facilities/${id}`, { is_active: true });
+  return data;
+};
+
+export const importFacilities = async (file: File): Promise<FacilityImportResult> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await api.post<FacilityImportResult>("/facilities/import", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
 };

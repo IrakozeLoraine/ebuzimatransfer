@@ -40,7 +40,6 @@ export const FindResourcesPage = () => {
     return resources.filter(
       (r) =>
         r.resource_name.toLowerCase().includes(q) ||
-        (r.resource_code ?? "").toLowerCase().includes(q) ||
         (r.facility_name ?? "").toLowerCase().includes(q) ||
         (r.unit_name ?? "").toLowerCase().includes(q)
     );
@@ -84,7 +83,7 @@ export const FindResourcesPage = () => {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Name, code, or facility…"
+            placeholder="Name or facility…"
           />
         </div>
       </div>
@@ -102,38 +101,37 @@ export const FindResourcesPage = () => {
             {filtered.length} available resource{filtered.length === 1 ? "" : "s"} across {byFacility.length} facilit
             {byFacility.length === 1 ? "y" : "ies"}
           </p>
-          {byFacility.map((group) => (
-            <Card key={group.facility} className="p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <Building2 className="h-6 w-6 md:h-4 md:w-4 text-muted-foreground" />
-                <div className="flex flex-col md:flex-row md:items-center md:gap-2">
-                  <h2 className="font-semibold">{group.facility}</h2>
-                  <span className="w-fit rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {byFacility.map((group) => (
+              <Card key={group.facility} className="flex h-full flex-col p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <Building2 className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  <h2 className="flex-1 font-semibold leading-tight">{group.facility}</h2>
+                  <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
                     {group.rows.length} available
                   </span>
                 </div>
-              </div>
-              <ul>
-                {group.rows.map((r) => (
-                  <li key={r.id} className="flex flex-col md:flex-row gap-2 md:items-center justify-between py-2 border-b border-b-neutral-100 last:border-0">
-                    <div>
-                      <p className="text-sm font-medium">{r.resource_name}</p>
-                      <p className="font-mono text-xs text-muted-foreground">
-                        {r.resource_code ?? "—"}
-                        {r.unit_name ? ` · ${r.unit_name}` : ""}
-                      </p>
-                    </div>
-                    {canCreateReferral && (
-                      <Button size="sm" variant="outline" className="w-fit border-primary text-primary bg-white cursor-pointer" onClick={() => requestTransfer(r)}>
-                        <ArrowLeftRight className="mr-1.5 h-3.5 w-3.5" />
-                        Request Transfer
-                      </Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          ))}
+                <ul className="flex-1">
+                  {group.rows.map((r) => (
+                    <li key={r.id} className="flex flex-col gap-2 border-b border-b-neutral-100 py-2 last:border-0">
+                      <div>
+                        <p className="text-sm font-medium">{r.resource_name}</p>
+                        <p className="font-mono text-xs text-muted-foreground">
+                          {r.unit_name ? `${r.unit_name}` : ""}
+                        </p>
+                      </div>
+                      {canCreateReferral && (
+                        <Button size="sm" variant="outline" className="w-fit border-primary text-primary bg-white cursor-pointer" onClick={() => requestTransfer(r)}>
+                          <ArrowLeftRight className="mr-1.5 h-3.5 w-3.5" />
+                          Request Transfer
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            ))}
+          </div>
         </div>
       )}
     </div>

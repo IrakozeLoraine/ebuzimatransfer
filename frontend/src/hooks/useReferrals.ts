@@ -10,9 +10,9 @@ import {
   recordArrivalCondition,
   markReferralArrived,
 } from "@/api/referrals.api";
-import { createTransport, updateTransport } from "@/api/transport.api";
+import { createTransport } from "@/api/transport.api";
 import type { CreateReferralPayload, AcceptReferralPayload, RejectReferralPayload, ArrivalCondition } from "@/types/referral";
-import type { CreateTransportPayload, UpdateTransportPayload } from "@/types/transport";
+import type { CreateTransportPayload } from "@/types/transport";
 
 export const useReferrals = (params?: { status?: string }) =>
   useQuery({
@@ -104,19 +104,6 @@ export const useArrangeTransport = () => {
     onSuccess: (_, { referral_id }) => {
       qc.invalidateQueries({ queryKey: ["referrals"] });
       qc.invalidateQueries({ queryKey: ["referral", referral_id] });
-    },
-  });
-};
-
-// Referring clinician records departure / arrival on the transport event.
-export const useUpdateTransport = (referralId: string) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: UpdateTransportPayload }) =>
-      updateTransport(id, payload),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["referrals"] });
-      qc.invalidateQueries({ queryKey: ["referral", referralId] });
     },
   });
 };

@@ -1,15 +1,39 @@
 import uuid
-from typing import List
-from fastapi import APIRouter, Depends
+from typing import List, Optional
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_session
 from app.core.permissions import require_roles, get_current_user
-from app.core.exceptions import ForbiddenError
+from app.core.exceptions import ForbiddenError, ValidationError
 from app.services.user_service import UserService
 from app.services.audit_service import AuditService
-from app.schemas.user import UserCreate, UserCreateAssign, UserUpdate, UserOut, UserStatusUpdate, UserAssignRequest
+from app.schemas.user import (
+    UserCreate,
+    UserCreateAssign,
+    UserUpdate,
+    UserOut,
+    UserStatusUpdate,
+    UserAssignRequest,
+    UserImportResult,
+)
 
 router = APIRouter()
+
+
+def _resolve_import_facility(current_user, requested: Optional[uuid.UUID]) -> uuid.UUID:
+    """The facility a bulk user-import targets: super admins must name one,
+    facility admins use their own active/single facility."""
+    if "SUPER_ADMIN" in current_user.effective_roles:
+        if requested is None:
+            raise ValidationError("facility_id is required")
+        return requested
+    facility_ids = {f.id for f in current_user.facilities}
+    target = requested or getattr(current_user, "active_facility_id", None)
+    if target is None and len(facility_ids) == 1:
+        target = next(iter(facility_ids))
+    if target is None or target not in facility_ids:
+        raise ForbiddenError()
+    return target
 
 
 @router.get("", response_model=List[UserOut])
@@ -65,6 +89,33 @@ async def create_and_assign_user(
     await AuditService(session).log("CREATE_USER", "user", user_id=current_user.id, entity_id=user.id)
     await session.commit()
     return UserOut.from_user(user)
+
+
+@router.post("/import", response_model=UserImportResult)
+async def import_users(
+    facility_id: Optional[uuid.UUID] = Query(None),
+    file: UploadFile = File(...),
+    current_user=Depends(require_roles("SUPER_ADMIN", "FACILITY_ADMIN")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Bulk register/assign users at a facility from a .csv or .xlsx file.
+
+    Super admins must provide ``facility_id``; facility admins import into their
+    own facility.
+    """
+    target = _resolve_import_facility(current_user, facility_id)
+    contents = await file.read()
+    filename = (file.filename or "").lower()
+    is_csv = filename.endswith(".csv") or file.content_type == "text/csv"
+    result = await UserService(session).import_users(contents, target, is_csv=is_csv)
+    await AuditService(session).log(
+        "IMPORT_USERS",
+        "user",
+        user_id=current_user.id,
+        extra={"created": result.created, "assigned": result.assigned},
+    )
+    await session.commit()
+    return result
 
 
 @router.post("/assign", response_model=UserOut)

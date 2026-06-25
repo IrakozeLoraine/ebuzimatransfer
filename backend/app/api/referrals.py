@@ -89,7 +89,7 @@ async def accept_referral(
     session: AsyncSession = Depends(get_session),
 ):
     svc = ReferralService(session)
-    referral = await svc.accept(referral_id, payload, current_user.id)
+    referral = await svc.accept(referral_id, payload, current_user)
     await AuditService(session).log("ACCEPT_REFERRAL", "referral", user_id=current_user.id, entity_id=referral_id)
     await NotificationService(session).create(
         referral.created_by, "Transfer request approved",
@@ -118,7 +118,7 @@ async def quick_accept_referral(
     resource_id = await svc.auto_pick_resource(referral_id, facility_id)
     if resource_id is None:
         raise ValidationError("No available resource in the requested unit at your facility")
-    referral = await svc.accept(referral_id, AcceptReferralRequest(resource_id=resource_id), current_user.id)
+    referral = await svc.accept(referral_id, AcceptReferralRequest(resource_id=resource_id), current_user)
     await AuditService(session).log("ACCEPT_REFERRAL", "referral", user_id=current_user.id, entity_id=referral_id)
     await NotificationService(session).create(
         referral.created_by, "Transfer request approved",
@@ -139,7 +139,7 @@ async def reject_referral(
     session: AsyncSession = Depends(get_session),
 ):
     svc = ReferralService(session)
-    referral = await svc.reject(referral_id, payload, current_user.id)
+    referral = await svc.reject(referral_id, payload, current_user)
     await AuditService(session).log("REJECT_REFERRAL", "referral", user_id=current_user.id, entity_id=referral_id)
     await NotificationService(session).create(
         referral.created_by, "Transfer request rejected",

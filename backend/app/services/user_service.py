@@ -1,15 +1,29 @@
 from __future__ import annotations
+import re
 import uuid
 import secrets
-from typing import List
+from typing import List, Optional
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password
-from app.core.exceptions import ConflictError, NotFoundError, ForbiddenError
+from app.core.spreadsheet import read_csv_rows, read_xlsx_rows
+from app.core.tiers import tier_rank
+from app.core.exceptions import ConflictError, NotFoundError, ForbiddenError, ValidationError
 from app.models.user import User, AccountStatus, UserFacilityRole, UserFacilityUnit
 from app.models.facility import Facility
 from app.models.unit import Unit
 from app.repositories.user_repository import UserRepository
-from app.schemas.user import UserCreate, UserUpdate
+from app.schemas.user import (
+    UserCreate,
+    UserUpdate,
+    UserImportError,
+    UserImportResult,
+    VALID_ROLES,
+)
+
+# Roles that can be granted to a user within a facility via import. SUPER_ADMIN is
+# a global-only grant and is never assigned through a facility-scoped import.
+_FACILITY_ASSIGNABLE_ROLES = {r for r in VALID_ROLES if r != "SUPER_ADMIN"}
 
 
 class UserService:
@@ -70,6 +84,10 @@ class UserService:
         facility = await self.session.get(Facility, facility_id)
         if not facility:
             raise NotFoundError("Facility")
+        if not facility.is_active:
+            raise ValidationError(
+                "Cannot assign users to a deactivated facility. Reactivate it first."
+            )
 
         # Drop the user's current grants for this facility, then re-add the requested ones.
         user.facility_roles = [fr for fr in user.facility_roles if fr.facility_id != facility_id]
@@ -160,3 +178,135 @@ class UserService:
         user.is_active = False
         user.account_status = AccountStatus.INACTIVE.value
         await self.session.flush()
+
+    async def import_users(
+        self, file_bytes: bytes, facility_id: uuid.UUID, is_csv: bool = False
+    ) -> UserImportResult:
+        """Parse an .xlsx or .csv file and bulk register/assign users at a facility.
+
+        Expected header row (case-insensitive): ``medical_id`` (required),
+        ``first_name``, ``last_name``, ``email``, ``phone``, ``roles`` and
+        ``units``. ``roles`` and ``units`` hold one or more values separated by
+        ``;`` / ``,`` / ``|`` / ``/``. Unknown roles or units (or units not
+        available at this facility's tier) make the row an error; valid rows are
+        still imported. A medical ID that already exists is re-assigned the given
+        roles/units rather than re-created.
+        """
+        facility = await self.session.get(Facility, facility_id)
+        if not facility:
+            raise NotFoundError("Facility")
+        if not facility.is_active:
+            raise ValidationError(
+                "Cannot assign users to a deactivated facility. Reactivate it first."
+            )
+
+        rows = read_csv_rows(file_bytes) if is_csv else read_xlsx_rows(file_bytes)
+        if not rows:
+            return UserImportResult(created=0, assigned=0, errors=[])
+
+        header = [str(c).strip().lower() if c is not None else "" for c in rows[0]]
+
+        def col(*names: str) -> Optional[int]:
+            for name in names:
+                if name in header:
+                    return header.index(name)
+            return None
+
+        idx_mid = col("medical_id", "medical id", "id")
+        idx_first = col("first_name", "first name", "firstname")
+        idx_last = col("last_name", "last name", "lastname")
+        idx_email = col("email")
+        idx_phone = col("phone", "phone_number")
+        idx_roles = col("roles", "role")
+        idx_units = col("units", "unit")
+        if idx_mid is None:
+            raise ValidationError("Missing required 'medical_id' column in the spreadsheet.")
+
+        # Units available at this facility's tier, by lower-cased name.
+        active_units = (
+            (await self.session.execute(select(Unit).where(Unit.is_active.is_(True))))
+            .scalars()
+            .all()
+        )
+        units_by_name: dict[str, Unit] = {}
+        for u in active_units:
+            if tier_rank(u.tier) > tier_rank(facility.type):
+                continue
+            units_by_name.setdefault(u.name.strip().lower(), u)
+
+        errors: List[UserImportError] = []
+        created = 0
+        assigned = 0
+        for i, raw in enumerate(rows[1:], start=2):  # row 1 is the header
+            def cell(idx: Optional[int]) -> Optional[str]:
+                if idx is None or idx >= len(raw) or raw[idx] is None:
+                    return None
+                return str(raw[idx]).strip()
+
+            medical_id = cell(idx_mid)
+            if not medical_id:
+                continue  # skip blank rows silently
+
+            # Roles default to CLINICIAN; values may be separated by ; , | or /.
+            roles_raw = cell(idx_roles)
+            role_tokens = [t for t in re.split(r"[;,|/]", roles_raw)] if roles_raw else []
+            roles = [t.strip().upper().replace(" ", "_") for t in role_tokens if t.strip()]
+            roles = roles or ["CLINICIAN"]
+            invalid = [r for r in roles if r not in _FACILITY_ASSIGNABLE_ROLES]
+            if invalid:
+                errors.append(UserImportError(row=i, message=f"Invalid role(s): {', '.join(invalid)}"))
+                continue
+
+            units_raw = cell(idx_units)
+            unit_tokens = [t.strip() for t in re.split(r"[;,|/]", units_raw)] if units_raw else []
+            unit_ids: List[uuid.UUID] = []
+            unit_error: str | None = None
+            for token in unit_tokens:
+                if not token:
+                    continue
+                unit = units_by_name.get(token.lower())
+                if not unit:
+                    unit_error = f"Unit '{token}' is not available at this facility"
+                    break
+                unit_ids.append(unit.id)
+            if unit_error:
+                errors.append(UserImportError(row=i, message=unit_error))
+                continue
+
+            try:
+                existing = await self.repo.get_by_medical_id(medical_id)
+                if existing is None:
+                    first = cell(idx_first)
+                    last = cell(idx_last)
+                    if not first or not last:
+                        errors.append(
+                            UserImportError(row=i, message="first_name and last_name are required for new users")
+                        )
+                        continue
+                    email = cell(idx_email) or None
+                    if email:
+                        clash = await self.repo.get_by_email(email)
+                        if clash is not None:
+                            errors.append(UserImportError(row=i, message=f"Email '{email}' already registered"))
+                            continue
+                    user = User(
+                        email=email,
+                        medical_id=medical_id,
+                        first_name=first,
+                        last_name=last,
+                        phone=cell(idx_phone),
+                        password_hash=hash_password(secrets.token_urlsafe(32)),
+                        account_status=AccountStatus.PASSWORD_RESET_ENABLED.value,
+                    )
+                    await self.repo.create(user)
+                    created += 1
+                await self.assign_roles(medical_id, facility_id, roles, unit_ids)
+                assigned += 1
+            except (ConflictError, NotFoundError, ValidationError) as exc:
+                detail = exc.detail
+                message = detail.get("message") if isinstance(detail, dict) else str(detail)
+                errors.append(UserImportError(row=i, message=message))
+                continue
+
+        await self.session.flush()
+        return UserImportResult(created=created, assigned=assigned, errors=errors)

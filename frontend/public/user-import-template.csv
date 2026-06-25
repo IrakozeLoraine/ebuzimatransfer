@@ -1,0 +1,3 @@
+medical_id,first_name,last_name,email,phone,roles,units
+RC-CHUK-010,Jean,Uwimana,jean.uwimana@example.rw,0788000333,CLINICIAN,Intensive Care Unit (ICU) & High Dependency Unit (HDU)
+RC-CHUK-011,Aline,Mukamana,aline.mukamana@example.rw,0788000444,CLINICIAN;FACILITY_ADMIN,

@@ -1,20 +1,23 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useFacilities, useDeleteFacility } from "@/hooks/useFacilities";
+import { useFacilities, useDeleteFacility, useReactivateFacility } from "@/hooks/useFacilities";
 import { DataTable } from "@/components/organisms/DataTable";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/molecules/ConfirmDialog";
 import { TableToolbar, ALL_FILTER } from "@/components/molecules/TableToolbar";
-import { Plus, Trash2, Pencil, Eye } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye, Upload, RotateCcw } from "lucide-react";
 import type { Facility } from "@/types/facility";
 import { FacilityFormDialog } from "./facilities/FacilityFormDialog";
+import FacilityImportDialog from "./facilities/FacilityImportDialog";
 import { FACILITY_TYPES, TYPE_BADGES, facilityTypeLabel } from "./facilities/constants";
 
 export const FacilitiesPage = () => {
   const navigate = useNavigate();
   const { data: facilities = [], isLoading } = useFacilities();
   const { mutate: deleteFac } = useDeleteFacility();
+  const { mutate: reactivateFac } = useReactivateFacility();
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editing, setEditing] = useState<Facility | null>(null);
   const [toDelete, setToDelete] = useState<Facility | null>(null);
   const [search, setSearch] = useState("");
@@ -107,14 +110,27 @@ export const FacilitiesPage = () => {
           >
             <Pencil className="h-4 w-4" />
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-            onClick={() => setToDelete(f)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {f.is_active ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+              title="Deactivate facility"
+              onClick={() => setToDelete(f)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50"
+              title="Reactivate facility"
+              onClick={() => reactivateFac(f.id)}
+            >
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       ),
     },
@@ -129,10 +145,16 @@ export const FacilitiesPage = () => {
             {facilities.filter((f) => f.is_active).length} active facilities
           </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Facility
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowImport(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Import
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Facility
+          </Button>
+        </div>
       </div>
 
       <TableToolbar
@@ -170,9 +192,21 @@ export const FacilitiesPage = () => {
         onRowClick={(f) => navigate(`/admin/facilities/${f.id}`)}
         emptyMessage="No facilities match your filters"
         pageSize={10}
+        exportable={{
+          filename: "facilities",
+          columns: [
+            { header: "Name", value: (f) => f.name },
+            { header: "Type", value: (f) => facilityTypeLabel(f.type) },
+            { header: "Province", value: (f) => f.province ?? "" },
+            { header: "District", value: (f) => f.district ?? "" },
+            { header: "Status", value: (f) => (f.is_active ? "Active" : "Inactive") },
+          ],
+        }}
       />
 
       <FacilityFormDialog open={showForm} facility={editing} onOpenChange={setShowForm} />
+
+      <FacilityImportDialog open={showImport} onOpenChange={setShowImport} />
 
       <ConfirmDialog
         open={!!toDelete}

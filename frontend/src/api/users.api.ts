@@ -1,5 +1,5 @@
 import { api } from "./axios";
-import type { User, CreateUserPayload, UpdateUserPayload, AssignUserPayload, CreateAssignPayload, UserStatusPayload } from "@/types/user";
+import type { User, CreateUserPayload, UpdateUserPayload, AssignUserPayload, CreateAssignPayload, UserStatusPayload, UserImportResult } from "@/types/user";
 
 export const getUsers = async (): Promise<User[]> => {
   const { data } = await api.get<User[]>("/users");
@@ -18,6 +18,19 @@ export const createUser = async (payload: CreateUserPayload): Promise<User> => {
 
 export const createAndAssignUser = async (payload: CreateAssignPayload): Promise<User> => {
   const { data } = await api.post<User>("/users/create-and-assign", payload);
+  return data;
+};
+
+export const importUsers = async (
+  file: File,
+  facilityId?: string,
+): Promise<UserImportResult> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await api.post<UserImportResult>("/users/import", formData, {
+    params: facilityId ? { facility_id: facilityId } : undefined,
+    headers: { "Content-Type": "multipart/form-data" },
+  });
   return data;
 };
 

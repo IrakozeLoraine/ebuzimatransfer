@@ -1,10 +1,7 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import {
-  useResources,
-  useUpdateResourceStatus} from "@/hooks/useResources";
+import { useResources } from "@/hooks/useResources";
 import { DataTable } from "@/components/organisms/DataTable";
-import { ResourceStatusBadge } from "@/components/atoms/ResourceStatusBadge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -13,15 +10,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Upload, ArrowLeftRight, History } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Plus, Upload, ArrowLeftRight, History, Search, SlidersHorizontal, PlusCircle } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { cn } from "@/utils/cn";
 import { Resource, ResourceStatus, ResourceFilters } from "@/types/resource";
 import { STATUS_LABELS, STATUS_OPTIONS } from "./constants";
 import UsageDialog from "./UsageDialog";
 import AssignDialog from "./AssignDialog";
+import AdjustUnitsDialog from "./AdjustUnitsDialog";
 import ImportDialog from "./ImportDialog";
 import AddResourceDialog from "./AddResourceDialog";
+import AvailabilityDialog from "./AvailabilityDialog";
+
+/** Units of a resource group that fall into a given status bucket. */
+const unitsInBucket = (r: Resource, status: ResourceStatus): number =>
+  status === "AVAILABLE"
+    ? r.available
+    : status === "OCCUPIED"
+    ? r.occupied
+    : status === "RESERVED"
+    ? r.reserved
+    : r.out_of_service;
 
 export const ResourcesPage = () => {
   const { isSuperAdmin, isFacilityAdmin, canManageResources, canAssignResources, canUpdateResourceStatus } = usePermissions();
@@ -32,18 +42,42 @@ export const ResourcesPage = () => {
   const [filter, setFilter] = useState<string>(
     initialStatus && STATUS_OPTIONS.includes(initialStatus as ResourceStatus) ? initialStatus : "ALL"
   );
+  const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [assignTargets, setAssignTargets] = useState<Resource[]>([]);
+  const [addUnitsTarget, setAddUnitsTarget] = useState<Resource | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [usageId, setUsageId] = useState<string | null>(null);
+  const [availabilityTarget, setAvailabilityTarget] = useState<Resource | null>(null);
 
   // Super admin can switch between all resources and unassigned central stock.
   const queryFilters: ResourceFilters = isSuperAdmin && scope === "UNASSIGNED" ? { unassigned: true } : {};
   const { data: resources = [], isLoading } = useResources(queryFilters);
-  const { mutate: updateStatus, isPending: updatingStatus } = useUpdateResourceStatus();
 
-  const filtered = filter === "ALL" ? resources : resources.filter((r) => r.status === filter);
+  const query = search.trim().toLowerCase();
+  const filtered = resources
+    .filter((r) => {
+      const matchesStatus =
+        filter === "ALL" || unitsInBucket(r, filter as ResourceStatus) > 0;
+      const matchesSearch =
+        !query ||
+        r.resource_name.toLowerCase().includes(query) ||
+        (r.resource_code ?? "").toLowerCase().includes(query) ||
+        (r.resource_type ?? "").toLowerCase().includes(query) ||
+        (r.facility_name ?? "").toLowerCase().includes(query) ||
+        (r.unit_name ?? "").toLowerCase().includes(query);
+      return matchesStatus && matchesSearch;
+    })
+    // Sort by assignment (facility, then unit), then resource name. Unassigned
+    // central stock sorts last.
+    .sort((a, b) => {
+      const byFacility = (a.facility_name ?? "￿").localeCompare(b.facility_name ?? "￿");
+      if (byFacility !== 0) return byFacility;
+      const byUnit = (a.unit_name ?? "").localeCompare(b.unit_name ?? "");
+      if (byUnit !== 0) return byUnit;
+      return a.resource_name.localeCompare(b.resource_name);
+    });
 
   const selectedResources = filtered.filter((r) => selectedIds.has(r.id));
 
@@ -72,33 +106,13 @@ export const ResourcesPage = () => {
     setSelectedIds(new Set());
   };
 
+  // Totals shown in the filter dropdown are unit counts across all groups.
   const counts = STATUS_OPTIONS.reduce(
-    (acc, s) => ({ ...acc, [s]: resources.filter((r) => r.status === s).length }),
+    (acc, s) => ({ ...acc, [s]: resources.reduce((sum, r) => sum + unitsInBucket(r, s), 0) }),
     {} as Record<ResourceStatus, number>
   );
 
   const columns = [
-    {
-      header: "Resource",
-      accessor: (r: Resource) => (
-        <div className={cn("flex flex-col gap-0.5 -ml-4 pl-4")}>
-          <span className="font-semibold text-foreground">{r.resource_name}</span>
-          <span className="font-mono text-xs text-muted-foreground">{r.resource_code ?? "—"}</span>
-        </div>
-      ),
-    },
-    {
-      header: "Type",
-      accessor: (r: Resource) => (
-        <span className="text-xs text-muted-foreground">{r.resource_type ?? "—"}</span>
-      ),
-    },
-    {
-      header: "Qty",
-      accessor: (r: Resource) => (
-        <span className="tabular-nums text-sm font-medium">{r.quantity}</span>
-      ),
-    },
     {
       header: "Assignment",
       accessor: (r: Resource) =>
@@ -114,37 +128,74 @@ export const ResourcesPage = () => {
         ),
     },
     {
-      header: "Status",
-      accessor: (r: Resource) => <ResourceStatusBadge status={r.status} />,
+      header: "Resource",
+      accessor: (r: Resource) => (
+        <div className={cn("flex flex-col gap-0.5 -ml-4 pl-4")}>
+          <span className="font-semibold text-foreground">{r.resource_name}</span>
+          <span className="font-mono text-xs text-muted-foreground">{r.resource_code ?? "—"}</span>
+        </div>
+      ),
     },
     {
-      header: "Update Status",
+      header: "Qty",
       accessor: (r: Resource) => (
-        <Select
-          defaultValue={r.status}
-          onValueChange={(v) => updateStatus({ id: r.id, status: v as ResourceStatus })}
-          disabled={updatingStatus || !r.facility_id || !canUpdateResourceStatus}
-        >
-          <SelectTrigger className="h-8 w-40 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((s) => (
-              <SelectItem key={s} value={s} className="text-xs">
-                {STATUS_LABELS[s]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <span className="tabular-nums text-sm font-medium">{r.quantity}</span>
+      ),
+    },
+    {
+      header: "Availability",
+      accessor: (r: Resource) => (
+        <div className="flex flex-col gap-1">
+          <span className="text-sm">
+            <span className="font-semibold text-emerald-600 tabular-nums">{r.available}</span>
+            <span className="text-muted-foreground"> / {r.quantity} available</span>
+          </span>
+          <div className="flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
+            {r.occupied > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                {r.occupied} occ
+              </span>
+            )}
+            {r.reserved > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                {r.reserved} res
+              </span>
+            )}
+            {r.out_of_service > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
+                {r.out_of_service} oos
+              </span>
+            )}
+          </div>
+        </div>
+      ),
+    },
+    {
+      header: "Type",
+      accessor: (r: Resource) => (
+        <span className="text-xs text-muted-foreground">{r.resource_type ?? "—"}</span>
       ),
     },
     {
       header: "Actions",
       accessor: (r: Resource) => (
         <div className="flex items-center gap-1">
+          {canUpdateResourceStatus && r.facility_id && (
+            <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => setAvailabilityTarget(r)}>
+              <SlidersHorizontal className="h-3.5 w-3.5 mr-1" /> Update
+            </Button>
+          )}
           <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => setUsageId(r.id)}>
             <History className="h-3.5 w-3.5 mr-1" /> Usage
           </Button>
+          {canAssignResources && (
+            <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => setAddUnitsTarget(r)}>
+              <PlusCircle className="h-3.5 w-3.5 mr-1" /> Units
+            </Button>
+          )}
           {canAssignResources && (
             <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => setAssignTargets([r])}>
               <ArrowLeftRight className="h-3.5 w-3.5 mr-1" />
@@ -205,6 +256,16 @@ export const ResourcesPage = () => {
         </div>
       </div>
 
+      <div className="relative max-w-sm">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+        <Input
+          placeholder="Search by name, code, type, facility, or unit…"
+          className="pl-9"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
       {/* Bulk-selection action bar */}
       {canAssignResources && selectedResources.length > 0 && (
         <div className="flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -229,6 +290,22 @@ export const ResourcesPage = () => {
         isLoading={isLoading}
         keyExtractor={(r) => r.id}
         emptyMessage="No resources match the selected filter"
+        pageSize={10}
+        exportable={{
+          filename: "resources",
+          columns: [
+            { header: "Resource", value: (r) => r.resource_name },
+            { header: "Code", value: (r) => r.resource_code ?? "" },
+            { header: "Type", value: (r) => r.resource_type ?? "" },
+            { header: "Quantity", value: (r) => r.quantity },
+            { header: "Facility", value: (r) => r.facility_name ?? "Unassigned" },
+            { header: "Unit", value: (r) => r.unit_name ?? "" },
+            { header: "Available", value: (r) => r.available },
+            { header: "Occupied", value: (r) => r.occupied },
+            { header: "Reserved", value: (r) => r.reserved },
+            { header: "Out of Service", value: (r) => r.out_of_service },
+          ],
+        }}
         selection={
           canAssignResources
             ? { selectedIds, onToggle: toggleRow, onToggleAll: toggleAll }
@@ -241,7 +318,9 @@ export const ResourcesPage = () => {
 
       <ImportDialog open={showImport} onOpenChange={setShowImport} facilityScoped={isFacilityAdmin && !isSuperAdmin} />
       <AssignDialog resources={assignTargets} onClose={closeAssign} />
+      <AdjustUnitsDialog resource={addUnitsTarget} onClose={() => setAddUnitsTarget(null)} />
       <UsageDialog resourceId={usageId} onClose={() => setUsageId(null)} />
+      <AvailabilityDialog resource={availabilityTarget} onClose={() => setAvailabilityTarget(null)} />
     </div>
   );
 };

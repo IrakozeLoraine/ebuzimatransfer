@@ -5,6 +5,8 @@ from typing import Optional
 from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.facility import Facility
+from app.models.unit import Unit
+from app.models.resource import Resource
 from app.schemas.report import OccupancyReportRow
 
 
@@ -13,17 +15,16 @@ class ReportService:
         self.session = session
 
     async def occupancy_report(self) -> list[OccupancyReportRow]:
-        from sqlalchemy import case as sa_case
         stmt = (
             select(
                 Facility.name.label("facility"),
                 Unit.type.label("unit_type"),
-                func.count(Resource.id).label("total_resources"),
-                func.sum(sa_case((Resource.status == ResourceStatus.OCCUPIED, 1), else_=0)).label("occupied_resources"),
+                func.coalesce(func.sum(Resource.quantity), 0).label("total_resources"),
+                func.coalesce(func.sum(Resource.occupied), 0).label("occupied_resources"),
             )
             .join(Unit, Resource.unit_id == Unit.id)
-            .join(Facility, Unit.facility_id == Facility.id)
-            .where(Facility.is_active == True, Resource.resource_code.is_not(None))
+            .join(Facility, Resource.facility_id == Facility.id)
+            .where(Facility.is_active == True)
             .group_by(Facility.name, Unit.type)
         )
         result = await self.session.execute(stmt)

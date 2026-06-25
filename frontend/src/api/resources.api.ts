@@ -2,9 +2,9 @@ import {
   BulkAssignResourcePayload,
   CreateResourcePayload,
   Resource,
+  ResourceCountsPayload,
   ResourceFilters,
   ResourceImportResult,
-  ResourceStatus,
   ResourceUsage,
 } from "@/types/resource";
 import { api } from "./axios";
@@ -19,8 +19,11 @@ export const createResource = async (payload: CreateResourcePayload): Promise<Re
   return data;
 };
 
-export const updateResourceStatus = async (id: string, status: ResourceStatus): Promise<Resource> => {
-  const { data } = await api.patch<Resource>(`/resources/${id}/status`, { status });
+export const updateResourceCounts = async (
+  id: string,
+  counts: ResourceCountsPayload
+): Promise<Resource> => {
+  const { data } = await api.patch<Resource>(`/resources/${id}/counts`, counts);
   return data;
 };
 
@@ -28,6 +31,16 @@ export const assignResources = async (
   payload: BulkAssignResourcePayload
 ): Promise<Resource[]> => {
   const { data } = await api.post<Resource[]>("/resources/assign", payload);
+  return data;
+};
+
+export const addResourceUnits = async (id: string, count: number): Promise<Resource> => {
+  const { data } = await api.post<Resource>(`/resources/${id}/add-units`, { count });
+  return data;
+};
+
+export const removeResourceUnits = async (id: string, count: number): Promise<Resource> => {
+  const { data } = await api.post<Resource>(`/resources/${id}/remove-units`, { count });
   return data;
 };
 

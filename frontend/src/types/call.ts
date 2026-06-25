@@ -22,6 +22,16 @@ export interface CreatePhoneLinePayload {
   is_active?: boolean;
 }
 
+export interface PhoneLineImportError {
+  row: number;
+  message: string;
+}
+
+export interface PhoneLineImportResult {
+  created: number;
+  errors: PhoneLineImportError[];
+}
+
 export interface CallLog {
   id: string;
   referral_id: string | null;

@@ -8,6 +8,16 @@ export interface Facility {
   is_active: boolean;
 }
 
+export interface FacilityImportError {
+  row: number;
+  message: string;
+}
+
+export interface FacilityImportResult {
+  created: number;
+  errors: FacilityImportError[];
+}
+
 export interface CapacityRow {
   facility_id: string;
   facility: string;

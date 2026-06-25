@@ -93,11 +93,13 @@ class ReferralStatusHistory(Base, UUIDMixin, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("referrals.id", ondelete="CASCADE"), nullable=False
     )
     status: Mapped[ReferralStatus] = mapped_column(SAEnum(ReferralStatus, name="referral_status"), nullable=False)
-    changed_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    # Null when the change was driven by an ambulance driver (not a staff user),
+    # e.g. start/arrival actions from the driver phone app.
+    changed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     comment: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     referral: Mapped["Referral"] = relationship("Referral", back_populates="status_history")
-    actor: Mapped["User"] = relationship("User", foreign_keys=[changed_by])
+    actor: Mapped["User | None"] = relationship("User", foreign_keys=[changed_by])
 
 
 from app.models.user import User  # noqa: E402

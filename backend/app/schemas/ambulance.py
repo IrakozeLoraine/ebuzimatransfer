@@ -5,47 +5,106 @@ from typing import Optional, List, Tuple
 from pydantic import BaseModel
 
 
-class DevicePingCreate(BaseModel):
-    """A GPS fix reported by a hardware tracker (authenticated via X-Device-Key)."""
-    latitude: float
-    longitude: float
+# --------------------------------------------------------------------------- #
+# Ambulance management (facility admin / super admin)
+# --------------------------------------------------------------------------- #
 
-
-class LocationPingOut(BaseModel):
-    id: uuid.UUID
-    referral_id: uuid.UUID
-    latitude: float
-    longitude: float
-    reported_by: Optional[uuid.UUID]
-    recorded_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class AmbulanceDeviceCreate(BaseModel):
-    label: str
+class AmbulanceCreate(BaseModel):
+    plate_number: str
+    driver_name: Optional[str] = None
+    driver_phone: Optional[str] = None
     facility_id: Optional[uuid.UUID] = None
+    # The admin picks a memorable login ID; the server generates the password and
+    # reveals it once (no admin-chosen passwords to leak or reuse).
+    login_id: str
 
 
-class AmbulanceDeviceOut(BaseModel):
+class AmbulanceUpdate(BaseModel):
+    plate_number: Optional[str] = None
+    driver_name: Optional[str] = None
+    driver_phone: Optional[str] = None
+    is_active: Optional[bool] = None
+    # Password resets go through the dedicated reset endpoint, which regenerates
+    # and reveals a fresh password — there is no admin-supplied password here.
+
+
+class AmbulanceOut(BaseModel):
     id: uuid.UUID
-    label: str
     facility_id: Optional[uuid.UUID]
+    facility_name: Optional[str] = None
+    plate_number: str
+    driver_name: Optional[str]
+    driver_phone: Optional[str]
+    login_id: str
     is_active: bool
+    # Derived: AVAILABLE, or ON_JOURNEY when assigned to an in-progress transfer.
+    status: str = "AVAILABLE"
     created_at: datetime
 
     model_config = {"from_attributes": True}
 
 
-class AmbulanceDeviceCreated(AmbulanceDeviceOut):
-    """Returned once, at creation — includes the plaintext key to flash onto the device."""
-    api_key: str
+class AmbulanceCredentials(AmbulanceOut):
+    """Returned only at registration or password reset: the same ambulance plus the
+    one-time plaintext ``password``. The admin shows or QR-codes this to the driver;
+    the server never stores or returns the plaintext again."""
+    password: str
+
+
+# --------------------------------------------------------------------------- #
+# Driver phone app
+# --------------------------------------------------------------------------- #
+
+class DriverLogin(BaseModel):
+    login_id: str
+    password: str
+
+
+class DriverToken(BaseModel):
+    token: str
+    ambulance: AmbulanceOut
+
+
+class DriverPing(BaseModel):
+    """A GPS fix streamed by the driver's phone during a journey."""
+    latitude: float
+    longitude: float
 
 
 class RoutePoint(BaseModel):
     name: str
     latitude: float
     longitude: float
+
+
+class DriverJourney(BaseModel):
+    """The single journey currently assigned to the driver's ambulance, with the
+    sending/receiving facilities and which step the driver is on."""
+    transport_id: uuid.UUID
+    referral_id: uuid.UUID
+    referral_number: str
+    # ASSIGNED -> EN_ROUTE_TO_PICKUP -> PATIENT_ONBOARD -> ARRIVED
+    step: str
+    sending: Optional[RoutePoint] = None
+    receiving: Optional[RoutePoint] = None
+    dispatch_time: Optional[datetime] = None
+    pickup_time: Optional[datetime] = None
+    arrival_time: Optional[datetime] = None
+
+
+# --------------------------------------------------------------------------- #
+# Live tracking (web)
+# --------------------------------------------------------------------------- #
+
+class LocationPingOut(BaseModel):
+    id: uuid.UUID
+    referral_id: uuid.UUID
+    latitude: float
+    longitude: float
+    ambulance_id: Optional[uuid.UUID] = None
+    recorded_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class AmbulanceTrack(BaseModel):

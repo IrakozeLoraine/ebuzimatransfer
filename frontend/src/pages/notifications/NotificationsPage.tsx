@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, CheckCheck } from "lucide-react";
+import { Bell, CheckCheck, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Pagination } from "@/components/molecules/Pagination";
 import { useNotificationStore } from "@/store/notification.store";
 import { useNotifications, useMarkRead, useMarkAllRead } from "@/hooks/useNotifications";
 import type { Notification } from "@/types/notification";
@@ -15,6 +18,22 @@ export const NotificationsPage = () => {
   const unreadCount = useNotificationStore((s) => s.unreadCount);
   const { mutate: markRead } = useMarkRead();
   const { mutate: markAll } = useMarkAllRead();
+
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const query = search.trim().toLowerCase();
+  const filtered = query
+    ? notifications.filter(
+        (n) =>
+          n.title.toLowerCase().includes(query) || n.message.toLowerCase().includes(query)
+      )
+    : notifications;
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const open = (n: Notification) => {
     if (!n.is_read) markRead(n.id);
@@ -37,6 +56,18 @@ export const NotificationsPage = () => {
         )}
       </div>
 
+      {notifications.length > 0 && (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+          <Input
+            placeholder="Search notifications…"
+            className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      )}
+
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : notifications.length === 0 ? (
@@ -44,9 +75,14 @@ export const NotificationsPage = () => {
           <Bell className="mx-auto mb-2 h-6 w-6 opacity-50" />
           No notifications yet.
         </Card>
+      ) : filtered.length === 0 ? (
+        <Card className="p-12 text-center text-sm text-muted-foreground">
+          <Search className="mx-auto mb-2 h-6 w-6 opacity-50" />
+          No notifications match your search.
+        </Card>
       ) : (
         <div className="space-y-2">
-          {notifications.map((n) => (
+          {paged.map((n) => (
             <button
               key={n.id}
               type="button"
@@ -64,6 +100,21 @@ export const NotificationsPage = () => {
               </div>
             </button>
           ))}
+
+          {filtered.length > pageSize && (
+            <Card className="overflow-hidden p-0">
+              <Pagination
+                page={currentPage}
+                pageSize={pageSize}
+                total={filtered.length}
+                onPageChange={setPage}
+                onPageSizeChange={(s) => {
+                  setPageSize(s);
+                  setPage(1);
+                }}
+              />
+            </Card>
+          )}
         </div>
       )}
     </div>

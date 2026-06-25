@@ -1,4 +1,3 @@
-import { ResourceStatusBadge } from "@/components/atoms/ResourceStatusBadge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useResourceUsage } from "@/hooks/useResources";
 
@@ -23,7 +22,14 @@ export default function UsageDialog({ resourceId, onClose }: { resourceId: strin
                                         : "Unassigned"}
                                 </p>
                             </div>
-                            <ResourceStatusBadge status={data.resource.status} />
+                            <div className="text-right text-xs">
+                                <p className="font-semibold text-emerald-600">
+                                    {data.resource.available} / {data.resource.quantity} available
+                                </p>
+                                <p className="text-muted-foreground">
+                                    {data.resource.occupied} occ · {data.resource.reserved} res · {data.resource.out_of_service} oos
+                                </p>
+                            </div>
                         </div>
 
                         <div>

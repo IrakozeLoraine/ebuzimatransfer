@@ -26,3 +26,13 @@ export interface UnitListParams {
     facility_id?: string;
     active?: boolean;
 }
+
+export interface UnitImportError {
+    row: number;
+    message: string;
+}
+
+export interface UnitImportResult {
+    created: number;
+    errors: UnitImportError[];
+}

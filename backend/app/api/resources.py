@@ -11,8 +11,9 @@ from app.services.audit_service import AuditService
 from app.websocket.manager import ws_manager
 from app.schemas.resource import (
     ResourceCreate,
-    ResourceStatusUpdate,
+    ResourceCountsUpdate,
     ResourceBulkAssign,
+    ResourceUnitCount,
     ResourceOut,
     ResourceUsageOut,
     ResourceImportResult,
@@ -176,13 +177,19 @@ async def assign_resources(
             target_facility = resource.facility_id
             target_unit = payload.unit_id
 
-        result = await svc.assign(resource_id, target_facility, target_unit)
+        result = await svc.assign(resource_id, target_facility, target_unit, payload.quantity)
+        if result is None:
+            # Nothing movable on this resource (e.g. all units occupied) — skip it.
+            continue
         await AuditService(session).log(
             "ASSIGN_RESOURCE",
             "resource",
             user_id=current_user.id,
             entity_id=resource_id,
-            extra={"facility_id": str(target_facility) if target_facility else None},
+            extra={
+                "facility_id": str(target_facility) if target_facility else None,
+                "quantity": payload.quantity,
+            },
         )
         results.append(result)
 
@@ -192,6 +199,69 @@ async def assign_resources(
             "capacity", {"event": "RESOURCE_ASSIGNED", "resource_id": str(result.id)}
         )
     return results
+
+
+async def _authorize_resource_admin(svc: ResourceService, resource_id: uuid.UUID, current_user):
+    """Resolve a resource and ensure the caller may manage its quantity: super
+    admins anywhere, facility admins only within their own facilities."""
+    resource = await svc.get(resource_id)
+    if not _is_super_admin(current_user):
+        if resource.facility_id not in {f.id for f in current_user.facilities}:
+            raise ForbiddenError()
+    return resource
+
+
+@router.post("/{resource_id}/add-units", response_model=ResourceOut)
+async def add_resource_units(
+    resource_id: uuid.UUID,
+    payload: ResourceUnitCount,
+    current_user=Depends(require_roles(SUPER_ADMIN, FACILITY_ADMIN)),
+    session: AsyncSession = Depends(get_session),
+):
+    """Increase a resource group's quantity. Super admins can grow any group
+    (including central stock); facility admins only groups in their own facility."""
+    svc = ResourceService(session)
+    await _authorize_resource_admin(svc, resource_id, current_user)
+    result = await svc.add_units(resource_id, payload.count)
+    await AuditService(session).log(
+        "ADD_RESOURCE_UNITS",
+        "resource",
+        user_id=current_user.id,
+        entity_id=resource_id,
+        extra={"count": payload.count},
+    )
+    await session.commit()
+    await ws_manager.broadcast_to_channel(
+        "capacity", {"event": "RESOURCE_UPDATED", "resource_id": str(resource_id)}
+    )
+    return result
+
+
+@router.post("/{resource_id}/remove-units", response_model=ResourceOut)
+async def remove_resource_units(
+    resource_id: uuid.UUID,
+    payload: ResourceUnitCount,
+    current_user=Depends(require_roles(SUPER_ADMIN, FACILITY_ADMIN)),
+    session: AsyncSession = Depends(get_session),
+):
+    """Decrease a resource group's quantity by retiring out-of-service units.
+    Super admins can shrink any group; facility admins only groups in their own
+    facility."""
+    svc = ResourceService(session)
+    await _authorize_resource_admin(svc, resource_id, current_user)
+    result = await svc.remove_units(resource_id, payload.count)
+    await AuditService(session).log(
+        "REMOVE_RESOURCE_UNITS",
+        "resource",
+        user_id=current_user.id,
+        entity_id=resource_id,
+        extra={"count": payload.count},
+    )
+    await session.commit()
+    await ws_manager.broadcast_to_channel(
+        "capacity", {"event": "RESOURCE_UPDATED", "resource_id": str(resource_id)}
+    )
+    return result
 
 
 @router.post("/{resource_id}/reserve", response_model=ResourceOut)
@@ -220,10 +290,10 @@ async def reserve_resource(
     return ResourceOut.model_validate(resource)
 
 
-@router.patch("/{resource_id}/status", response_model=ResourceOut)
-async def update_resource_status(
+@router.patch("/{resource_id}/counts", response_model=ResourceOut)
+async def update_resource_counts(
     resource_id: uuid.UUID,
-    payload: ResourceStatusUpdate,
+    payload: ResourceCountsUpdate,
     current_user=Depends(require_roles(SUPER_ADMIN, FACILITY_ADMIN, "CLINICIAN")),
     session: AsyncSession = Depends(get_session),
 ):
@@ -233,8 +303,20 @@ async def update_resource_status(
     if not _is_super_admin(current_user):
         if resource.facility_id not in {f.id for f in current_user.facilities}:
             raise ForbiddenError()
-    resource = await svc.update_status(resource_id, payload)
-    await AuditService(session).log("UPDATE_RESOURCE_STATUS", "resource", user_id=current_user.id, entity_id=resource_id, extra={"status": payload.status.value})
+    resource = await svc.update_counts(resource_id, payload)
+    await AuditService(session).log(
+        "UPDATE_RESOURCE_COUNTS",
+        "resource",
+        user_id=current_user.id,
+        entity_id=resource_id,
+        extra={
+            "occupied": payload.occupied,
+            "reserved": payload.reserved,
+            "out_of_service": payload.out_of_service,
+        },
+    )
     await session.commit()
-    await ws_manager.broadcast_to_channel("capacity", {"event": "RESOURCE_UPDATED", "resource_id": str(resource_id), "status": payload.status.value})
+    await ws_manager.broadcast_to_channel(
+        "capacity", {"event": "RESOURCE_UPDATED", "resource_id": str(resource_id)}
+    )
     return ResourceOut.model_validate(resource)

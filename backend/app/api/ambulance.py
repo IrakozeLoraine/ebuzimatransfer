@@ -5,17 +5,14 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_session
-from app.core.permissions import get_current_user, get_current_device
-from app.core.exceptions import NotFoundError, ConflictError
+from app.core.permissions import get_current_user
+from app.core.exceptions import NotFoundError
 from app.models.ambulance import AmbulanceLocationPing
 from app.models.referral import Referral
 from app.models.facility import Facility
 from app.models.transport import TransportEvent
-from app.services.audit_service import AuditService
 from app.services.routing import road_route
-from app.websocket.manager import ws_manager
 from app.schemas.ambulance import (
-    DevicePingCreate,
     LocationPingOut,
     AmbulanceTrack,
     RoutePoint,
@@ -35,52 +32,6 @@ async def _get_referral(session: AsyncSession, referral_id: uuid.UUID) -> Referr
     if not referral:
         raise NotFoundError("Transfer request")
     return referral
-
-
-@router.post("/devices/ping", response_model=LocationPingOut, status_code=201)
-async def device_ping(
-    payload: DevicePingCreate,
-    device=Depends(get_current_device),
-    session: AsyncSession = Depends(get_session),
-):
-    """Ingest a GPS position from a hardware tracker.
-
-    The device is resolved to the journey it is currently assigned to (the most
-    recent transport event referencing it that has not yet arrived), and the
-    position is recorded against that transfer request.
-    """
-    transport = await session.scalar(
-        select(TransportEvent)
-        .where(TransportEvent.device_id == device.id, TransportEvent.arrival_time.is_(None))
-        .order_by(TransportEvent.created_at.desc())
-    )
-    if not transport:
-        raise ConflictError("This device is not assigned to an active journey")
-
-    referral_id = transport.referral_id
-    ping = AmbulanceLocationPing(
-        referral_id=referral_id,
-        latitude=payload.latitude,
-        longitude=payload.longitude,
-        device_id=device.id,
-    )
-    session.add(ping)
-    await AuditService(session).log(
-        "REPORT_AMBULANCE_PING", "ambulance", entity_id=referral_id
-    )
-    await session.commit()
-    await session.refresh(ping)
-    await ws_manager.broadcast_to_channel(
-        f"ambulance:{referral_id}",
-        {
-            "event": "AMBULANCE_PING",
-            "referral_id": str(referral_id),
-            "latitude": ping.latitude,
-            "longitude": ping.longitude,
-            "recorded_at": ping.recorded_at.isoformat(),
-        },
-    )
-    return ping
 
 
 @router.get("/{referral_id}/track", response_model=AmbulanceTrack)

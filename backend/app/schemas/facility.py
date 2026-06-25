@@ -32,3 +32,13 @@ class FacilityOut(FacilityBase):
     is_active: bool
 
     model_config = {"from_attributes": True}
+
+
+class FacilityImportError(BaseModel):
+    row: int
+    message: str
+
+
+class FacilityImportResult(BaseModel):
+    created: int
+    errors: List[FacilityImportError] = []

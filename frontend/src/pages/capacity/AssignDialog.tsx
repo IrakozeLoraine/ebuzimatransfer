@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/responsive-dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/components/ui/toaster";
@@ -33,8 +34,15 @@ export default function AssignDialog({
     const adminFacilityId =
         resources[0]?.facility_id ?? user?.active_facility_id ?? user?.facilities?.[0]?.id ?? "";
 
+    // Units that can be moved right now: central stock is wholly assignable, any
+    // assigned group only down to its available (free) units.
+    const movableOf = (r: Resource) =>
+        r.facility_id == null && r.unit_id == null ? r.quantity : r.available;
+    const singleMovable = single ? movableOf(single) : 0;
+
     const [facilityId, setFacilityId] = useState<string>("");
     const [unitId, setUnitId] = useState<string>("");
+    const [quantity, setQuantity] = useState<string>("");
 
     // Reset selections whenever the targeted set of resources changes (React's
     // "adjust state while rendering" pattern — previous key kept in state).
@@ -44,6 +52,8 @@ export default function AssignDialog({
         setLastKey(targetKey);
         setFacilityId(isSuperAdmin ? (single?.facility_id ?? "") : adminFacilityId);
         setUnitId(single?.unit_id ?? "");
+        // Default to moving everything for a single resource; one-at-a-time for a batch.
+        setQuantity(single ? String(Math.max(1, singleMovable)) : "1");
     }
 
     // Units are derived from the target facility's tier (cascading catalog).
@@ -52,6 +62,9 @@ export default function AssignDialog({
         { facility_id: unitFacilityId || undefined },
         { enabled: !!unitFacilityId }
     );
+
+    const parsedQty = parseInt(quantity, 10);
+    const qty = Number.isFinite(parsedQty) && parsedQty > 0 ? parsedQty : null;
 
     const handleAssign = () => {
         if (!resources.length) return;
@@ -62,14 +75,20 @@ export default function AssignDialog({
                 // keep the resources in their own facility, server-enforced.
                 facility_id: isSuperAdmin ? facilityId || null : adminFacilityId,
                 unit_id: unitId || null,
+                quantity: qty,
             },
             {
-                onSuccess: () => {
+                onSuccess: (moved) => {
+                    const movedCount = moved.length;
                     toast({
-                        variant: "success",
+                        variant: movedCount === 0 ? "destructive" : "success",
                         title:
                             count > 1
-                                ? `${count} resources updated`
+                                ? movedCount < count
+                                    ? `${movedCount} of ${count} resources updated`
+                                    : `${count} resources updated`
+                                : movedCount === 0
+                                ? "No units available to move"
                                 : facilityId || !isSuperAdmin
                                 ? "Resource assigned"
                                 : "Returned to stock",
@@ -89,7 +108,12 @@ export default function AssignDialog({
         : `Transfer ${count} resources`;
 
     // Facility admins must pick a unit; super admins may save (incl. return to stock).
-    const saveDisabled = isPending || (!isSuperAdmin && !unitId);
+    // A quantity is always required, and for a single resource it can't exceed what's movable.
+    const saveDisabled =
+        isPending ||
+        (!isSuperAdmin && !unitId) ||
+        qty === null ||
+        (single != null && (singleMovable < 1 || qty > singleMovable));
 
     return (
         <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -141,6 +165,22 @@ export default function AssignDialog({
                                     ))}
                                 </SelectContent>
                             </Select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label>Quantity</Label>
+                            <Input
+                                type="number"
+                                min={1}
+                                max={single ? singleMovable : undefined}
+                                value={quantity}
+                                onChange={(e) => setQuantity(e.target.value)}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                {single
+                                    ? `${singleMovable} unit${singleMovable === 1 ? "" : "s"} available to move`
+                                    : "Applied to each selected resource (capped at what each has available)"}
+                            </p>
                         </div>
 
                         <div className="flex justify-between gap-2 pt-1">

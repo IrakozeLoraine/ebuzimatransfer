@@ -139,6 +139,23 @@ export const UsersPage = () => {
         onRowClick={(u) => navigate(`/admin/users/${u.id}`)}
         emptyMessage="No users match your filters"
         pageSize={10}
+        exportable={{
+          filename: "users",
+          columns: [
+            { header: "Name", value: (u) => `${u.first_name} ${u.last_name}` },
+            { header: "Medical ID", value: (u) => u.medical_id },
+            { header: "Email", value: (u) => u.email },
+            {
+              header: "Roles",
+              value: (u) =>
+                [...u.global_roles, ...u.facility_roles.flatMap((fr) => fr.roles)]
+                  .map((r) => r.replace(/_/g, " "))
+                  .join(", "),
+            },
+            { header: "Facilities", value: (u) => u.facilities.map((f) => f.name).join(", ") },
+            { header: "Status", value: (u) => ACCOUNT_STATUS_LABELS[u.account_status] ?? u.account_status },
+          ],
+        }}
       />
 
       <CreateUserDialog open={showCreate} onOpenChange={setShowCreate} />

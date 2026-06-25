@@ -112,7 +112,7 @@ export const getUserColumns = ({
             <KeyRound className="h-4 w-4" />
           </Button>
         )}
-        {isSuperAdmin && u.is_active && (
+        {isSuperAdmin && !u.global_roles.includes("SUPER_ADMIN") && u.is_active && (
           <Button
             size="sm"
             variant="ghost"

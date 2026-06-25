@@ -11,8 +11,8 @@ export const newReferralSchema = z.object({
   reason_for_transfer: z.string().min(10, "Provide a reason for transfer"),
   ventilator_needed: z.boolean(),
   high_flow_oxygen_needed: z.boolean(),
-  preferred_facility_id: z.string().optional(),
-  requested_unit_id: z.string().optional(),
+  preferred_facility_id: z.string().min(1, "Select a destination facility"),
+  requested_unit_id: z.string().min(1, "Select a requested unit"),
 });
 
 export type NewReferralFormValues = z.infer<typeof newReferralSchema>;

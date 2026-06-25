@@ -1,32 +1,31 @@
-from fastapi import Depends, Header
+from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.security import decode_token, hash_device_key
+from app.core.security import decode_token
 from app.core.exceptions import UnauthorizedError, ForbiddenError
 from app.db.session import get_session
-from typing import List
 import uuid
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
-async def get_current_device(
-    x_device_key: str = Header(..., alias="X-Device-Key"),
+async def get_current_ambulance(
+    token: str = Depends(oauth2_scheme),
     session: AsyncSession = Depends(get_session),
 ):
-    """Authenticate a hardware GPS tracker by its API key (sent as ``X-Device-Key``)."""
-    from app.models.ambulance import AmbulanceDevice
+    """Authenticate the driver's phone app via its ambulance login token."""
+    from app.models.ambulance import Ambulance
 
-    device = await session.scalar(
-        select(AmbulanceDevice).where(
-            AmbulanceDevice.api_key_hash == hash_device_key(x_device_key),
-            AmbulanceDevice.is_active.is_(True),
-        )
-    )
-    if not device:
-        raise UnauthorizedError("Invalid or inactive device key")
-    return device
+    payload = decode_token(token)
+    if not payload or payload.get("type") != "driver":
+        raise UnauthorizedError("Invalid or expired driver token")
+    sub = payload.get("sub")
+    if not sub:
+        raise UnauthorizedError("Token missing subject")
+    ambulance = await session.get(Ambulance, uuid.UUID(sub))
+    if not ambulance or not ambulance.is_active:
+        raise UnauthorizedError("Ambulance not found or inactive")
+    return ambulance
 
 
 async def get_current_user(

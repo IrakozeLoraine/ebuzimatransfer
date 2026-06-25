@@ -1,5 +1,11 @@
 import { api } from "./axios";
-import { CreateUnitPayload, Unit, UnitListParams, UpdateUnitPayload } from "@/types/unit";
+import {
+  CreateUnitPayload,
+  Unit,
+  UnitImportResult,
+  UnitListParams,
+  UpdateUnitPayload,
+} from "@/types/unit";
 
 export const getUnits = async (params: UnitListParams = {}): Promise<Unit[]> => {
   const { data } = await api.get<Unit[]>("/units", { params });
@@ -18,4 +24,13 @@ export const updateUnit = async (id: string, payload: UpdateUnitPayload): Promis
 
 export const deleteUnit = async (id: string): Promise<void> => {
   await api.delete(`/units/${id}`);
+};
+
+export const importUnits = async (file: File): Promise<UnitImportResult> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await api.post<UnitImportResult>("/units/import", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
 };

@@ -48,7 +48,14 @@ class ResourceRepository(BaseRepository[Resource]):
         if facility_ids is not None:
             stmt = stmt.where(Resource.facility_id.in_(list(facility_ids)))
         if status is not None:
-            stmt = stmt.where(Resource.status == status)
+            # Filter to groups that have at least one unit in the requested bucket.
+            bucket = {
+                ResourceStatus.AVAILABLE: Resource.available,
+                ResourceStatus.OCCUPIED: Resource.occupied,
+                ResourceStatus.RESERVED: Resource.reserved,
+                ResourceStatus.OUT_OF_SERVICE: Resource.out_of_service,
+            }[status]
+            stmt = stmt.where(bucket > 0)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
@@ -58,7 +65,7 @@ class ResourceRepository(BaseRepository[Resource]):
         stmt = (
             select(Resource)
             .options(selectinload(Resource.unit), selectinload(Resource.facility))
-            .where(Resource.status == ResourceStatus.AVAILABLE, Resource.facility_id.isnot(None))
+            .where(Resource.available > 0, Resource.facility_id.isnot(None))
             .order_by(Resource.resource_name)
         )
         if unit_id is not None:
@@ -79,27 +86,19 @@ class ResourceRepository(BaseRepository[Resource]):
         self, facility_ids: Optional[Sequence[uuid.UUID]] = None
     ) -> List[dict]:
         """Aggregate assigned resources by facility + clinical unit with per-status
-        counts. ``facility_ids`` restricts the summary to those facilities (used to
-        scope a facility admin to their own facility)."""
-        s = ResourceStatus
+        unit counts summed across resource groups. ``facility_ids`` restricts the
+        summary to those facilities (used to scope a facility admin to their own
+        facility)."""
         stmt = (
             select(
                 Facility.id.label("facility_id"),
                 Facility.name.label("facility"),
                 Unit.name.label("unit_type"),
                 func.coalesce(func.sum(Resource.quantity), 0).label("total"),
-                func.coalesce(
-                    func.sum(Resource.quantity).filter(Resource.status == s.AVAILABLE), 0
-                ).label("available"),
-                func.coalesce(
-                    func.sum(Resource.quantity).filter(Resource.status == s.OCCUPIED), 0
-                ).label("occupied"),
-                func.coalesce(
-                    func.sum(Resource.quantity).filter(Resource.status == s.RESERVED), 0
-                ).label("reserved"),
-                func.coalesce(
-                    func.sum(Resource.quantity).filter(Resource.status == s.OUT_OF_SERVICE), 0
-                ).label("out_of_service"),
+                func.coalesce(func.sum(Resource.available), 0).label("available"),
+                func.coalesce(func.sum(Resource.occupied), 0).label("occupied"),
+                func.coalesce(func.sum(Resource.reserved), 0).label("reserved"),
+                func.coalesce(func.sum(Resource.out_of_service), 0).label("out_of_service"),
             )
             .join(Unit, Resource.unit_id == Unit.id)
             .join(Facility, Resource.facility_id == Facility.id)

@@ -1,17 +1,17 @@
-import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.session import get_session
 from app.core.permissions import require_roles
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError, ConflictError, ForbiddenError
+from app.models.ambulance import Ambulance
 from app.models.transport import TransportEvent
 from app.models.referral import Referral, ReferralStatus
 from app.services.referral_service import ReferralService
 from app.services.audit_service import AuditService
 from app.services.notification_service import NotificationService
 from app.websocket.manager import ws_manager
-from app.schemas.transport import TransportCreate, TransportUpdate, TransportOut
+from app.schemas.transport import TransportCreate, TransportOut
 
 router = APIRouter()
 
@@ -34,14 +34,33 @@ async def create_transport(
     current_user=Depends(require_roles("CLINICIAN", "SUPER_ADMIN")),
     session: AsyncSession = Depends(get_session),
 ):
-    """The referring clinician arranges transport (their hospital's ambulance) for
-    an accepted request, and notifies the receiving hospital a patient is coming."""
+    """The referring clinician assigns an available ambulance to an accepted
+    request. Plate and driver are snapshotted from the ambulance, and the
+    receiving hospital is notified that a patient is coming. The driver then
+    drives the journey from their phone app."""
+    ambulance = await session.get(Ambulance, payload.ambulance_id)
+    if not ambulance or not ambulance.is_active:
+        raise NotFoundError("Ambulance")
+    # A non-super clinician may only dispatch their own facility's ambulances.
+    if "SUPER_ADMIN" not in set(current_user.effective_roles):
+        if ambulance.facility_id not in {f.id for f in current_user.facilities}:
+            raise ForbiddenError()
+
+    # Refuse to double-book an ambulance already on a journey.
+    busy = await session.scalar(
+        select(TransportEvent).where(
+            TransportEvent.ambulance_id == ambulance.id, TransportEvent.arrival_time.is_(None)
+        )
+    )
+    if busy:
+        raise ConflictError("This ambulance is already on a journey")
+
     event = TransportEvent(
         referral_id=payload.referral_id,
-        ambulance_identifier=payload.ambulance_identifier,
-        driver_name=payload.driver_name,
-        driver_phone=payload.driver_phone,
-        device_id=payload.device_id,
+        ambulance_id=ambulance.id,
+        ambulance_identifier=ambulance.plate_number,
+        driver_name=ambulance.driver_name,
+        driver_phone=ambulance.driver_phone,
         created_by=current_user.id,
     )
     session.add(event)
@@ -50,49 +69,11 @@ async def create_transport(
     referral = await svc.change_status(payload.referral_id, ReferralStatus.TRANSPORT_ARRANGED, current_user.id)
     await _notify_receiving(
         session, referral, "Incoming patient — transport arranged",
-        f"{referral.referral_number}: transport arranged ({payload.ambulance_identifier}).",
+        f"{referral.referral_number}: transport arranged ({ambulance.plate_number}).",
         "REFERRAL_TRANSPORT_ARRANGED",
     )
     await AuditService(session).log("CREATE_TRANSPORT", "transport", user_id=current_user.id, entity_id=payload.referral_id)
     await session.commit()
     await session.refresh(event)
     await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_TRANSPORT_ARRANGED", "referral_id": str(payload.referral_id)})
-    return event
-
-
-@router.patch("/{transport_id}", response_model=TransportOut)
-async def update_transport(
-    transport_id: uuid.UUID,
-    payload: TransportUpdate,
-    current_user=Depends(require_roles("CLINICIAN", "SUPER_ADMIN")),
-    session: AsyncSession = Depends(get_session),
-):
-    result = await session.execute(select(TransportEvent).where(TransportEvent.id == transport_id))
-    event = result.scalar_one_or_none()
-    if not event:
-        raise NotFoundError("Transport event")
-
-    for field, value in payload.model_dump(exclude_none=True).items():
-        setattr(event, field, value)
-
-    svc = ReferralService(session)
-    if payload.arrival_time:
-        # The receiving clinician confirms arrival; the referring clinician is notified.
-        referral = await svc.change_status(event.referral_id, ReferralStatus.ARRIVED, current_user.id)
-        await NotificationService(session).create(
-            referral.created_by, "Patient has arrived",
-            f"{referral.referral_number}: the patient has arrived at the receiving facility.",
-            "REFERRAL_ARRIVED", "referral", referral.id,
-        )
-        await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_ARRIVED", "referral_id": str(event.referral_id)})
-    elif payload.departure_time:
-        referral = await svc.change_status(event.referral_id, ReferralStatus.EN_ROUTE, current_user.id)
-        await _notify_receiving(
-            session, referral, "Patient en route",
-            f"{referral.referral_number}: the patient is en route.",
-            "REFERRAL_EN_ROUTE",
-        )
-        await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_EN_ROUTE", "referral_id": str(event.referral_id)})
-
-    await session.commit()
     return event

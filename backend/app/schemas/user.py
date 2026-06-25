@@ -140,6 +140,19 @@ class UserAssignRequest(BaseModel):
         return v
 
 
+class UserImportError(BaseModel):
+    row: int
+    message: str
+
+
+class UserImportResult(BaseModel):
+    """Outcome of a bulk user import: how many new identities were created, how
+    many users were (re)assigned at the facility, and any skipped rows."""
+    created: int
+    assigned: int
+    errors: List[UserImportError] = []
+
+
 def _facility_roles(user) -> List[FacilityRolesOut]:
     """Group a user's facility-scoped role grants and unit memberships by facility."""
     grouped: dict[uuid.UUID, FacilityRolesOut] = {}

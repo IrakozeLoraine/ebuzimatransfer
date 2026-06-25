@@ -2,8 +2,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getResources,
   createResource,
-  updateResourceStatus,
+  updateResourceCounts,
   assignResources,
+  addResourceUnits,
+  removeResourceUnits,
   importResources,
   getResourceUsage,
   reserveResource,
@@ -13,8 +15,8 @@ import { getCapacity } from "@/api/reports.api";
 import {
   BulkAssignResourcePayload,
   CreateResourcePayload,
+  ResourceCountsPayload,
   ResourceFilters,
-  ResourceStatus,
 } from "@/types/resource";
 
 export const useResources = (filters: ResourceFilters = {}) =>
@@ -38,11 +40,11 @@ export const useCreateResource = () => {
   });
 };
 
-export const useUpdateResourceStatus = () => {
+export const useUpdateResourceCounts = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: ResourceStatus }) =>
-      updateResourceStatus(id, status),
+    mutationFn: ({ id, counts }: { id: string; counts: ResourceCountsPayload }) =>
+      updateResourceCounts(id, counts),
     onSuccess: () => invalidateResourceData(qc),
   });
 };
@@ -51,6 +53,22 @@ export const useAssignResources = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (payload: BulkAssignResourcePayload) => assignResources(payload),
+    onSuccess: () => invalidateResourceData(qc),
+  });
+};
+
+export const useAddResourceUnits = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, count }: { id: string; count: number }) => addResourceUnits(id, count),
+    onSuccess: () => invalidateResourceData(qc),
+  });
+};
+
+export const useRemoveResourceUnits = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, count }: { id: string; count: number }) => removeResourceUnits(id, count),
     onSuccess: () => invalidateResourceData(qc),
   });
 };

@@ -3,11 +3,15 @@ from datetime import datetime
 from enum import Enum as PyEnum
 from sqlalchemy import String, Integer, ForeignKey, Enum as SAEnum, DateTime
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, UUIDMixin, TimestampMixin
 
 
 class ResourceStatus(str, PyEnum):
+    """The buckets a resource group's units can fall into. A resource row holds a
+    ``quantity`` of identical units split across these counts; AVAILABLE is derived
+    from the remainder rather than stored."""
     AVAILABLE = "AVAILABLE"
     OCCUPIED = "OCCUPIED"
     RESERVED = "RESERVED"
@@ -37,9 +41,6 @@ class Resource(Base, UUIDMixin, TimestampMixin):
     )
     resource_name: Mapped[str] = mapped_column(String(200), nullable=False)
     resource_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    status: Mapped[ResourceStatus | None] = mapped_column(
-        SAEnum(ResourceStatus, name="resource_status", create_type=False), nullable=True
-    )
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Equipment fields
     resource_type: Mapped[ResourceType | None] = mapped_column(
@@ -50,7 +51,20 @@ class Resource(Base, UUIDMixin, TimestampMixin):
         ),
         nullable=True,
     )
+    # ``quantity`` is the total number of identical units in this group; the rest
+    # are split across per-status counters. AVAILABLE is whatever's left over.
     quantity: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    occupied: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    reserved: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    out_of_service: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    @hybrid_property
+    def available(self) -> int:
+        return self.quantity - (self.occupied or 0) - (self.reserved or 0) - (self.out_of_service or 0)
+
+    @available.expression
+    def available(cls):
+        return cls.quantity - cls.occupied - cls.reserved - cls.out_of_service
 
     unit: Mapped["Unit | None"] = relationship("Unit", back_populates="resources")
     facility: Mapped["Facility | None"] = relationship("Facility")

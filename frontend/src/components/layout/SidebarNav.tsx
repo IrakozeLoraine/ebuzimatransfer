@@ -3,14 +3,13 @@ import {
   LayoutDashboard,
   Package,
   FileText,
-  BarChart3,
   Users,
   Building2,
   ClipboardList,
   User,
   Search,
   Layers,
-  Radio,
+  Truck,
 } from "lucide-react";
 import logo from "@/assets/ebuzimaTransfer.svg";
 import { cn } from "@/utils/cn";
@@ -30,7 +29,6 @@ export const SidebarNav = ({ onNavigate }: Props) => {
   const {
     isSuperAdmin,
     isFacilityAdmin,
-    canViewReports,
     canManageFacilities,
     canViewAudit,
     canViewResources,
@@ -42,14 +40,14 @@ export const SidebarNav = ({ onNavigate }: Props) => {
     ...(canViewResources ? [navItem("/find-resources", "Resource Lookup", Search)] : []),
     ...(canViewResources ? [navItem("/resources", "Resources", Package)] : []),
     navItem("/transfer-requests", "Transfer Requests", FileText),
-    ...(canViewReports ? [navItem("/reports", "Reports", BarChart3)] : []),
   ];
 
   const adminLinks = [
     ...(isSuperAdmin || isFacilityAdmin ? [navItem("/admin/users", "Users", Users)] : []),
     ...(canManageFacilities ? [navItem("/admin/facilities", "Facilities", Building2)] : []),
+    ...(isFacilityAdmin && !isSuperAdmin ? [navItem("/facility", "My Facility", Building2)] : []),
     ...(isSuperAdmin ? [navItem("/admin/units", "Clinical Units", Layers)] : []),
-    ...(isSuperAdmin || isFacilityAdmin ? [navItem("/admin/devices", "GPS Trackers", Radio)] : []),
+    ...(isSuperAdmin || isFacilityAdmin ? [navItem("/admin/ambulances", "Ambulances", Truck)] : []),
     ...(canViewAudit ? [navItem("/admin/audit", "Audit Logs", ClipboardList)] : []),
   ];
 

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Upload } from "lucide-react";
 import { DataTable } from "@/components/organisms/DataTable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import { getApiErrorMessage } from "@/utils/apiError";
 import { useUnits, useCreateUnit, useUpdateUnit, useDeleteUnit } from "@/hooks/useUnits";
 import type { Unit, FacilityTier } from "@/types/unit";
 import { FACILITY_TYPES, TYPE_BADGES, facilityTypeLabel } from "../facilities/constants";
+import UnitImportDialog from "./UnitImportDialog";
 
 export const UnitsCatalogPage = () => {
   // Include inactive units so the catalog can be fully managed.
@@ -26,6 +27,7 @@ export const UnitsCatalogPage = () => {
   const { mutate: deleteUnit } = useDeleteUnit();
 
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editing, setEditing] = useState<Unit | null>(null);
   const [toDelete, setToDelete] = useState<Unit | null>(null);
   const [search, setSearch] = useState("");
@@ -106,10 +108,16 @@ export const UnitsCatalogPage = () => {
             Units cascade upward: a facility automatically has every unit at or below its tier.
           </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Unit
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowImport(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Import
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Unit
+          </Button>
+        </div>
       </div>
 
       <TableToolbar
@@ -135,9 +143,20 @@ export const UnitsCatalogPage = () => {
         keyExtractor={(u) => u.id}
         emptyMessage="No units match your filters"
         pageSize={10}
+        exportable={{
+          filename: "clinical-units",
+          columns: [
+            { header: "Unit", value: (u) => u.name },
+            { header: "Code", value: (u) => u.code ?? "" },
+            { header: "Tier", value: (u) => facilityTypeLabel(u.tier) },
+            { header: "Status", value: (u) => (u.is_active ? "Active" : "Inactive") },
+          ],
+        }}
       />
 
       <UnitFormDialog open={showForm} unit={editing} onOpenChange={setShowForm} />
+
+      <UnitImportDialog open={showImport} onOpenChange={setShowImport} />
 
       <ConfirmDialog
         open={!!toDelete}

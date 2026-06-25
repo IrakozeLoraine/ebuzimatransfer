@@ -1,6 +1,6 @@
 import uuid
 from typing import List
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_session
 from app.core.permissions import require_role, require_roles, get_current_user
@@ -9,7 +9,12 @@ from app.services.facility_service import FacilityService
 from app.services.user_service import UserService
 from app.schemas.user import UserOut
 from app.services.audit_service import AuditService
-from app.schemas.facility import FacilityCreate, FacilityUpdate, FacilityOut
+from app.schemas.facility import (
+    FacilityCreate,
+    FacilityImportResult,
+    FacilityUpdate,
+    FacilityOut,
+)
 
 router = APIRouter()
 
@@ -47,6 +52,24 @@ async def create_facility(
     await session.commit()
     await session.refresh(f)
     return f
+
+
+@router.post("/import", response_model=FacilityImportResult)
+async def import_facilities(
+    file: UploadFile = File(...),
+    current_user=Depends(require_role("SUPER_ADMIN")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Bulk-create facilities from a .csv or .xlsx file (super admin only)."""
+    contents = await file.read()
+    filename = (file.filename or "").lower()
+    is_csv = filename.endswith(".csv") or file.content_type == "text/csv"
+    result = await FacilityService(session).import_from_file(contents, is_csv=is_csv)
+    await AuditService(session).log(
+        "IMPORT_FACILITIES", "facility", user_id=current_user.id, extra={"created": result.created}
+    )
+    await session.commit()
+    return result
 
 
 @router.get("/{facility_id}", response_model=FacilityOut)

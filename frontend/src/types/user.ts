@@ -51,3 +51,14 @@ export interface CreateAssignPayload extends CreateUserPayload {
 export interface UserStatusPayload {
   account_status: string;
 }
+
+export interface UserImportError {
+  row: number;
+  message: string;
+}
+
+export interface UserImportResult {
+  created: number;
+  assigned: number;
+  errors: UserImportError[];
+}

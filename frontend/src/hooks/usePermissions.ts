@@ -13,7 +13,6 @@ export const usePermissions = () => {
   // A single clinician role; "referring" vs "receiving" is contextual, not a role.
   const isClinician = hasRole("CLINICIAN");
 
-  const canViewReports = isSuperAdmin;
   const canManageFacilities = isSuperAdmin;
   const canViewAudit = isAdmin;
   const canManageResources = isAdmin || isClinician;
@@ -34,7 +33,6 @@ export const usePermissions = () => {
     isFacilityAdmin,
     isAdmin,
     isClinician,
-    canViewReports,
     canManageFacilities,
     canViewAudit,
     canManageResources,

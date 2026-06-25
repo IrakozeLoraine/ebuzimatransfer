@@ -3,7 +3,7 @@ export interface LocationPing {
   referral_id: string;
   latitude: number;
   longitude: number;
-  reported_by: string | null;
+  ambulance_id: string | null;
   recorded_at: string;
 }
 
@@ -27,15 +27,38 @@ export interface AmbulanceTrack {
   arrival_time: string | null;
 }
 
-export interface AmbulanceDevice {
+export type AmbulanceStatus = "AVAILABLE" | "ON_JOURNEY";
+
+export interface Ambulance {
   id: string;
-  label: string;
   facility_id: string | null;
+  facility_name: string | null;
+  plate_number: string;
+  driver_name: string | null;
+  driver_phone: string | null;
+  login_id: string;
   is_active: boolean;
+  status: AmbulanceStatus;
   created_at: string;
 }
 
-/** Returned once at creation — includes the plaintext key to flash onto the device. */
-export interface AmbulanceDeviceCreated extends AmbulanceDevice {
-  api_key: string;
+export interface CreateAmbulancePayload {
+  plate_number: string;
+  driver_name?: string;
+  driver_phone?: string;
+  facility_id?: string;
+  login_id: string;
+}
+
+export interface UpdateAmbulancePayload {
+  plate_number?: string;
+  driver_name?: string;
+  driver_phone?: string;
+  is_active?: boolean;
+}
+
+/** Returned once at registration or password reset: the ambulance plus the
+ *  one-time plaintext password the driver's phone needs. */
+export interface AmbulanceCredentials extends Ambulance {
+  password: string;
 }

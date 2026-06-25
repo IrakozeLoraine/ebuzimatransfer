@@ -1,16 +1,16 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useReferral, useAcceptReferral, useQuickAcceptReferral, useRejectReferral, useRecordArrivalCondition, useArrangeTransport, useUpdateTransport, useMarkArrived } from "@/hooks/useReferrals";
+import { useReferral, useAcceptReferral, useQuickAcceptReferral, useRejectReferral, useRecordArrivalCondition, useArrangeTransport, useMarkArrived } from "@/hooks/useReferrals";
 import type { ArrivalCondition } from "@/types/referral";
 import { useResources } from "@/hooks/useResources";
-import { useDevices } from "@/hooks/useDevices";
+import { useAmbulances } from "@/hooks/useAmbulances";
+import { useFacilities } from "@/hooks/useFacilities";
 import { useAuthStore } from "@/store/auth.store";
 import { toast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/utils/apiError";
-import { Zap, Truck, Navigation } from "lucide-react";
+import { Zap, Truck } from "lucide-react";
 import { StatusBadge } from "@/components/atoms/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -58,24 +58,20 @@ export const ReferralDetailPage = () => {
   const me = useAuthStore((s) => s.user);
   const { data: referral, isLoading } = useReferral(id!);
   const { data: resources = [] } = useResources();
-  const { data: devices = [] } = useDevices();
+  const { data: ambulances = [] } = useAmbulances(true);
+  const { data: facilities = [] } = useFacilities();
   const { mutate: accept, isPending: accepting } = useAcceptReferral();
   const { mutate: quickAccept, isPending: quickAccepting } = useQuickAcceptReferral();
   const { mutate: reject, isPending: rejecting } = useRejectReferral();
   const { mutate: recordCondition, isPending: recordingCondition } = useRecordArrivalCondition();
   const { mutate: arrangeTransport, isPending: arranging } = useArrangeTransport();
-  const { mutate: updateTransport, isPending: updatingTransport } = useUpdateTransport(id!);
   const { mutate: markArrived, isPending: markingArrived } = useMarkArrived();
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [selectedResourceId, setSelectedResourceId] = useState("");
   const [selectedCondition, setSelectedCondition] = useState<ArrivalCondition | "">("");
   const [ambulanceId, setAmbulanceId] = useState("");
-  const [driverName, setDriverName] = useState("");
-  const [driverPhone, setDriverPhone] = useState("");
-  const [deviceId, setDeviceId] = useState("");
 
-  const availableResources = resources.filter((r) => r.status === "AVAILABLE");
-  const activeDevices = devices.filter((d) => d.is_active);
+  const availableResources = resources.filter((r) => r.available > 0);
 
   const handleAccept = () => {
     if (!selectedResourceId || !id) return;
@@ -116,27 +112,18 @@ export const ReferralDetailPage = () => {
   };
 
   const handleArrangeTransport = () => {
-    if (!id || !ambulanceId.trim()) return;
+    if (!id || !ambulanceId) return;
     arrangeTransport(
-      { referral_id: id, ambulance_identifier: ambulanceId.trim(), driver_name: driverName || undefined, driver_phone: driverPhone || undefined, device_id: deviceId || undefined },
+      { referral_id: id, ambulance_id: ambulanceId },
       {
         onSuccess: () => {
-          toast({ variant: "success", title: "Transport arranged", description: "The receiving facility has been notified." });
-          setAmbulanceId(""); setDriverName(""); setDriverPhone(""); setDeviceId("");
+          toast({ variant: "success", title: "Transport arranged", description: "The receiving facility has been notified. The driver drives the rest from their app." });
+          setAmbulanceId("");
         },
         onError: (e) => toast({ variant: "destructive", title: "Could not arrange transport", description: getApiErrorMessage(e) }),
       }
     );
   };
-
-  const setTransportTime = (transportId: string, field: "departure_time" | "arrival_time", successMsg: string) =>
-    updateTransport(
-      { id: transportId, payload: { [field]: new Date().toISOString() } },
-      {
-        onSuccess: () => toast({ variant: "success", title: successMsg }),
-        onError: (e) => toast({ variant: "destructive", title: "Could not update transport", description: getApiErrorMessage(e) }),
-      }
-    );
 
   const handleMarkArrived = () => {
     if (!id) return;
@@ -160,9 +147,8 @@ export const ReferralDetailPage = () => {
 
   if (!referral) return <p className="text-destructive">Transfer request not found</p>;
 
-  const canAction =
-    canAcceptReferral &&
-    (referral.status === "REQUESTED" || referral.status === "UNDER_REVIEW");
+  const isPendingDecision =
+    referral.status === "REQUESTED" || referral.status === "UNDER_REVIEW";
 
   const isInTransit =
     referral.status === "TRANSPORT_ARRANGED" ||
@@ -185,6 +171,22 @@ export const ReferralDetailPage = () => {
     isSuperAdmin ||
     (!!receivingFacilityId && receivingFacilityId === myFacility) ||
     (!!referral.requested_unit_id && myUnits.includes(referral.requested_unit_id));
+
+  // Phone coordination targets the counterparty hospital. A pure receiving-side
+  // viewer calls the hospital that submitted the request; otherwise (referring side
+  // or super admin) the destination facility.
+  const callFacilityId =
+    isReceivingSide && !isReferringSide
+      ? referral.referring_facility_id
+      : receivingFacilityId;
+
+  // Only the destination side may approve/reject, and never the clinician who sent
+  // the request — mirrors the server-side guard so the buttons aren't shown in vain.
+  const canAction =
+    canAcceptReferral &&
+    isPendingDecision &&
+    isReceivingSide &&
+    referral.created_by !== me?.id;
 
   const TIMELINE_COLORS: Record<string, string> = {
     REQUESTED: "bg-blue-500",
@@ -263,10 +265,12 @@ export const ReferralDetailPage = () => {
         </CardContent>
       </Card>
 
-      {/* Coordinate the transfer with a call to the destination facility */}
+      {/* Coordinate by phone with the *other* hospital: the receiving side calls the
+          hospital that submitted the request; the referring side calls the destination. */}
       <CallCoordinationCard
         referralId={referral.id}
-        facilityId={referral.accepted_facility_id ?? referral.preferred_facility_id}
+        facilityId={callFacilityId}
+        facilityName={facilities.find((f) => f.id === callFacilityId)?.name}
       />
 
       {/* Transport — arranged by the referring clinician (their hospital's ambulance).
@@ -280,77 +284,53 @@ export const ReferralDetailPage = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Existing transport details */}
+            {/* Existing transport details + driver-driven journey progress */}
             {transport && (
               <div className="space-y-1.5 rounded-lg bg-muted/40 p-3 text-sm">
                 <Row label="Ambulance" value={transport.ambulance_identifier} />
                 {transport.driver_name && <Row label="Driver" value={transport.driver_name} />}
                 {transport.driver_phone && <Row label="Driver phone" value={transport.driver_phone} />}
-                {transport.departure_time && <Row label="Departed" value={formatDateTime(transport.departure_time)} />}
+                {transport.dispatch_time && <Row label="Journey started" value={formatDateTime(transport.dispatch_time)} />}
+                {transport.pickup_time && <Row label="Patient picked up" value={formatDateTime(transport.pickup_time)} />}
                 {transport.arrival_time && <Row label="Arrived" value={formatDateTime(transport.arrival_time)} />}
+                {!transport.arrival_time && (
+                  <p className="pt-1 text-[11px] text-muted-foreground">
+                    The driver advances the journey (start → picked up → arrived) from their phone app.
+                  </p>
+                )}
               </div>
             )}
 
-            {/* Referring clinician: arrange transport when accepted */}
+            {/* Referring clinician: assign an available ambulance when accepted */}
             {isReferringSide && referral.status === "ACCEPTED" && !transport && (
               <div className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Arrange your hospital's ambulance to send the patient. The receiving facility will be notified.
+                  Assign one of your hospital's available ambulances. The driver signs into their
+                  phone app and drives the journey; the receiving facility is notified.
                   If no ambulance is used, the receiving facility can confirm arrival instead.
                 </p>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Ambulance ID <span className="text-destructive">*</span></Label>
-                    <Input placeholder="e.g. RAD 432 H" value={ambulanceId} onChange={(e) => setAmbulanceId(e.target.value)} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Driver name</Label>
-                    <Input value={driverName} onChange={(e) => setDriverName(e.target.value)} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Driver phone</Label>
-                    <Input value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">GPS tracker</Label>
-                    <Select value={deviceId} onValueChange={setDeviceId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder={activeDevices.length ? "Select a tracker" : "No trackers registered"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {activeDevices.map((d) => (
-                          <SelectItem key={d.id} value={d.id}>{d.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-[11px] text-muted-foreground">
-                      Live tracking uses the assigned ambulance's hardware tracker.
-                    </p>
-                  </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Available ambulance</Label>
+                  <Select value={ambulanceId} onValueChange={setAmbulanceId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={ambulances.length ? "Select an ambulance" : "No ambulances available"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ambulances.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.plate_number}{a.driver_name ? ` — ${a.driver_name}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <Button onClick={handleArrangeTransport} disabled={!ambulanceId.trim() || arranging}>
+                <Button onClick={handleArrangeTransport} disabled={!ambulanceId || arranging}>
                   <Truck className="mr-2 h-4 w-4" />
                   {arranging ? "Arranging…" : "Arrange transport"}
                 </Button>
               </div>
             )}
 
-            {/* Referring clinician: dispatch the ambulance */}
-            {isReferringSide && transport && referral.status === "TRANSPORT_ARRANGED" && (
-              <Button onClick={() => setTransportTime(transport.id, "departure_time", "Patient marked en route")} disabled={updatingTransport}>
-                <Navigation className="mr-2 h-4 w-4" />
-                {updatingTransport ? "Updating…" : "Mark departed (en route)"}
-              </Button>
-            )}
-
-            {/* Receiving clinician: confirm the patient arrived at their facility.
-                Works whether or not a tracked ambulance was used. Notifies the referring side. */}
-            {isReceivingSide && transport && referral.status === "EN_ROUTE" && (
-              <Button onClick={() => setTransportTime(transport.id, "arrival_time", "Patient marked as arrived")} disabled={updatingTransport}>
-                <Check className="mr-2 h-4 w-4" />
-                {updatingTransport ? "Updating…" : "Mark patient arrived"}
-              </Button>
-            )}
             {isReceivingSide && referral.status === "ACCEPTED" && (
               <div className="space-y-2 border-t pt-3">
                 <p className="text-xs text-muted-foreground">

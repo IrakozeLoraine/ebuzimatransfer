@@ -31,7 +31,10 @@ export interface Resource {
     resource_code: string | null;
     resource_type: ResourceType | null;
     quantity: number;
-    status: ResourceStatus;
+    occupied: number;
+    reserved: number;
+    out_of_service: number;
+    available: number;
     notes: string | null;
     facility_name?: string | null;
     unit_name?: string | null;
@@ -44,14 +47,21 @@ export interface CreateResourcePayload {
     resource_code?: string;
     resource_type?: ResourceType;
     quantity?: number;
-    status?: ResourceStatus;
     notes?: string;
+}
+
+export interface ResourceCountsPayload {
+    occupied: number;
+    reserved: number;
+    out_of_service: number;
 }
 
 export interface BulkAssignResourcePayload {
     resource_ids: string[];
     facility_id?: string | null;
     unit_id?: string | null;
+    /** Units to move from each resource (clamped to what's movable); omit to move all. */
+    quantity?: number | null;
 }
 
 export interface ResourceImportError {

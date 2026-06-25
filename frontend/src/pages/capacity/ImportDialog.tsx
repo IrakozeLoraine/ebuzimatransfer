@@ -31,12 +31,14 @@ export default function ImportDialog({
     const handleImport = () => {
         if (!file) return;
         importResources(file, {
-            onSuccess: (res) =>
+            onSuccess: (res) => {
                 toast({
                     variant: res.errors.length ? "warning" : "success",
                     title: `${res.created} resource(s) imported`,
                     description: res.errors.length ? `${res.errors.length} row(s) skipped` : undefined,
-                }),
+                })
+                if (res.errors.length === 0) handleClose(false)
+            },
             onError: (e) =>
                 toast({ variant: "destructive", title: "Import failed", description: getApiErrorMessage(e) }),
         });

@@ -64,8 +64,8 @@ export const NewReferralPage = () => {
   useEffect(() => {
     const facility = searchParams.get("facility");
     const unit = searchParams.get("unit");
-    if (facility) setValue("preferred_facility_id", facility);
-    if (unit) setValue("requested_unit_id", unit);
+    if (facility) setValue("preferred_facility_id", facility, { shouldValidate: true });
+    if (unit) setValue("requested_unit_id", unit, { shouldValidate: true });
   }, [searchParams, setValue]);
 
   const onSubmit = (data: NewReferralFormValues) => {
@@ -203,26 +203,28 @@ export const NewReferralPage = () => {
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label>Preferred Facility <span className="text-muted-foreground text-xs">(optional)</span></Label>
-              <Select value={watch("preferred_facility_id")} onValueChange={(v) => setValue("preferred_facility_id", v)}>
-                <SelectTrigger><SelectValue placeholder="Any available facility" /></SelectTrigger>
+              <Label>Preferred Facility <span className="text-destructive">*</span></Label>
+              <Select value={watch("preferred_facility_id")} onValueChange={(v) => setValue("preferred_facility_id", v, { shouldValidate: true })}>
+                <SelectTrigger><SelectValue placeholder="Select destination facility" /></SelectTrigger>
                 <SelectContent>
                   {facilities.map((f) => (
                     <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {errors.preferred_facility_id && <p className="text-xs text-destructive">{errors.preferred_facility_id.message}</p>}
             </div>
             <div className="space-y-1.5">
-              <Label>Requested Clinical Unit <span className="text-muted-foreground text-xs">(optional)</span></Label>
-              <Select value={watch("requested_unit_id")} onValueChange={(v) => setValue("requested_unit_id", v)}>
-                <SelectTrigger><SelectValue placeholder="Any unit" /></SelectTrigger>
+              <Label>Requested Clinical Unit <span className="text-destructive">*</span></Label>
+              <Select value={watch("requested_unit_id")} onValueChange={(v) => setValue("requested_unit_id", v, { shouldValidate: true })}>
+                <SelectTrigger><SelectValue placeholder="Select requested unit" /></SelectTrigger>
                 <SelectContent>
                   {units.map((u) => (
                     <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {errors.requested_unit_id && <p className="text-xs text-destructive">{errors.requested_unit_id.message}</p>}
             </div>
           </CardContent>
         </Card>

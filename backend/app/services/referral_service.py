@@ -4,7 +4,7 @@ from typing import List, Optional
 from datetime import datetime
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.exceptions import NotFoundError, InvalidStatusTransitionError, ValidationError
+from app.core.exceptions import NotFoundError, InvalidStatusTransitionError, ValidationError, ForbiddenError
 from app.models.referral import Referral, ReferralStatus, ReferralStatusHistory, ArrivalCondition, ALLOWED_TRANSITIONS
 from app.repositories.referral_repository import ReferralRepository
 from app.repositories.resource_repository import ResourceRepository
@@ -87,10 +87,38 @@ class ReferralService:
         await self.session.flush()
         return referral
 
-    async def accept(self, referral_id: uuid.UUID, data: AcceptReferralRequest, actor_id: uuid.UUID) -> Referral:
+    def assert_can_approve(self, referral: Referral, actor) -> None:
+        """Only staff at the destination (the facility — and, when named, the unit —
+        the request was sent to) may approve it, and never the clinician who sent it.
+        Super admins are exempt."""
+        roles = set(getattr(actor, "effective_roles", []))
+        if "SUPER_ADMIN" in roles:
+            return
+        if referral.created_by == actor.id:
+            raise ForbiddenError("You cannot approve a transfer request you sent.")
+        # Facility the request was sent to (it hasn't been accepted yet here).
+        receiving_facility_id = referral.preferred_facility_id
+        active = getattr(actor, "active_facility_id", None)
+        actor_facility_ids = (
+            {active} if active is not None else {f.id for f in getattr(actor, "facilities", [])}
+        )
+        if receiving_facility_id is None or receiving_facility_id not in actor_facility_ids:
+            raise ForbiddenError("Only staff at the destination facility can approve this request.")
+        # Clinicians must also work in the requested unit; facility admins manage the
+        # whole facility, so the unit constraint does not apply to them.
+        if (
+            referral.requested_unit_id is not None
+            and "FACILITY_ADMIN" not in roles
+            and referral.requested_unit_id not in set(getattr(actor, "unit_ids", []))
+        ):
+            raise ForbiddenError("Only staff in the requested unit can approve this request.")
+
+    async def accept(self, referral_id: uuid.UUID, data: AcceptReferralRequest, actor) -> Referral:
         referral = await self.repo.get_by_id(referral_id)
         if not referral:
             raise NotFoundError("Referral")
+        self.assert_can_approve(referral, actor)
+        actor_id = actor.id
         if ReferralStatus.ACCEPTED not in ALLOWED_TRANSITIONS.get(referral.status, []):
             raise InvalidStatusTransitionError(referral.status, ReferralStatus.ACCEPTED)
 
@@ -118,7 +146,7 @@ class ReferralService:
         resources = await self.resource_service.repo.list_scoped(facility_id=facility_id)
         available = [
             r for r in resources
-            if r.status.value == "AVAILABLE"
+            if r.available > 0
         ]
         if referral.requested_unit_id is not None:
             in_unit = [r for r in available if r.unit_id == referral.requested_unit_id]
@@ -126,10 +154,12 @@ class ReferralService:
                 return in_unit[0].id
         return available[0].id if available else None
 
-    async def reject(self, referral_id: uuid.UUID, data: RejectReferralRequest, actor_id: uuid.UUID) -> Referral:
+    async def reject(self, referral_id: uuid.UUID, data: RejectReferralRequest, actor) -> Referral:
         referral = await self.repo.get_by_id(referral_id)
         if not referral:
             raise NotFoundError("Referral")
+        self.assert_can_approve(referral, actor)
+        actor_id = actor.id
         if ReferralStatus.REJECTED not in ALLOWED_TRANSITIONS.get(referral.status, []):
             raise InvalidStatusTransitionError(referral.status, ReferralStatus.REJECTED)
         referral.status = ReferralStatus.REJECTED

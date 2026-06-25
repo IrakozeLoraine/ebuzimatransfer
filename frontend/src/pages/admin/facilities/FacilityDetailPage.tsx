@@ -1,109 +1,28 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Pencil, Building2, Users, UserPlus, X, UserX, UserCheck, Layers, Phone } from "lucide-react";
-import { useFacility, useFacilityUsers } from "@/hooks/useFacilities";
+import { ArrowLeft, Pencil, Building2, Users, UserX, Layers, Phone, RotateCcw } from "lucide-react";
+import { useFacility, useFacilityUsers, useReactivateFacility } from "@/hooks/useFacilities";
 import { useUnits } from "@/hooks/useUnits";
-import { useRemoveUserFromFacility } from "@/hooks/useUser";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
-import { ConfirmDialog } from "@/components/molecules/ConfirmDialog";
-import { DataTable } from "@/components/organisms/DataTable";
-import type { User } from "@/types/user";
 import { FacilityFormDialog } from "./FacilityFormDialog";
 import { FacilityPhoneLinesTab } from "./FacilityPhoneLinesTab";
-import { AssignUserDialog } from "../users/AssignUserDialog";
+import { FacilityUsersTab } from "./FacilityUsersTab";
 import { TYPE_BADGES, facilityTypeLabel } from "./constants";
-import { getRoleColor, ACCOUNT_STATUS_LABELS } from "../users/constants";
 
 export const FacilityDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: facility, isLoading } = useFacility(id);
-  const { data: users = [], isLoading: usersLoading } = useFacilityUsers(id);
+  const { data: users = [] } = useFacilityUsers(id);
   const { data: units = [] } = useUnits({ facility_id: id }, { enabled: !!id });
   const [tab, setTab] = useState("info");
   const [showEdit, setShowEdit] = useState(false);
-  const [showAssign, setShowAssign] = useState(false);
-  const [userSearch, setUserSearch] = useState("");
-  const [toRemove, setToRemove] = useState<User | null>(null);
 
-  const { mutate: removeFromFacility } = useRemoveUserFromFacility({
-    onSuccess: () => setToRemove(null),
-  });
+  const { mutate: reactivate, isPending: reactivating } = useReactivateFacility();
 
-  const filteredUsers = useMemo(() => {
-    const q = userSearch.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter(
-      (u) =>
-        `${u.first_name} ${u.last_name}`.toLowerCase().includes(q) ||
-        u.email.toLowerCase().includes(q) ||
-        u.medical_id.toLowerCase().includes(q)
-    );
-  }, [users, userSearch]);
-
-  const rolesAtFacility = (u: User) =>
-    u.facility_roles.find((fr) => fr.facility.id === id)?.roles ?? [];
-
-  const userColumns = [
-    {
-      header: "Name",
-      accessor: (u: User) => (
-        <div>
-          <p className="font-semibold">{u.first_name} {u.last_name}</p>
-          <p className="text-xs text-muted-foreground">{u.medical_id}</p>
-        </div>
-      ),
-    },
-    { header: "Email", accessor: (u: User) => <span className="text-sm text-muted-foreground">{u.email}</span> },
-    {
-      header: "Roles here",
-      accessor: (u: User) => (
-        <div className="flex flex-wrap gap-1.5">
-          {rolesAtFacility(u).map((name) => (
-            <span key={name} className={`rounded-full px-2 py-0.5 text-xs font-medium ${getRoleColor(name)}`}>
-              {name.replace(/_/g, " ")}
-            </span>
-          ))}
-        </div>
-      ),
-    },
-    {
-      header: "Status",
-      accessor: (u: User) => {
-        const label = ACCOUNT_STATUS_LABELS[u.account_status] ?? u.account_status;
-        const colorClass =
-          u.account_status === "ACTIVE"
-            ? "text-emerald-600"
-            : u.account_status === "PASSWORD_RESET_ENABLED"
-              ? "text-amber-600"
-              : "text-muted-foreground";
-        return (
-          <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${colorClass}`}>
-            {u.is_active ? <UserCheck className="h-3.5 w-3.5" /> : <UserX className="h-3.5 w-3.5" />}
-            {label}
-          </span>
-        );
-      },
-    },
-    {
-      header: "",
-      accessor: (u: User) => (
-        <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-            onClick={() => setToRemove(u)}
-          >
-            <X className="mr-1 h-4 w-4" /> Remove
-          </Button>
-        </div>
-      ),
-    },
-  ];
+  const isInactive = !!facility && !facility.is_active;
 
   if (!isLoading && !facility) {
     return (
@@ -160,6 +79,29 @@ export const FacilityDetailPage = () => {
         )}
       </div>
 
+      {isInactive && (
+        <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2.5">
+            <UserX className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div>
+              <p className="text-sm font-medium text-amber-900">This facility is deactivated</p>
+              <p className="text-xs text-amber-700">
+                You can't assign users or add phone lines while it's inactive. Reactivate it to make changes.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            className="shrink-0 border-amber-300 bg-white text-amber-900 hover:bg-amber-100"
+            disabled={reactivating}
+            onClick={() => facility && reactivate(facility.id)}
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
+            {reactivating ? "Reactivating…" : "Reactivate"}
+          </Button>
+        </div>
+      )}
+
       <Tabs
         value={tab}
         onValueChange={setTab}
@@ -184,29 +126,13 @@ export const FacilityDetailPage = () => {
         </Card>
       )}
 
-      {tab === "users" && (
-        <div className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <Input
-              value={userSearch}
-              onChange={(e) => setUserSearch(e.target.value)}
-              placeholder="Search assigned users by name, email, or medical ID…"
-              className="sm:max-w-sm"
-            />
-            <Button onClick={() => setShowAssign(true)}>
-              <UserPlus className="mr-2 h-4 w-4" /> Assign User
-            </Button>
-          </div>
-          <DataTable
-            columns={userColumns}
-            data={filteredUsers}
-            isLoading={usersLoading}
-            keyExtractor={(u) => u.id}
-            onRowClick={(u) => navigate(`/admin/users/${u.id}`)}
-            emptyMessage="No users assigned to this facility"
-            pageSize={10}
-          />
-        </div>
+      {tab === "users" && facility && (
+        <FacilityUsersTab
+          facilityId={facility.id}
+          facilityName={facility.name}
+          isInactive={isInactive}
+          isSuperAdmin
+        />
       )}
 
       {tab === "units" && (
@@ -233,24 +159,9 @@ export const FacilityDetailPage = () => {
         </Card>
       )}
 
-      {tab === "phones" && id && <FacilityPhoneLinesTab facilityId={id} />}
+      {tab === "phones" && id && <FacilityPhoneLinesTab facilityId={id} disabled={isInactive} />}
 
       <FacilityFormDialog open={showEdit} facility={facility ?? null} onOpenChange={setShowEdit} />
-      <AssignUserDialog
-        open={showAssign}
-        onOpenChange={setShowAssign}
-        fixedFacility={facility ? { id: facility.id, name: facility.name } : null}
-      />
-
-      <ConfirmDialog
-        open={!!toRemove}
-        title="Remove from facility"
-        description={`Remove ${toRemove?.first_name} ${toRemove?.last_name} from ${facility?.name}? They will lose all roles at this facility.`}
-        confirmLabel="Remove"
-        destructive
-        onConfirm={() => id && toRemove && removeFromFacility({ userId: toRemove.id, facilityId: id })}
-        onCancel={() => setToRemove(null)}
-      />
     </div>
   );
 };

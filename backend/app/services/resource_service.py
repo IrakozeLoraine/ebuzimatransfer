@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundError, ResourceReservedError, ValidationError
+from app.core.spreadsheet import read_csv_rows, read_xlsx_rows
 from app.core.tiers import tier_rank
 from app.models.resource import Resource, ResourceStatus, ResourceType, ResourceReservation
 from app.models.unit import Unit
@@ -13,7 +14,7 @@ from app.models.facility import Facility
 from app.repositories.resource_repository import ResourceRepository
 from app.schemas.resource import (
     ResourceCreate,
-    ResourceStatusUpdate,
+    ResourceCountsUpdate,
     ResourceOut,
     ReservationOut,
     ResourceUsageOut,
@@ -34,7 +35,10 @@ def _to_out(resource: Resource) -> ResourceOut:
         unit_id=resource.unit_id,
         facility_id=resource.facility_id,
         quantity=resource.quantity,
-        status=resource.status,
+        occupied=resource.occupied,
+        reserved=resource.reserved,
+        out_of_service=resource.out_of_service,
+        available=resource.available,
         facility_name=resource.facility.name if resource.facility else None,
         unit_name=resource.unit.name if resource.unit else None,
     )
@@ -74,6 +78,10 @@ class ResourceService:
         payload = data.model_dump()
         await self._validate_unit_facility(payload.get("unit_id"), payload.get("facility_id"))
         resource = Resource(**payload)
+        # Central stock (no facility/unit) is out of circulation until assigned;
+        # everything else starts fully available.
+        if resource.facility_id is None and resource.unit_id is None:
+            resource.out_of_service = resource.quantity
         return await self.repo.create(resource)
 
     async def get(self, resource_id: uuid.UUID) -> Resource:
@@ -98,35 +106,175 @@ class ResourceService:
         resources = await self.repo.list_available(unit_id=unit_id)
         return [_to_out(r) for r in resources]
 
-    async def update_status(self, resource_id: uuid.UUID, data: ResourceStatusUpdate) -> Resource:
+    async def add_units(self, resource_id: uuid.UUID, count: int) -> ResourceOut:
+        """Add ``count`` units to an existing resource group. Units added to a
+        facility/unit are immediately available; units added to central stock are
+        held out of circulation (out-of-service) until assigned, matching how
+        stock is created."""
+        if count < 1:
+            raise ValidationError("Count must be at least 1")
         resource = await self.get(resource_id)
-        resource.status = data.status
+        resource.quantity += count
+        if resource.facility_id is None and resource.unit_id is None:
+            resource.out_of_service += count
+        # Elsewhere the new units fall into the derived AVAILABLE pool.
+        await self.session.flush()
+        result = await self.session.execute(
+            select(Resource)
+            .where(Resource.id == resource_id)
+            .options(selectinload(Resource.unit), selectinload(Resource.facility))
+        )
+        return _to_out(result.scalar_one())
+
+    async def remove_units(self, resource_id: uuid.UUID, count: int) -> ResourceOut:
+        """Remove ``count`` units from a resource group. Only out-of-service units
+        may be removed — in-use (available/occupied/reserved) units stay put. A
+        group emptied to zero is deleted."""
+        if count < 1:
+            raise ValidationError("Count must be at least 1")
+        result = await self.session.execute(
+            select(Resource)
+            .where(Resource.id == resource_id)
+            .options(selectinload(Resource.unit), selectinload(Resource.facility))
+        )
+        resource = result.scalar_one_or_none()
+        if not resource:
+            raise NotFoundError("Resource")
+        if count > resource.out_of_service:
+            raise ValidationError(
+                f"Only {resource.out_of_service} out-of-service unit(s) can be removed"
+            )
+        resource.quantity -= count
+        resource.out_of_service -= count
+        out = _to_out(resource)
+        if resource.quantity <= 0:
+            await self.session.delete(resource)
+        await self.session.flush()
+        return out
+
+    async def update_counts(self, resource_id: uuid.UUID, data: ResourceCountsUpdate) -> Resource:
+        """Set the per-status unit counts for a resource group. AVAILABLE is the
+        remainder, so the supplied counts may not exceed the group's quantity."""
+        resource = await self.get(resource_id)
+        if data.occupied + data.reserved + data.out_of_service > resource.quantity:
+            raise ValidationError(
+                f"Occupied, reserved and out-of-service units cannot exceed the quantity ({resource.quantity})"
+            )
+        resource.occupied = data.occupied
+        resource.reserved = data.reserved
+        resource.out_of_service = data.out_of_service
         await self.session.flush()
         return resource
+
+    @staticmethod
+    def _movable(resource: Resource) -> int:
+        """How many of a group's units can be (re-)assigned right now. Central
+        stock (no facility/unit) is held entirely out of circulation, so all of
+        it is movable; anywhere else only the AVAILABLE units may be moved —
+        occupied/reserved/out-of-service units stay put with their group."""
+        if resource.facility_id is None and resource.unit_id is None:
+            return resource.quantity
+        return resource.available
+
+    async def _find_merge_target(
+        self,
+        source: Resource,
+        facility_id: uuid.UUID | None,
+        unit_id: uuid.UUID | None,
+    ) -> Resource | None:
+        """An existing, identical resource group already at the destination, into
+        which split-off units should be merged (same name, code and type)."""
+
+        def eq(col, val):
+            return col.is_(None) if val is None else col == val
+
+        result = await self.session.execute(
+            select(Resource).where(
+                Resource.id != source.id,
+                eq(Resource.facility_id, facility_id),
+                eq(Resource.unit_id, unit_id),
+                Resource.resource_name == source.resource_name,
+                eq(Resource.resource_code, source.resource_code),
+                eq(Resource.resource_type, source.resource_type),
+            )
+        )
+        return result.scalars().first()
 
     async def assign(
         self,
         resource_id: uuid.UUID,
         facility_id: uuid.UUID | None,
         unit_id: uuid.UUID | None,
-    ) -> ResourceOut:
+        quantity: int | None = None,
+    ) -> ResourceOut | None:
+        """Move ``quantity`` units of a resource group to a facility/unit (or back
+        to central stock when both are null). ``quantity`` is clamped to what's
+        movable; ``None`` moves everything movable. The moved units are split off
+        the source and merged into an identical group at the destination if one
+        exists, otherwise they form a new group. Returns ``None`` when the source
+        has nothing movable (so bulk callers can skip it)."""
         resource = await self.get(resource_id)
         if unit_id is not None:
             # A clinical unit only exists in the context of a facility.
             if facility_id is None:
                 raise ValidationError("A facility is required when assigning a unit")
             await self._validate_unit_facility(unit_id, facility_id)
+
+        movable = self._movable(resource)
+        qty = movable if quantity is None else min(quantity, movable)
+        if qty < 1:
+            return None
+
+        dest_is_stock = facility_id is None and unit_id is None
+        source_is_stock = resource.facility_id is None and resource.unit_id is None
+        target = await self._find_merge_target(resource, facility_id, unit_id)
+
+        if qty == resource.quantity and target is None:
+            # Whole group relocating with nothing to merge into: relabel in place
+            # so the row (and any reservations on it) keeps its identity.
+            resource.facility_id = facility_id
             resource.unit_id = unit_id
-            resource.facility_id = facility_id
+            resource.occupied = 0
+            resource.reserved = 0
+            # Central stock is held out of circulation until re-assigned.
+            resource.out_of_service = resource.quantity if dest_is_stock else 0
+            moved = resource
         else:
-            # Assign to a facility without a specific unit, or clear (back to stock).
-            resource.unit_id = None
-            resource.facility_id = facility_id
+            # Split: take qty units off the source group.
+            resource.quantity -= qty
+            if source_is_stock:
+                # The moved units came from the out-of-service stock pool.
+                resource.out_of_service = max(0, resource.out_of_service - qty)
+            # Elsewhere the units came from the (derived) AVAILABLE pool, so the
+            # remaining counts are already correct.
+
+            if target is not None:
+                target.quantity += qty
+                if dest_is_stock:
+                    target.out_of_service += qty
+                moved = target
+            else:
+                moved = Resource(
+                    resource_name=resource.resource_name,
+                    resource_code=resource.resource_code,
+                    resource_type=resource.resource_type,
+                    notes=resource.notes,
+                    quantity=qty,
+                    facility_id=facility_id,
+                    unit_id=unit_id,
+                    out_of_service=qty if dest_is_stock else 0,
+                )
+                self.session.add(moved)
+
+            if resource.quantity <= 0:
+                # The whole group was merged away — drop the emptied source row.
+                await self.session.delete(resource)
+
         await self.session.flush()
         # Reload with relationships for display.
         result = await self.session.execute(
             select(Resource)
-            .where(Resource.id == resource_id)
+            .where(Resource.id == moved.id)
             .options(selectinload(Resource.unit), selectinload(Resource.facility))
         )
         return _to_out(result.scalar_one())
@@ -153,29 +301,6 @@ class ResourceService:
         ]
         return ResourceUsageOut(resource=_to_out(resource), reservations=reservations)
 
-    @staticmethod
-    def _read_xlsx_rows(file_bytes: bytes) -> list[tuple]:
-        import io
-        from openpyxl import load_workbook
-
-        try:
-            wb = load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
-        except Exception:
-            raise ValidationError("Could not read the uploaded file. Please upload a valid .xlsx file.")
-        ws = wb.active
-        return list(ws.iter_rows(values_only=True))
-
-    @staticmethod
-    def _read_csv_rows(file_bytes: bytes) -> list[tuple]:
-        import csv
-        import io
-
-        try:
-            text = file_bytes.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            raise ValidationError("Could not read the uploaded file. Please upload a valid .csv file.")
-        return [tuple(row) for row in csv.reader(io.StringIO(text))]
-
     async def import_from_excel(
         self,
         file_bytes: bytes,
@@ -191,7 +316,7 @@ class ResourceService:
         available at this facility) are reported as errors while the remaining
         valid rows are still imported.
         """
-        rows = self._read_csv_rows(file_bytes) if is_csv else self._read_xlsx_rows(file_bytes)
+        rows = read_csv_rows(file_bytes) if is_csv else read_xlsx_rows(file_bytes)
         if not rows:
             return ResourceImportResult(created=0, errors=[])
 
@@ -293,7 +418,6 @@ class ResourceService:
                     notes=cell(idx_notes),
                     unit_id=unit_id,
                     facility_id=facility_id,
-                    status=ResourceStatus.AVAILABLE,
                 )
             )
             created += 1
@@ -311,10 +435,11 @@ class ResourceService:
         """Atomically reserve a resource using SELECT FOR UPDATE. Optionally links
         the reservation to the transfer request (referral) it fulfils."""
         resource = await self.repo.lock_for_update(resource_id)
-        if not resource or resource.status != ResourceStatus.AVAILABLE:
+        if not resource or resource.available < 1:
             raise ResourceReservedError()
 
-        resource.status = ResourceStatus.RESERVED
+        # Hold one unit of the group for the incoming patient.
+        resource.reserved += 1
         reservation = ResourceReservation(
             resource_id=resource_id,
             reserved_by=reserved_by,

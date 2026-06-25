@@ -31,6 +31,16 @@ class PhoneLineOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PhoneLineImportError(BaseModel):
+    row: int
+    message: str
+
+
+class PhoneLineImportResult(BaseModel):
+    created: int
+    errors: list[PhoneLineImportError] = []
+
+
 class CallLogCreate(BaseModel):
     to_number: str
     to_facility_id: Optional[uuid.UUID] = None

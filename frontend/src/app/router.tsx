@@ -4,6 +4,11 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { RoleGuard } from "@/components/layout/RoleGuard";
+import { RouteError } from "@/components/layout/RouteError";
+
+const NotFoundPage = lazy(() =>
+  import("@/pages/NotFoundPage").then((m) => ({ default: m.NotFoundPage }))
+);
 
 const LoginPage = lazy(() =>
   import("@/pages/login/LoginPage").then((m) => ({ default: m.LoginPage }))
@@ -16,11 +21,6 @@ const DashboardPage = lazy(() =>
 const ResourcesPage = lazy(() =>
   import("@/pages/capacity/ResourcesPage").then((m) => ({
     default: m.ResourcesPage,
-  }))
-);
-const ReportsPage = lazy(() =>
-  import("@/pages/reports/ReportsPage").then((m) => ({
-    default: m.ReportsPage,
   }))
 );
 const UsersPage = lazy(() =>
@@ -43,6 +43,11 @@ const FacilityDetailPage = lazy(() =>
     default: m.FacilityDetailPage,
   }))
 );
+const FacilityProfilePage = lazy(() =>
+  import("@/pages/admin/facilities/FacilityProfilePage").then((m) => ({
+    default: m.FacilityProfilePage,
+  }))
+);
 const AuditLogsPage = lazy(() =>
   import("@/pages/admin/AuditLogsPage").then((m) => ({
     default: m.AuditLogsPage,
@@ -53,9 +58,9 @@ const UnitsCatalogPage = lazy(() =>
     default: m.UnitsCatalogPage,
   }))
 );
-const DevicesPage = lazy(() =>
-  import("@/pages/admin/DevicesPage").then((m) => ({
-    default: m.DevicesPage,
+const AmbulancesPage = lazy(() =>
+  import("@/pages/admin/AmbulancesPage").then((m) => ({
+    default: m.AmbulancesPage,
   }))
 );
 const FindResourcesPage = lazy(() =>
@@ -100,9 +105,10 @@ const withSuspense = (element: React.ReactNode) => (
 );
 
 export const router = createBrowserRouter([
-  { path: "/login", element: withSuspense(<LoginPage />) },
+  { path: "/login", element: withSuspense(<LoginPage />), errorElement: <RouteError /> },
   {
     element: <ProtectedRoute />,
+    errorElement: <RouteError />,
     children: [
       {
         element: <AppLayout />,
@@ -142,14 +148,6 @@ export const router = createBrowserRouter([
             element: withSuspense(<AmbulanceTrackingPage />),
           },
           {
-            path: "/reports",
-            element: (
-              <RoleGuard roles={["SUPER_ADMIN"]}>
-                <ReportsPage />
-              </RoleGuard>
-            ),
-          },
-          {
             path: "/admin/users",
             element: (
               <RoleGuard roles={["SUPER_ADMIN", "FACILITY_ADMIN"]}>
@@ -168,6 +166,14 @@ export const router = createBrowserRouter([
           },
           { path: "/admin/facilities/:id", element: <RoleGuard roles={["SUPER_ADMIN"]}><FacilityDetailPage /></RoleGuard> },
           {
+            path: "/facility",
+            element: (
+              <RoleGuard roles={["FACILITY_ADMIN"]}>
+                <FacilityProfilePage />
+              </RoleGuard>
+            ),
+          },
+          {
             path: "/admin/units",
             element: (
               <RoleGuard roles={["SUPER_ADMIN"]}>
@@ -176,10 +182,10 @@ export const router = createBrowserRouter([
             ),
           },
           {
-            path: "/admin/devices",
+            path: "/admin/ambulances",
             element: (
               <RoleGuard roles={["SUPER_ADMIN", "FACILITY_ADMIN"]}>
-                <DevicesPage />
+                <AmbulancesPage />
               </RoleGuard>
             ),
           },
@@ -190,10 +196,13 @@ export const router = createBrowserRouter([
                 <AuditLogsPage />
               </RoleGuard>
             ),
-          }
+          },
+          // Unknown in-app paths render a 404 within the authenticated shell.
+          { path: "*", element: withSuspense(<NotFoundPage />) },
         ],
       },
     ],
   },
-  { path: "*", element: <Navigate to="/dashboard" replace /> },
+  // Fallback for anything outside the app shell (e.g. unauthenticated bad paths).
+  { path: "*", element: withSuspense(<NotFoundPage />), errorElement: <RouteError /> },
 ]);

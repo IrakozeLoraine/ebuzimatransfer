@@ -1,0 +1,4 @@
+label,phone_number,line_type
+ER Main Reception,0788000111,COORDINATION
+Emergency Hotline,912,EMERGENCY
+Duty Supervisor,0788000222,SUPERVISOR
