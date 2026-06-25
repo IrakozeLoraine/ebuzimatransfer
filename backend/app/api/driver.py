@@ -114,6 +114,24 @@ async def current_journey(
     return await _build_journey(session, t)
 
 
+@router.get("/journeys", response_model=list[DriverJourney])
+async def journey_history(
+    ambulance=Depends(get_current_ambulance),
+    session: AsyncSession = Depends(get_session),
+):
+    """This ambulance's completed journeys, most recent arrival first."""
+    rows = await session.scalars(
+        select(TransportEvent)
+        .where(
+            TransportEvent.ambulance_id == ambulance.id,
+            TransportEvent.arrival_time.isnot(None),
+        )
+        .order_by(TransportEvent.arrival_time.desc())
+        .limit(50)
+    )
+    return [await _build_journey(session, t) for t in rows]
+
+
 async def _load_active_transport(session: AsyncSession, ambulance) -> TransportEvent:
     t = await _active_transport(session, ambulance.id)
     if not t:

@@ -7,6 +7,7 @@ import '../config.dart';
 import '../driver_api.dart';
 import '../location.dart';
 import '../theme.dart';
+import 'history_screen.dart';
 
 /// The driver's main screen. It shows the single journey assigned to this
 /// ambulance (sending → receiving hospital) and one big button for the next
@@ -154,6 +155,17 @@ class _JourneyScreenState extends State<JourneyScreen> {
         title: Text(widget.config.plate.isEmpty ? 'My journey' : widget.config.plate),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), tooltip: 'Refresh', onPressed: _busy ? null : () => _refresh()),
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'Journey history',
+            onPressed: _busy
+                ? null
+                : () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => HistoryScreen(config: widget.config),
+                      ),
+                    ),
+          ),
           IconButton(icon: const Icon(Icons.logout), tooltip: 'Sign out', onPressed: _busy ? null : _signOut),
         ],
       ),

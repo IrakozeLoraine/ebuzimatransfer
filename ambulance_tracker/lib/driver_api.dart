@@ -26,6 +26,9 @@ class Journey {
     required this.step,
     this.sending,
     this.receiving,
+    this.dispatchTime,
+    this.pickupTime,
+    this.arrivalTime,
   });
 
   final String transportId;
@@ -35,9 +38,18 @@ class Journey {
   final String step;
   final JourneyPoint? sending;
   final JourneyPoint? receiving;
+  final DateTime? dispatchTime;
+  final DateTime? pickupTime;
+  final DateTime? arrivalTime;
 
   /// True while the ambulance is moving and should be streaming its position.
   bool get isTracking => step == 'EN_ROUTE_TO_PICKUP' || step == 'PATIENT_ONBOARD';
+
+  /// A finished trip — used to list past journeys in the history view.
+  bool get isComplete => arrivalTime != null;
+
+  static DateTime? _parseTime(dynamic v) =>
+      v is String && v.isNotEmpty ? DateTime.tryParse(v)?.toLocal() : null;
 
   static Journey fromJson(Map<String, dynamic> j) => Journey(
         transportId: j['transport_id'] as String,
@@ -45,6 +57,9 @@ class Journey {
         step: j['step'] as String? ?? 'ASSIGNED',
         sending: JourneyPoint.fromJson(j['sending'] as Map<String, dynamic>?),
         receiving: JourneyPoint.fromJson(j['receiving'] as Map<String, dynamic>?),
+        dispatchTime: _parseTime(j['dispatch_time']),
+        pickupTime: _parseTime(j['pickup_time']),
+        arrivalTime: _parseTime(j['arrival_time']),
       );
 }
 
@@ -116,6 +131,19 @@ class DriverApi {
     final body = resp.body.trim();
     if (body.isEmpty || body == 'null') return null;
     return Journey.fromJson(jsonDecode(body) as Map<String, dynamic>);
+  }
+
+  /// This ambulance's completed journeys, most recent first.
+  Future<List<Journey>> journeys({required String baseUrl, required String token}) async {
+    final resp = await _client
+        .get(_uri(baseUrl, '/driver/journeys'), headers: _authHeaders(token))
+        .timeout(const Duration(seconds: 20));
+    if (resp.statusCode == 401) throw ApiException('Session expired. Sign in again.');
+    if (resp.statusCode != 200) throw ApiException('Could not load journey history (${resp.statusCode}).');
+    final body = resp.body.trim();
+    if (body.isEmpty || body == 'null') return const [];
+    final list = jsonDecode(body) as List<dynamic>;
+    return list.map((e) => Journey.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   Future<Journey> _advance(String baseUrl, String token, String path) async {
