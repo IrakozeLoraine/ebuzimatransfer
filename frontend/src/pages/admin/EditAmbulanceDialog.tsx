@@ -81,11 +81,11 @@ export default function EditAmbulanceDialog({
                         </div>
                         <div className="grid gap-3 sm:grid-cols-2">
                             <div className="space-y-1.5">
-                                <Label>Driver name</Label>
+                                <Label>Driver name <span className="text-muted-foreground">(optional)</span></Label>
                                 <Input value={driverName} onChange={(e) => setDriverName(e.target.value)} />
                             </div>
                             <div className="space-y-1.5">
-                                <Label>Driver phone</Label>
+                                <Label>Driver phone <span className="text-muted-foreground">(optional)</span></Label>
                                 <Input value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} />
                             </div>
                         </div>

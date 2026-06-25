@@ -1,0 +1,149 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs for the same ref when a new commit is pushed.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Backend — FastAPI / SQLAlchemy / Alembic
+  # Validates that dependencies resolve, all modules compile, and the full
+  # migration history applies cleanly against a real PostgreSQL instance.
+  # ---------------------------------------------------------------------------
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ebuzimauser
+          POSTGRES_PASSWORD: ebuzimapass
+          POSTGRES_DB: ebuzimadb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ebuzimauser -d ebuzimadb"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://ebuzimauser:ebuzimapass@localhost:5432/ebuzimadb
+      SECRET_KEY: ci-test-secret
+      JWT_ALGORITHM: HS256
+      ALLOWED_ORIGINS: http://localhost:5173
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compile all modules (syntax check)
+        run: python -m compileall app seeds.py
+
+      - name: Apply database migrations
+        run: alembic upgrade head
+
+      - name: Verify the app imports and boots
+        run: python -c "from app.main import app; print('OK', app.title)"
+
+  # ---------------------------------------------------------------------------
+  # Frontend — React 19 / TypeScript / Vite
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check and build
+        run: npm run build
+
+  # ---------------------------------------------------------------------------
+  # Mobile — Flutter ambulance tracker
+  # ---------------------------------------------------------------------------
+  mobile:
+    name: Mobile (Flutter)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ambulance_tracker
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+  # ---------------------------------------------------------------------------
+  # Docker — make sure the production images actually build.
+  # ---------------------------------------------------------------------------
+  docker-build:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: false
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max

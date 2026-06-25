@@ -1,0 +1,48 @@
+name: Deploy
+
+# Runs after CI succeeds on main, and can be triggered manually.
+# Deployment is a no-op unless the deploy secrets below are configured.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    # Only deploy when the triggering CI run passed (manual runs always proceed).
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    environment: production
+
+    steps:
+      - name: Check deploy configuration
+        id: config
+        run: |
+          if [ -n "${{ secrets.DEPLOY_HOST }}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deploy secrets not configured — skipping. See README for required secrets."
+          fi
+
+      - name: Deploy over SSH
+        if: steps.config.outputs.configured == 'true'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          # DEPLOY_PATH is the checkout of this repo on the server.
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+            git pull --ff-only origin main
+            ./deploy.sh

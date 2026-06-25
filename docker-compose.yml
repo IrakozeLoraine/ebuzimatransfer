@@ -16,6 +16,15 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: ebuzimaredis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -23,6 +32,7 @@ services:
     container_name: ebuzimabackend
     environment:
       DATABASE_URL: postgresql+asyncpg://ebuzimauser:ebuzimapass@db:5432/ebuzimadb
+      REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-supersecretchangeme}
       JWT_ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 60
@@ -33,6 +43,8 @@ services:
       - "8000:8000"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     command: >
       sh -c "alembic upgrade head && python seeds.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"

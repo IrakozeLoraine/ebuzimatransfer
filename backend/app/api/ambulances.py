@@ -107,20 +107,21 @@ async def create_ambulance(
     if facility_id is None:
         raise ValidationError("A facility is required to register an ambulance")
 
-    login_id = payload.login_id.strip()
-    if not login_id:
-        raise ValidationError("A driver login ID is required")
-    exists = await session.scalar(select(Ambulance).where(Ambulance.login_id == login_id))
+    # The plate number doubles as the driver's login ID — one less thing to set.
+    plate_number = payload.plate_number.strip()
+    if not plate_number:
+        raise ValidationError("A plate number is required")
+    exists = await session.scalar(select(Ambulance).where(Ambulance.login_id == plate_number))
     if exists:
-        raise ValidationError("That login ID is already in use")
+        raise ValidationError("An ambulance with that plate number is already registered")
 
     password = generate_password()
     amb = Ambulance(
         facility_id=facility_id,
-        plate_number=payload.plate_number.strip(),
+        plate_number=plate_number,
         driver_name=payload.driver_name,
         driver_phone=payload.driver_phone,
-        login_id=login_id,
+        login_id=plate_number,
         password_hash=hash_password(password),
     )
     session.add(amb)
@@ -152,7 +153,18 @@ async def update_ambulance(
         raise ForbiddenError()
 
     if payload.plate_number is not None:
-        amb.plate_number = payload.plate_number.strip()
+        new_plate = payload.plate_number.strip()
+        if new_plate != amb.plate_number:
+            clash = await session.scalar(
+                select(Ambulance).where(
+                    Ambulance.login_id == new_plate, Ambulance.id != amb.id
+                )
+            )
+            if clash:
+                raise ValidationError("An ambulance with that plate number is already registered")
+        # The login ID tracks the plate number, so update both together.
+        amb.plate_number = new_plate
+        amb.login_id = new_plate
     if payload.driver_name is not None:
         amb.driver_name = payload.driver_name
     if payload.driver_phone is not None:

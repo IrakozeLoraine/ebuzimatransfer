@@ -27,16 +27,15 @@ export default function AmbulanceFormDialog({
     const [plate, setPlate] = useState("");
     const [driverName, setDriverName] = useState("");
     const [driverPhone, setDriverPhone] = useState("");
-    const [loginId, setLoginId] = useState("");
     const [facilityId, setFacilityId] = useState("");
 
     const reset = () => {
-        setPlate(""); setDriverName(""); setDriverPhone(""); setLoginId(""); setFacilityId("");
+        setPlate(""); setDriverName(""); setDriverPhone(""); setFacilityId("");
     };
 
     const submit = () => {
-        if (!plate.trim() || !loginId.trim()) {
-            toast({ variant: "destructive", title: "Plate and driver login ID are required" });
+        if (!plate.trim()) {
+            toast({ variant: "destructive", title: "Plate number is required" });
             return;
         }
         if (requireFacility && !facilityId) {
@@ -48,7 +47,6 @@ export default function AmbulanceFormDialog({
                 plate_number: plate.trim(),
                 driver_name: driverName || undefined,
                 driver_phone: driverPhone || undefined,
-                login_id: loginId.trim(),
                 facility_id: requireFacility ? facilityId : undefined,
             },
             {
@@ -75,11 +73,11 @@ export default function AmbulanceFormDialog({
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                            <Label>Driver name</Label>
+                            <Label>Driver name <span className="text-muted-foreground">(optional)</span></Label>
                             <Input value={driverName} onChange={(e) => setDriverName(e.target.value)} />
                         </div>
                         <div className="space-y-1.5">
-                            <Label>Driver phone</Label>
+                            <Label>Driver phone <span className="text-muted-foreground">(optional)</span></Label>
                             <Input value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} />
                         </div>
                     </div>
@@ -98,14 +96,11 @@ export default function AmbulanceFormDialog({
                             </Select>
                         </div>
                     )}
-                    <div className="rounded-lg border bg-muted/40 p-3 space-y-3">
-                        <div className="space-y-1.5">
-                            <Label>Driver login ID</Label>
-                            <Input value={loginId} onChange={(e) => setLoginId(e.target.value)} placeholder="e.g. amb-432h" autoCapitalize="none" />
-                        </div>
+                    <div className="rounded-lg border bg-muted/40 p-3">
                         <p className="text-xs text-muted-foreground">
-                            A password is generated automatically. After you register, you'll get a
-                            QR code to set up the driver's phone in one scan.
+                            The driver signs in with the plate number as their login ID. A password is
+                            generated automatically — after you register, you'll get a QR code to set up
+                            the driver's phone in one scan.
                         </p>
                     </div>
                     <div className="flex justify-end gap-2 pt-1">

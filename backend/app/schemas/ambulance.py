@@ -11,12 +11,12 @@ from pydantic import BaseModel
 
 class AmbulanceCreate(BaseModel):
     plate_number: str
+    # Optional driver details — handy but not required.
     driver_name: Optional[str] = None
     driver_phone: Optional[str] = None
     facility_id: Optional[uuid.UUID] = None
-    # The admin picks a memorable login ID; the server generates the password and
-    # reveals it once (no admin-chosen passwords to leak or reuse).
-    login_id: str
+    # The driver login ID is the plate number; the server generates the password
+    # and reveals it once (no admin-chosen logins or passwords to leak or reuse).
 
 
 class AmbulanceUpdate(BaseModel):

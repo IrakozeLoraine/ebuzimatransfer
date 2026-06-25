@@ -47,7 +47,6 @@ export interface CreateAmbulancePayload {
   driver_name?: string;
   driver_phone?: string;
   facility_id?: string;
-  login_id: string;
 }
 
 export interface UpdateAmbulancePayload {

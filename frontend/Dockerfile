@@ -6,6 +6,7 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+ENV NODE_OPTIONS=--max-old-space-size=1536
 RUN npm run build
 
 FROM nginx:alpine
