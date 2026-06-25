@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../config.dart';
 import '../driver_api.dart';
+import '../theme.dart';
 import 'scan_screen.dart';
 
 /// Driver sign-in. The easy path is to scan the setup QR the hospital console
@@ -20,8 +21,6 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _api = DriverApi();
-  late final TextEditingController _baseUrl =
-      TextEditingController(text: widget.initial.baseUrl);
   final _loginId = TextEditingController();
   final _password = TextEditingController();
   bool _obscure = true;
@@ -29,7 +28,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _baseUrl.dispose();
     _loginId.dispose();
     _password.dispose();
     super.dispose();
@@ -41,7 +39,6 @@ class _LoginScreenState extends State<LoginScreen> {
       MaterialPageRoute(builder: (_) => const ScanScreen()),
     );
     if (payload == null) return;
-    _baseUrl.text = payload.serverUrl;
     _loginId.text = payload.loginId;
     _password.text = payload.password;
     await _signIn();
@@ -52,12 +49,11 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _busy = true);
     try {
       final result = await _api.login(
-        baseUrl: _baseUrl.text.trim(),
+        baseUrl: kBackendBaseUrl,
         loginId: _loginId.text.trim(),
         password: _password.text,
       );
       final config = Config(
-        baseUrl: _baseUrl.text.trim(),
         token: result.token,
         plate: result.plate,
         intervalSeconds: widget.initial.intervalSeconds,
@@ -82,110 +78,123 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              const SizedBox(height: 24),
-              const Icon(Icons.local_hospital, size: 56, color: Color(0xFFdc2626)),
-              const SizedBox(height: 8),
-              Text(
-                'Set up this ambulance',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Scan the setup code from the hospital console to sign in — or enter '
-                'the details by hand below.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 28),
-              FilledButton.icon(
-                onPressed: _busy ? null : _scan,
-                icon: const Icon(Icons.qr_code_scanner),
-                label: const Text('Scan setup code'),
-                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-              ),
-              const SizedBox(height: 20),
-              Row(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
                 children: [
-                  const Expanded(child: Divider()),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(
-                      'or enter manually',
-                      style: Theme.of(context).textTheme.bodySmall,
+                  const SizedBox(height: 8),
+                  const BrandHeader(),
+                  const SizedBox(height: 36),
+                  const Text(
+                    'Set up this ambulance',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.foreground,
                     ),
                   ),
-                  const Expanded(child: Divider()),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Scan the setup code from the hospital console to sign in — or '
+                    'enter the details by hand below.',
+                    style: TextStyle(fontSize: 14, color: AppColors.mutedForeground),
+                  ),
+                  const SizedBox(height: 28),
+                  SizedBox(
+                    height: 52,
+                    child: FilledButton.icon(
+                      onPressed: _busy ? null : _scan,
+                      icon: const Icon(Icons.qr_code_scanner),
+                      label: const Text('Scan setup code'),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Row(
+                    children: [
+                      Expanded(child: Divider()),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(
+                          'or enter manually',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.mutedForeground,
+                          ),
+                        ),
+                      ),
+                      Expanded(child: Divider()),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  _label('Login ID'),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: _loginId,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      hintText: 'Ambulance plate number',
+                    ),
+                    validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  _label('Password'),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: _password,
+                    obscureText: _obscure,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    onFieldSubmitted: (_) => _signIn(),
+                    decoration: InputDecoration(
+                      hintText: '••••••••',
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscure ? Icons.visibility : Icons.visibility_off,
+                          color: AppColors.mutedForeground,
+                        ),
+                        onPressed: () => setState(() => _obscure = !_obscure),
+                      ),
+                    ),
+                    validator: (v) => (v ?? '').isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 28),
+                  SizedBox(
+                    height: 52,
+                    child: FilledButton(
+                      onPressed: _busy ? null : _signIn,
+                      child: _busy
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Sign in'),
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: _baseUrl,
-                keyboardType: TextInputType.url,
-                autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'Server address',
-                  hintText: 'https://transfers.example.rw',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) {
-                  final value = (v ?? '').trim();
-                  if (value.isEmpty) return 'Required';
-                  final uri = Uri.tryParse(value);
-                  if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
-                    return 'Enter a full URL, e.g. https://host';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _loginId,
-                autocorrect: false,
-                enableSuggestions: false,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Login ID',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _password,
-                obscureText: _obscure,
-                autocorrect: false,
-                enableSuggestions: false,
-                onFieldSubmitted: (_) => _signIn(),
-                decoration: InputDecoration(
-                  labelText: 'Password',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () => setState(() => _obscure = !_obscure),
-                  ),
-                ),
-                validator: (v) => (v ?? '').isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 28),
-              FilledButton.tonalIcon(
-                onPressed: _busy ? null : _signIn,
-                icon: _busy
-                    ? const SizedBox(
-                        width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.login),
-                label: Text(_busy ? 'Signing in…' : 'Sign in'),
-                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  Widget _label(String text) => Text(
+        text,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: AppColors.foreground,
+        ),
+      );
 }

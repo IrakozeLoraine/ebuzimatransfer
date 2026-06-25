@@ -66,6 +66,13 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- Allow plain HTTP to the local-network dev backend (private IPs / .local).
+	     For a production HTTPS backend this exception is not needed. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Used to report the ambulance's position during a patient transfer.</string>
 	<key>NSCameraUsageDescription</key>

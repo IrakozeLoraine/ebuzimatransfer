@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'config.dart';
+import 'theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/journey_screen.dart';
 
@@ -17,11 +18,7 @@ class AmbulanceDriverApp extends StatelessWidget {
     return MaterialApp(
       title: 'Ambulance Driver',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: const Color(0xFFdc2626),
-        brightness: Brightness.light,
-      ),
+      theme: buildAppTheme(),
       home: const _Root(),
     );
   }
@@ -42,16 +39,24 @@ class _RootState extends State<_Root> {
   @override
   void initState() {
     super.initState();
-    Config.load().then((c) {
-      if (mounted) setState(() => _config = c);
-    });
+    _boot();
+  }
+
+  /// Load the saved session, holding the splash for a brief minimum so it
+  /// doesn't flicker on fast starts.
+  Future<void> _boot() async {
+    final results = await Future.wait([
+      Config.load(),
+      Future<void>.delayed(const Duration(milliseconds: 1500)),
+    ]);
+    if (mounted) setState(() => _config = results.first as Config);
   }
 
   @override
   Widget build(BuildContext context) {
     final config = _config;
     if (config == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const SplashScreen();
     }
     if (!config.isLoggedIn) {
       return LoginScreen(

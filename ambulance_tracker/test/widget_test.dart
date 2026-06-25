@@ -12,14 +12,15 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: LoginScreen(
-          initial: Config(baseUrl: '', token: ''),
+          initial: Config(token: ''),
           onSignedIn: (_) {},
         ),
       ),
     );
 
     expect(find.text('Scan setup code'), findsOneWidget);
-    expect(find.text('Server address'), findsOneWidget);
+    // The server address is baked in, so there's no server field — just creds.
+    expect(find.text('Server address'), findsNothing);
     expect(find.text('Login ID'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
   });
@@ -34,15 +35,15 @@ void main() {
       });
       final payload = SetupPayload.tryParse(raw);
       expect(payload, isNotNull);
-      expect(payload!.serverUrl, 'https://transfers.example.rw');
-      expect(payload.loginId, 'amb-432h');
+      // The server URL in the QR is ignored; only the credentials are used.
+      expect(payload!.loginId, 'amb-432h');
       expect(payload.password, 'Xy7k-9Qmn-aa3T');
     });
 
     test('rejects junk and incomplete codes', () {
       expect(SetupPayload.tryParse(null), isNull);
       expect(SetupPayload.tryParse('not json'), isNull);
-      expect(SetupPayload.tryParse(jsonEncode({'url': 'https://x', 'id': 'a'})), isNull);
+      expect(SetupPayload.tryParse(jsonEncode({'id': 'a'})), isNull);
     });
   });
 }

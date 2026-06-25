@@ -6,6 +6,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../config.dart';
 import '../driver_api.dart';
 import '../location.dart';
+import '../theme.dart';
 
 /// The driver's main screen. It shows the single journey assigned to this
 /// ambulance (sending → receiving hospital) and one big button for the next
@@ -189,9 +190,20 @@ class _JourneyScreenState extends State<JourneyScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 56, color: Theme.of(context).colorScheme.outline),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: const BoxDecoration(
+                color: AppColors.muted,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 40, color: AppColors.mutedForeground),
+            ),
             const SizedBox(height: 16),
-            Text(text, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyLarge),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16, color: AppColors.foreground),
+            ),
             if (retry) ...[
               const SizedBox(height: 20),
               OutlinedButton.icon(
@@ -231,33 +243,68 @@ class _JourneyView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Transfer ${journey.referralNumber}',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+          Row(
+            children: [
+              const Text(
+                'Transfer ',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: AppColors.mutedForeground,
+                ),
+              ),
+              Text(
+                journey.referralNumber,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.foreground,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           _RouteCard(
             from: journey.sending?.name ?? 'Sending facility',
             to: journey.receiving?.name ?? 'Receiving facility',
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           _Steps(step: journey.step),
           if (journey.isTracking) ...[
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.gps_fixed, size: 16, color: Colors.green.shade600),
-                const SizedBox(width: 6),
-                Text(
-                  lastFixAt == null ? 'Sharing live location…' : 'Location shared ${_ago(lastFixAt!)}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.gps_fixed, size: 16, color: AppColors.success),
+                  const SizedBox(width: 6),
+                  Text(
+                    lastFixAt == null
+                        ? 'Sharing live location…'
+                        : 'Location shared ${_ago(lastFixAt!)}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.success,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
           const Spacer(),
           _action(context),
-          const SizedBox(height: 8),
-          Text(_hint(), textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 12),
+          Text(
+            _hint(),
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+          ),
         ],
       ),
     );
@@ -265,24 +312,36 @@ class _JourneyView extends StatelessWidget {
 
   Widget _action(BuildContext context) {
     if (journey.step == 'ARRIVED') {
-      return Column(
+      return const Column(
         children: [
-          Icon(Icons.check_circle, size: 64, color: Colors.green.shade600),
-          const SizedBox(height: 8),
-          Text('Patient delivered', style: Theme.of(context).textTheme.titleMedium),
+          Icon(Icons.check_circle, size: 64, color: AppColors.success),
+          SizedBox(height: 8),
+          Text(
+            'Patient delivered',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: AppColors.foreground,
+            ),
+          ),
         ],
       );
     }
     final (label, icon, onTap, color) = switch (journey.step) {
-      'ASSIGNED' => ('Start journey', Icons.play_arrow, onStart, Colors.green.shade600),
-      'EN_ROUTE_TO_PICKUP' => ('Patient picked up', Icons.person_add_alt_1, onPicked, const Color(0xFF2563eb)),
-      _ => ('Patient arrived', Icons.flag, onArrived, const Color(0xFF0d9488)),
+      'ASSIGNED' => ('Start journey', Icons.play_arrow, onStart, AppColors.success),
+      'EN_ROUTE_TO_PICKUP' => ('Patient picked up', Icons.person_add_alt_1, onPicked, AppColors.primary),
+      _ => ('Patient arrived', Icons.flag, onArrived, const Color(0xFF0D9488)),
     };
     return SizedBox(
       height: 120,
       child: FilledButton(
         onPressed: busy ? null : onTap,
-        style: FilledButton.styleFrom(backgroundColor: color),
+        style: FilledButton.styleFrom(
+          backgroundColor: color,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(kRadiusXl),
+          ),
+        ),
         child: busy
             ? const CircularProgressIndicator(color: Colors.white)
             : Column(
@@ -324,22 +383,19 @@ class _RouteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            _point(context, Icons.radio_button_checked, 'From', from, Colors.green.shade700),
-            Padding(
-              padding: const EdgeInsets.only(left: 11),
-              child: SizedBox(
-                height: 22,
-                child: VerticalDivider(thickness: 2, color: Theme.of(context).colorScheme.outlineVariant),
-              ),
+    return AppCard(
+      child: Column(
+        children: [
+          _point(context, Icons.radio_button_checked, 'From', from, AppColors.success),
+          const Padding(
+            padding: EdgeInsets.only(left: 11),
+            child: SizedBox(
+              height: 22,
+              child: VerticalDivider(thickness: 2, color: AppColors.border),
             ),
-            _point(context, Icons.location_on, 'To', to, const Color(0xFFdc2626)),
-          ],
-        ),
+          ),
+          _point(context, Icons.location_on, 'To', to, AppColors.destructive),
+        ],
       ),
     );
   }
@@ -354,8 +410,24 @@ class _RouteCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: Theme.of(context).textTheme.labelSmall),
-              Text(name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+              Text(
+                label.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
+                  color: AppColors.mutedForeground,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                name,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.foreground,
+                ),
+              ),
             ],
           ),
         ),
@@ -377,7 +449,7 @@ class _Steps extends StatelessWidget {
     return Row(
       children: List.generate(_labels.length, (i) {
         final done = i <= current;
-        final color = done ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant;
+        final color = done ? AppColors.primary : AppColors.border;
         return Expanded(
           child: Column(
             children: [
@@ -388,11 +460,19 @@ class _Steps extends StatelessWidget {
                     width: 14, height: 14,
                     decoration: BoxDecoration(color: color, shape: BoxShape.circle),
                   ),
-                  Expanded(child: Container(height: 3, color: i == _labels.length - 1 ? Colors.transparent : (i < current ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant))),
+                  Expanded(child: Container(height: 3, color: i == _labels.length - 1 ? Colors.transparent : (i < current ? AppColors.primary : AppColors.border))),
                 ],
               ),
-              const SizedBox(height: 4),
-              Text(_labels[i], style: Theme.of(context).textTheme.labelSmall, textAlign: TextAlign.center),
+              const SizedBox(height: 6),
+              Text(
+                _labels[i],
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: done ? FontWeight.w600 : FontWeight.w400,
+                  color: done ? AppColors.foreground : AppColors.mutedForeground,
+                ),
+              ),
             ],
           ),
         );
