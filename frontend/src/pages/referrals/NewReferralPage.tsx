@@ -1,10 +1,11 @@
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useCreateReferral } from "@/hooks/useReferrals";
 import { useFacilities } from "@/hooks/useFacilities";
 import { useUnits } from "@/hooks/useUnits";
+import { useAvailableResources } from "@/hooks/useResources";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -60,13 +61,37 @@ export const NewReferralPage = () => {
     defaultValues: { ventilator_needed: false, high_flow_oxygen_needed: false },
   });
 
-  // Prefill destination facility + requested unit when arriving from Resource Lookup.
+  const preferredFacilityId = watch("preferred_facility_id");
+  const requestedUnitId = watch("requested_unit_id");
+  const requestedResourceId = watch("requested_resource_id");
+
+  // Currently-available resources at the chosen destination. Scoped to the requested
+  // unit (when one is picked) and narrowed to the selected facility, so the requester
+  // can only ask for a resource that actually has free capacity there.
+  const { data: availableResources = [], isLoading: resourcesLoading } = useAvailableResources(requestedUnitId || null);
+  const facilityResources = useMemo(
+    () => availableResources.filter((r) => r.facility_id === preferredFacilityId),
+    [availableResources, preferredFacilityId]
+  );
+
+  // Prefill destination facility + requested unit + resource when arriving from Resource Lookup.
   useEffect(() => {
     const facility = searchParams.get("facility");
     const unit = searchParams.get("unit");
+    const resource = searchParams.get("resource");
     if (facility) setValue("preferred_facility_id", facility, { shouldValidate: true });
     if (unit) setValue("requested_unit_id", unit, { shouldValidate: true });
+    if (resource) setValue("requested_resource_id", resource, { shouldValidate: true });
   }, [searchParams, setValue]);
+
+  // If the destination changes so the chosen resource is no longer available there,
+  // drop the stale selection rather than submitting a resource from another facility.
+  useEffect(() => {
+    if (resourcesLoading) return;
+    if (requestedResourceId && !facilityResources.some((r) => r.id === requestedResourceId)) {
+      setValue("requested_resource_id", "", { shouldValidate: true });
+    }
+  }, [facilityResources, requestedResourceId, resourcesLoading, setValue]);
 
   const onSubmit = (data: NewReferralFormValues) => {
     create(data, {
@@ -225,6 +250,41 @@ export const NewReferralPage = () => {
                 </SelectContent>
               </Select>
               {errors.requested_unit_id && <p className="text-xs text-destructive">{errors.requested_unit_id.message}</p>}
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Requested Resource <span className="text-destructive">*</span></Label>
+              <Select
+                value={requestedResourceId}
+                onValueChange={(v) => setValue("requested_resource_id", v, { shouldValidate: true })}
+                disabled={!preferredFacilityId}
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      !preferredFacilityId
+                        ? "Select a facility first"
+                        : facilityResources.length === 0
+                          ? "No resources available at this facility"
+                          : "Select an available resource"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {facilityResources.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.resource_name}
+                      {r.unit_name ? ` · ${r.unit_name}` : ""} — {r.available} available
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {preferredFacilityId && (
+                <p className="text-xs text-muted-foreground">
+                  {facilityResources.length} resource type{facilityResources.length === 1 ? "" : "s"} with availability at this facility
+                  {requestedUnitId ? " in the requested unit" : ""}.
+                </p>
+              )}
+              {errors.requested_resource_id && <p className="text-xs text-destructive">{errors.requested_resource_id.message}</p>}
             </div>
           </CardContent>
         </Card>

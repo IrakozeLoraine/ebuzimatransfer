@@ -75,12 +75,12 @@ startup for the live WebSocket fan-out).
 
 ```bash
 cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+python3 -m venv .venv && source .venv/bin/activate
+python3 -m pip install -r requirements.txt
 
 cp .env.example .env        # then edit values (see below)
 alembic upgrade head        # apply migrations
-python seeds.py             # seed reference data
+python3 seeds.py             # seed reference data
 uvicorn app.main:app --reload   # http://localhost:8000
 ```
 

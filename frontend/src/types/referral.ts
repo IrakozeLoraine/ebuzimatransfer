@@ -56,6 +56,7 @@ export interface Referral {
   accepted_facility_id: string | null;
   origin_unit_id: string | null;
   requested_unit_id: string | null;
+  requested_resource_id: string | null;
   created_at: string;
   updated_at: string;
   status_history: StatusHistory[];
@@ -75,6 +76,7 @@ export interface CreateReferralPayload {
   high_flow_oxygen_needed: boolean;
   preferred_facility_id?: string;
   requested_unit_id?: string;
+  requested_resource_id: string;
 }
 
 export interface AcceptReferralPayload {

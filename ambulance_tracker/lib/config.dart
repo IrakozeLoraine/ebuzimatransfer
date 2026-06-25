@@ -1,16 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// The backend this app always talks to. The driver never types or scans a
-/// server address — it's baked in here so the app just works on install.
-///
-/// NOTE: use the host machine's LAN IP (not 127.0.0.1 — that resolves to the
-/// phone/emulator itself). The backend must be served on 0.0.0.0 so devices on
-/// the same network can reach it (e.g. `uvicorn app.main:app --host 0.0.0.0`).
-const String kBackendBaseUrl = 'http://10.110.9.42:8000';
+const String kBackendBaseUrl = 'http://ebuzimatransfer.duckdns.org';
 
-/// Persisted driver session: the ambulance login token obtained at sign-in, the
-/// ambulance's plate (for display), and how often to stream a GPS position
-/// during a journey. The server address is fixed ([kBackendBaseUrl]).
 class Config {
   Config({
     required this.token,

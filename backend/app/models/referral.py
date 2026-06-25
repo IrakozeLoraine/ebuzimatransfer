@@ -70,6 +70,10 @@ class Referral(Base, UUIDMixin, TimestampMixin):
     accepted_facility_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("facilities.id"), nullable=True)
     origin_unit_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("units.id"), nullable=True)
     requested_unit_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("units.id"), nullable=True)
+    # The specific resource the requester is asking for at the destination. Captured
+    # (and validated as available) up front so the receiving side knows exactly what
+    # was requested; the approver still reserves the actual unit on accept.
+    requested_resource_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("resources.id"), nullable=True)
 
     creator: Mapped["User"] = relationship("User", foreign_keys=[created_by])
     status_history: Mapped[list["ReferralStatusHistory"]] = relationship(

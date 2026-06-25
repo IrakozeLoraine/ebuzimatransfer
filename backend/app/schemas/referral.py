@@ -21,6 +21,9 @@ class ReferralCreate(BaseModel):
     # facility + unit (and only that side's staff can approve it).
     preferred_facility_id: uuid.UUID
     requested_unit_id: uuid.UUID
+    # The specific resource being requested at the destination. Validated as
+    # currently available at the preferred facility when creating the request.
+    requested_resource_id: uuid.UUID
 
 
 class ReferralUpdate(BaseModel):
@@ -103,6 +106,7 @@ class ReferralOut(BaseModel):
     accepted_facility_id: Optional[uuid.UUID]
     origin_unit_id: Optional[uuid.UUID] = None
     requested_unit_id: Optional[uuid.UUID] = None
+    requested_resource_id: Optional[uuid.UUID] = None
     created_at: datetime
     updated_at: datetime
     status_history: List[StatusHistoryOut] = []

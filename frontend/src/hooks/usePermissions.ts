@@ -15,7 +15,7 @@ export const usePermissions = () => {
 
   const canManageFacilities = isSuperAdmin;
   const canViewAudit = isAdmin;
-  const canManageResources = isAdmin || isClinician;
+  const canManageResources = isAdmin;
   const canAssignResources = isAdmin;
   const canUpdateResourceStatus = isFacilityAdmin || isClinician;
   // Any clinician can create a transfer request (referring) and act on one that

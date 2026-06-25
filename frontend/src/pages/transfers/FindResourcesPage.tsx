@@ -9,11 +9,15 @@ import { Combobox } from "@/components/ui/combobox";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useUnits } from "@/hooks/useUnits";
 import { useAvailableResources } from "@/hooks/useResources";
+import { useAuthStore } from "@/store/auth.store";
 import type { Resource } from "@/types/resource";
 
 export const FindResourcesPage = () => {
   const navigate = useNavigate();
   const { canCreateReferral } = usePermissions();
+  // You can't transfer a resource from your own facility to yourself, so the
+  // request action is hidden for resources owned by the user's active facility.
+  const myFacilityId = useAuthStore((s) => s.user?.active_facility_id ?? null);
   const { data: units = [] } = useUnits();
   const [unitId, setUnitId] = useState<string>("");
   const [search, setSearch] = useState("");
@@ -30,6 +34,7 @@ export const FindResourcesPage = () => {
     const params = new URLSearchParams();
     if (r.facility_id) params.set("facility", r.facility_id);
     if (r.unit_id) params.set("unit", r.unit_id);
+    params.set("resource", r.id);
     navigate(`/transfer-requests/new?${params.toString()}`);
   };
 
@@ -108,19 +113,24 @@ export const FindResourcesPage = () => {
                   <Building2 className="h-5 w-5 shrink-0 text-muted-foreground" />
                   <h2 className="flex-1 font-semibold leading-tight">{group.facility}</h2>
                   <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                    {group.rows.length} available
+                    {group.rows.reduce((sum, r) => sum + r.available, 0)} available
                   </span>
                 </div>
                 <ul className="flex-1">
                   {group.rows.map((r) => (
                     <li key={r.id} className="flex flex-col gap-2 border-b border-b-neutral-100 py-2 last:border-0">
-                      <div>
-                        <p className="text-sm font-medium">{r.resource_name}</p>
-                        <p className="font-mono text-xs text-muted-foreground">
-                          {r.unit_name ? `${r.unit_name}` : ""}
-                        </p>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-medium">{r.resource_name}</p>
+                          <p className="font-mono text-xs text-muted-foreground">
+                            {r.unit_name ? `${r.unit_name}` : ""}
+                          </p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                          {r.available} available
+                        </span>
                       </div>
-                      {canCreateReferral && (
+                      {canCreateReferral && r.facility_id !== myFacilityId && (
                         <Button size="sm" variant="outline" className="w-fit border-primary text-primary bg-white cursor-pointer" onClick={() => requestTransfer(r)}>
                           <ArrowLeftRight className="mr-1.5 h-3.5 w-3.5" />
                           Request Transfer

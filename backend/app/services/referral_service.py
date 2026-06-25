@@ -26,6 +26,15 @@ class ReferralService:
         referring_facility_id: Optional[uuid.UUID] = None,
         origin_unit_id: Optional[uuid.UUID] = None,
     ) -> Referral:
+        # The requested resource must actually exist at the destination facility and
+        # have at least one unit available right now — you can't request something
+        # that isn't there.
+        resource = await self.resource_service.get(data.requested_resource_id)
+        if resource.facility_id != data.preferred_facility_id:
+            raise ValidationError("The requested resource is not at the selected facility")
+        if resource.available < 1:
+            raise ValidationError("The requested resource is no longer available")
+
         number = await self.repo.next_referral_number()
         referral = Referral(
             referral_number=number,
@@ -148,6 +157,11 @@ class ReferralService:
             r for r in resources
             if r.available > 0
         ]
+        # Prefer the exact resource the requester asked for, if it's still available.
+        if referral.requested_resource_id is not None:
+            requested = next((r for r in available if r.id == referral.requested_resource_id), None)
+            if requested is not None:
+                return requested.id
         if referral.requested_unit_id is not None:
             in_unit = [r for r in available if r.unit_id == referral.requested_unit_id]
             if in_unit:

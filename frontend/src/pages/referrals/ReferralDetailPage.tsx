@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useReferral, useAcceptReferral, useQuickAcceptReferral, useRejectReferral, useRecordArrivalCondition, useArrangeTransport, useMarkArrived } from "@/hooks/useReferrals";
 import type { ArrivalCondition } from "@/types/referral";
@@ -72,6 +72,15 @@ export const ReferralDetailPage = () => {
   const [ambulanceId, setAmbulanceId] = useState("");
 
   const availableResources = resources.filter((r) => r.available > 0);
+
+  // Default the manual pick to the resource the requester actually asked for, when
+  // it's still available — the approver can override it.
+  useEffect(() => {
+    const requested = referral?.requested_resource_id;
+    if (requested && !selectedResourceId && availableResources.some((r) => r.id === requested)) {
+      setSelectedResourceId(requested);
+    }
+  }, [referral?.requested_resource_id, availableResources, selectedResourceId]);
 
   const handleAccept = () => {
     if (!selectedResourceId || !id) return;
@@ -252,6 +261,14 @@ export const ReferralDetailPage = () => {
             <Row label="Ventilator" value={referral.ventilator_needed ? "Required" : "Not required"} />
             <Row label="High-flow O₂" value={referral.high_flow_oxygen_needed ? "Required" : "Not required"} />
             {referral.comorbidities && <Row label="Comorbidities" value={referral.comorbidities} />}
+            {referral.requested_resource_id && (
+              <Row
+                label="Requested Resource"
+                value={
+                  resources.find((r) => r.id === referral.requested_resource_id)?.resource_name ?? "—"
+                }
+              />
+            )}
           </CardContent>
         </Card>
       </div>
