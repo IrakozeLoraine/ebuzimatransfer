@@ -183,15 +183,33 @@ class ReferralService:
         await self.session.flush()
         return referral
 
-    async def set_arrival_condition(self, referral_id: uuid.UUID, condition: ArrivalCondition, actor_id: uuid.UUID) -> Referral:
+    def assert_can_record_arrival(self, referral: Referral, actor) -> None:
+        """Only staff at the *receiving* facility may record the patient's arrival
+        condition — never the sending clinician who created the request. Super
+        admins are exempt."""
+        roles = set(getattr(actor, "effective_roles", []))
+        if "SUPER_ADMIN" in roles:
+            return
+        if referral.created_by == actor.id:
+            raise ForbiddenError("The sending facility cannot record the patient's arrival condition.")
+        receiving_facility_id = referral.accepted_facility_id or referral.preferred_facility_id
+        active = getattr(actor, "active_facility_id", None)
+        actor_facility_ids = (
+            {active} if active is not None else {f.id for f in getattr(actor, "facilities", [])}
+        )
+        if receiving_facility_id is None or receiving_facility_id not in actor_facility_ids:
+            raise ForbiddenError("Only staff at the receiving facility can record the arrival condition.")
+
+    async def set_arrival_condition(self, referral_id: uuid.UUID, condition: ArrivalCondition, actor) -> Referral:
         referral = await self.repo.get_by_id(referral_id)
         if not referral:
             raise NotFoundError("Referral")
+        self.assert_can_record_arrival(referral, actor)
         if referral.status != ReferralStatus.ARRIVED:
             raise ValidationError("Arrival condition can only be recorded once the patient has arrived")
         referral.arrival_condition = condition
         await self._record_history(
-            referral_id, ReferralStatus.ARRIVED, actor_id, f"Arrival condition: {condition.value}"
+            referral_id, ReferralStatus.ARRIVED, actor.id, f"Arrival condition: {condition.value}"
         )
         await self.session.flush()
         return referral

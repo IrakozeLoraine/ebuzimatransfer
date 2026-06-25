@@ -27,6 +27,11 @@ class FacilityUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
+class FacilityLocationUpdate(BaseModel):
+    latitude: float
+    longitude: float
+
+
 class FacilityOut(FacilityBase):
     id: uuid.UUID
     is_active: bool

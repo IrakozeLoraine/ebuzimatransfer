@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getFacilities, getFacility, getFacilityUsers, createFacility, updateFacility, deleteFacility, reactivateFacility, importFacilities } from "@/api/facilities.api";
+import { getFacilities, getFacility, getFacilityUsers, createFacility, updateFacility, setFacilityLocation, deleteFacility, reactivateFacility, importFacilities } from "@/api/facilities.api";
 import type { Facility } from "@/types/facility";
 import { toast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/utils/apiError";
@@ -43,6 +43,25 @@ export const useUpdateFacility = () => {
       toast({
         variant: "destructive",
         title: "Failed to update facility",
+        description: getApiErrorMessage(error),
+      }),
+  });
+};
+
+export const useSetFacilityLocation = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, latitude, longitude }: { id: string; latitude: number; longitude: number }) =>
+      setFacilityLocation(id, { latitude, longitude }),
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: ["facilities"] });
+      qc.invalidateQueries({ queryKey: ["facility", id] });
+      toast({ variant: "success", title: "Facility location saved" });
+    },
+    onError: (error) =>
+      toast({
+        variant: "destructive",
+        title: "Failed to save facility location",
         description: getApiErrorMessage(error),
       }),
   });

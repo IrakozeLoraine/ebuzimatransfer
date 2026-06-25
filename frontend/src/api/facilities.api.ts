@@ -27,6 +27,14 @@ export const updateFacility = async (id: string, payload: Partial<Facility>): Pr
   return data;
 };
 
+export const setFacilityLocation = async (
+  id: string,
+  coords: { latitude: number; longitude: number }
+): Promise<Facility> => {
+  const { data } = await api.patch<Facility>(`/facilities/${id}/location`, coords);
+  return data;
+};
+
 export const deleteFacility = async (id: string): Promise<void> => {
   await api.delete(`/facilities/${id}`);
 };

@@ -12,6 +12,7 @@ from app.services.audit_service import AuditService
 from app.schemas.facility import (
     FacilityCreate,
     FacilityImportResult,
+    FacilityLocationUpdate,
     FacilityUpdate,
     FacilityOut,
 )
@@ -92,6 +93,26 @@ async def update_facility(
     f = await svc.update(facility_id, payload)
     await AuditService(session).log("UPDATE_FACILITY", "facility", user_id=current_user.id, entity_id=facility_id)
     await session.commit()
+    return f
+
+
+@router.patch("/{facility_id}/location", response_model=FacilityOut)
+async def set_facility_location(
+    facility_id: uuid.UUID,
+    payload: FacilityLocationUpdate,
+    current_user=Depends(require_roles("SUPER_ADMIN", "FACILITY_ADMIN")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Set a facility's GPS coordinates. A facility admin pins their own facility's
+    location (typically on first login by sharing their current position); super
+    admins can set it for any facility."""
+    if "SUPER_ADMIN" not in current_user.effective_roles and current_user.active_facility_id != facility_id:
+        raise ForbiddenError("You can only set the location of your own facility.")
+    svc = FacilityService(session)
+    f = await svc.set_location(facility_id, payload.latitude, payload.longitude)
+    await AuditService(session).log("SET_FACILITY_LOCATION", "facility", user_id=current_user.id, entity_id=facility_id)
+    await session.commit()
+    await session.refresh(f)
     return f
 
 

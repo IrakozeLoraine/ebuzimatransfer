@@ -5,6 +5,8 @@ export interface Facility {
   location: string | null;
   province: string | null;
   district: string | null;
+  latitude: number | null;
+  longitude: number | null;
   is_active: boolean;
 }
 

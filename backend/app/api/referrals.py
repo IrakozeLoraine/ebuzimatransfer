@@ -195,7 +195,7 @@ async def record_arrival_condition(
 ):
     """The receiving clinician records the patient's condition on arrival."""
     svc = ReferralService(session)
-    await svc.set_arrival_condition(referral_id, payload.arrival_condition, current_user.id)
+    await svc.set_arrival_condition(referral_id, payload.arrival_condition, current_user)
     await AuditService(session).log(
         "RECORD_ARRIVAL_CONDITION", "referral", user_id=current_user.id, entity_id=referral_id
     )

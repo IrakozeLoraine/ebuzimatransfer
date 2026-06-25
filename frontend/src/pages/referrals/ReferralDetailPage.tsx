@@ -197,6 +197,11 @@ export const ReferralDetailPage = () => {
     isReceivingSide &&
     referral.created_by !== me?.id;
 
+  // Only the receiving side records the patient's arrival condition — never the
+  // sending clinician who raised the request (mirrors the server-side guard).
+  const canRecordArrival =
+    canAcceptReferral && isReceivingSide && referral.created_by !== me?.id;
+
   const TIMELINE_COLORS: Record<string, string> = {
     REQUESTED: "bg-blue-500",
     UNDER_REVIEW: "bg-amber-500",
@@ -403,7 +408,7 @@ export const ReferralDetailPage = () => {
               >
                 {arrivalConditionLabel(referral.arrival_condition)}
               </span>
-            ) : canAcceptReferral ? (
+            ) : canRecordArrival ? (
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div className="flex-1 space-y-1.5">
                   <Label className="text-sm font-medium">Record how the patient arrived</Label>

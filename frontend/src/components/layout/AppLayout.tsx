@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { MobileSidebar } from "./MobileSidebar";
 import { Header } from "./Header";
+import { FacilityLocationPrompt } from "./FacilityLocationPrompt";
 import { useNotificationsWebSocket } from "@/hooks/useWebSocket";
 
 export const AppLayout = () => {
@@ -10,6 +11,7 @@ export const AppLayout = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/30">
+      <FacilityLocationPrompt />
       <Sidebar />
       <MobileSidebar />
       <Header />

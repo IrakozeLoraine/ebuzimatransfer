@@ -75,6 +75,13 @@ class FacilityService:
         await self.session.flush()
         return f
 
+    async def set_location(self, facility_id: uuid.UUID, latitude: float, longitude: float) -> Facility:
+        f = await self.get(facility_id)
+        f.latitude = latitude
+        f.longitude = longitude
+        await self.session.flush()
+        return f
+
     async def delete(self, facility_id: uuid.UUID) -> None:
         f = await self.get(facility_id)
         f.is_active = False
