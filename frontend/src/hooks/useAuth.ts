@@ -22,7 +22,8 @@ export const useCompleteAuth = () => {
     setTokens(access_token, refresh_token);
     const user = await getMe();
     setUser(user);
-    navigate("/dashboard");
+    const isAdmin = user.roles.some((r) => r === "SUPER_ADMIN" || r === "FACILITY_ADMIN");
+    navigate(isAdmin ? "/dashboard" : "/find-resources");
   };
 };
 

@@ -114,7 +114,17 @@ export const router = createBrowserRouter([
         element: <AppLayout />,
         children: [
           { index: true, element: <Navigate to="/dashboard" replace /> },
-          { path: "/dashboard", element: withSuspense(<DashboardPage />) },
+          {
+            path: "/dashboard",
+            element: (
+              <RoleGuard
+                roles={["SUPER_ADMIN", "FACILITY_ADMIN"]}
+                fallback={<Navigate to="/find-resources" replace />}
+              >
+                <DashboardPage />
+              </RoleGuard>
+            ),
+          },
           { path: "/profile", element: withSuspense(<ProfilePage />) },
           { path: "/notifications", element: withSuspense(<NotificationsPage />) },
           {

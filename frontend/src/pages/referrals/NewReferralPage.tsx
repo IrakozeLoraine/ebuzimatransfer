@@ -6,6 +6,7 @@ import { useCreateReferral } from "@/hooks/useReferrals";
 import { useFacilities } from "@/hooks/useFacilities";
 import { useUnits } from "@/hooks/useUnits";
 import { useAvailableResources } from "@/hooks/useResources";
+import { useAuthStore } from "@/store/auth.store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,6 +50,8 @@ export const NewReferralPage = () => {
   const { mutate: create, isPending, error } = useCreateReferral();
   const { data: facilities = [] } = useFacilities();
   const { data: units = [] } = useUnits();
+  const myFacilityId = useAuthStore((s) => s.user?.active_facility_id ?? null);
+  const myUnitIds = useAuthStore((s) => s.user?.unit_ids ?? []);
 
   const {
     register,
@@ -65,6 +68,12 @@ export const NewReferralPage = () => {
   const requestedUnitId = watch("requested_unit_id");
   const requestedResourceId = watch("requested_resource_id");
 
+  // A clinician can't request a transfer into their own department — i.e. a unit
+  // they work in at their own facility. Other units at their facility (and any unit
+  // elsewhere) are valid destinations; submitting to an own department is blocked below.
+  const isOwnDepartment =
+    preferredFacilityId === myFacilityId && !!requestedUnitId && myUnitIds.includes(requestedUnitId);
+
   // Currently-available resources at the chosen destination. Scoped to the requested
   // unit (when one is picked) and narrowed to the selected facility, so the requester
   // can only ask for a resource that actually has free capacity there.
@@ -74,7 +83,8 @@ export const NewReferralPage = () => {
     [availableResources, preferredFacilityId]
   );
 
-  // Prefill destination facility + requested unit + resource when arriving from Resource Lookup.
+  // Prefill destination facility + requested unit + resource when arriving from
+  // Resource Lookup, so the form shows exactly what the clinician clicked.
   useEffect(() => {
     const facility = searchParams.get("facility");
     const unit = searchParams.get("unit");
@@ -94,6 +104,8 @@ export const NewReferralPage = () => {
   }, [facilityResources, requestedResourceId, resourcesLoading, setValue]);
 
   const onSubmit = (data: NewReferralFormValues) => {
+    // Guard against requesting a transfer into the requester's own facility.
+    if (isOwnDepartment) return;
     create(data, {
       onSuccess: (referral) => navigate(`/transfer-requests/${referral.id}`),
     });
@@ -250,6 +262,11 @@ export const NewReferralPage = () => {
                 </SelectContent>
               </Select>
               {errors.requested_unit_id && <p className="text-xs text-destructive">{errors.requested_unit_id.message}</p>}
+              {isOwnDepartment && (
+                <p className="text-xs text-destructive">
+                  This is your own department — pick a different facility or unit to transfer to.
+                </p>
+              )}
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Requested Resource <span className="text-destructive">*</span></Label>
@@ -293,7 +310,7 @@ export const NewReferralPage = () => {
           <Button type="button" variant="outline" onClick={() => navigate(-1)}>
             Cancel
           </Button>
-          <Button type="submit" disabled={isPending} className="flex-1 sm:flex-none sm:min-w-40">
+          <Button type="submit" disabled={isPending || isOwnDepartment} className="flex-1 sm:flex-none sm:min-w-40">
             {isPending ? "Submitting…" : "Submit Transfer Request"}
           </Button>
         </div>

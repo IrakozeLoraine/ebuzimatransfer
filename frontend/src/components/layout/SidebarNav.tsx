@@ -29,6 +29,7 @@ export const SidebarNav = ({ onNavigate }: Props) => {
   const {
     isSuperAdmin,
     isFacilityAdmin,
+    isAdmin,
     canManageFacilities,
     canViewAudit,
     canViewResources,
@@ -36,7 +37,7 @@ export const SidebarNav = ({ onNavigate }: Props) => {
   const user = useAuthStore((s) => s.user);
 
   const mainLinks = [
-    navItem("/dashboard", "Dashboard", LayoutDashboard),
+    ...(isAdmin ? [navItem("/dashboard", "Dashboard", LayoutDashboard)] : []),
     ...(canViewResources ? [navItem("/find-resources", "Resource Lookup", Search)] : []),
     ...(canViewResources ? [navItem("/resources", "Resources", Package)] : []),
     navItem("/transfer-requests", "Transfer Requests", FileText),

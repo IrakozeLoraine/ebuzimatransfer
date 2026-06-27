@@ -66,6 +66,14 @@ export default function AssignDialog({
     const parsedQty = parseInt(quantity, 10);
     const qty = Number.isFinite(parsedQty) && parsedQty > 0 ? parsedQty : null;
 
+    // A transfer to the resource's current facility *and* unit is a no-op — block it.
+    const targetFacilityId = isSuperAdmin ? facilityId || null : adminFacilityId;
+    const targetUnitId = unitId || null;
+    const sameLocation =
+        single != null &&
+        targetFacilityId === (single.facility_id ?? null) &&
+        targetUnitId === (single.unit_id ?? null);
+
     const handleAssign = () => {
         if (!resources.length) return;
         assign(
@@ -113,6 +121,7 @@ export default function AssignDialog({
         isPending ||
         (!isSuperAdmin && !unitId) ||
         qty === null ||
+        sameLocation ||
         (single != null && (singleMovable < 1 || qty > singleMovable));
 
     return (
@@ -182,6 +191,12 @@ export default function AssignDialog({
                                     : "Applied to each selected resource (capped at what each has available)"}
                             </p>
                         </div>
+
+                        {sameLocation && (
+                            <p className="text-xs text-amber-600">
+                                Pick a different facility or unit — this resource is already there.
+                            </p>
+                        )}
 
                         <div className="flex justify-between gap-2 pt-1">
                             {/* Returning to central stock is a super-admin-only action. */}

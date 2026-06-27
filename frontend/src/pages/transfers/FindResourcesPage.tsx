@@ -15,13 +15,22 @@ import type { Resource } from "@/types/resource";
 export const FindResourcesPage = () => {
   const navigate = useNavigate();
   const { canCreateReferral } = usePermissions();
-  // You can't transfer a resource from your own facility to yourself, so the
-  // request action is hidden for resources owned by the user's active facility.
+  // You can't transfer a patient into your own department, so resources in the
+  // unit(s) the clinician works in at their own facility are excluded. Other units
+  // at their facility — and any unit elsewhere — remain visible.
   const myFacilityId = useAuthStore((s) => s.user?.active_facility_id ?? null);
+  const myUnitIds = useAuthStore((s) => s.user?.unit_ids ?? []);
   const { data: units = [] } = useUnits();
   const [unitId, setUnitId] = useState<string>("");
   const [search, setSearch] = useState("");
-  const { data: resources = [], isLoading } = useAvailableResources(unitId || null);
+  const { data: allResources = [], isLoading } = useAvailableResources(unitId || null);
+  const resources = useMemo(
+    () =>
+      allResources.filter(
+        (r) => !(r.facility_id === myFacilityId && r.unit_id != null && myUnitIds.includes(r.unit_id))
+      ),
+    [allResources, myFacilityId, myUnitIds]
+  );
 
   const unitOptions = [
     { value: "", label: "All clinical units" },
@@ -37,6 +46,9 @@ export const FindResourcesPage = () => {
     params.set("resource", r.id);
     navigate(`/transfer-requests/new?${params.toString()}`);
   };
+
+  // Top-level entry point: opens a blank transfer-request form with no prefill.
+  const requestTransferBlank = () => navigate("/transfer-requests/new");
 
   // Free-text filtering on top of the (optionally unit-scoped) results.
   const filtered = useMemo(() => {
@@ -63,12 +75,20 @@ export const FindResourcesPage = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Clinical Resource Lookup</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          All available resources across facilities. Filter by clinical unit or search to narrow down, then request a
-          transfer for your patient.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Clinical Resource Lookup</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            All available resources across facilities. Filter by clinical unit or search to narrow down, then request a
+            transfer for your patient.
+          </p>
+        </div>
+        {canCreateReferral && (
+          <Button className="w-fit shrink-0" onClick={requestTransferBlank}>
+            <ArrowLeftRight className="mr-1.5 h-4 w-4" />
+            Request Transfer
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -130,7 +150,7 @@ export const FindResourcesPage = () => {
                           {r.available} available
                         </span>
                       </div>
-                      {canCreateReferral && r.facility_id !== myFacilityId && (
+                      {canCreateReferral && (
                         <Button size="sm" variant="outline" className="w-fit border-primary text-primary bg-white cursor-pointer" onClick={() => requestTransfer(r)}>
                           <ArrowLeftRight className="mr-1.5 h-3.5 w-3.5" />
                           Request Transfer

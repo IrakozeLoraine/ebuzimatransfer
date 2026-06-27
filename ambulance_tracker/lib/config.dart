@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 const String kBackendBaseUrl = 'http://ebuzimatransfer.duckdns.org';
+// const String kBackendBaseUrl = 'http://127.0.0.1:8000';
 
 class Config {
   Config({

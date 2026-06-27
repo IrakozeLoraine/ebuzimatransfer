@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Plus, Upload, ArrowLeftRight, History, Search, SlidersHorizontal, PlusCircle } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuthStore } from "@/store/auth.store";
 import { cn } from "@/utils/cn";
 import { Resource, ResourceStatus, ResourceFilters } from "@/types/resource";
 import { STATUS_LABELS, STATUS_OPTIONS } from "./constants";
@@ -34,7 +35,9 @@ const unitsInBucket = (r: Resource, status: ResourceStatus): number =>
     : r.out_of_service;
 
 export const ResourcesPage = () => {
-  const { isSuperAdmin, isFacilityAdmin, canManageResources, canAssignResources, canUpdateResourceStatus } = usePermissions();
+  const { isSuperAdmin, isFacilityAdmin, isAdmin, canManageResources, canAssignResources, canUpdateResourceStatus } = usePermissions();
+  const myFacilityId = useAuthStore((s) => s.user?.active_facility_id ?? null);
+  const myUnitIds = useAuthStore((s) => s.user?.unit_ids ?? []);
 
   const [searchParams] = useSearchParams();
   const initialStatus = searchParams.get("status");
@@ -56,7 +59,12 @@ export const ResourcesPage = () => {
   const { data: resources = [], isLoading } = useResources(queryFilters);
 
   const query = search.trim().toLowerCase();
-  const filtered = resources
+  const scoped = isAdmin
+    ? resources
+    : resources.filter(
+        (r) => r.facility_id === myFacilityId && r.unit_id != null && myUnitIds.includes(r.unit_id)
+      );
+  const filtered = scoped
     .filter((r) => {
       const matchesStatus =
         filter === "ALL" || unitsInBucket(r, filter as ResourceStatus) > 0;
@@ -108,7 +116,7 @@ export const ResourcesPage = () => {
 
   // Totals shown in the filter dropdown are unit counts across all groups.
   const counts = STATUS_OPTIONS.reduce(
-    (acc, s) => ({ ...acc, [s]: resources.reduce((sum, r) => sum + unitsInBucket(r, s), 0) }),
+    (acc, s) => ({ ...acc, [s]: scoped.reduce((sum, r) => sum + unitsInBucket(r, s), 0) }),
     {} as Record<ResourceStatus, number>
   );
 
@@ -213,7 +221,7 @@ export const ResourcesPage = () => {
         <div>
           <h1 className="text-2xl font-bold">Resource Management</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {resources.length} resources{isSuperAdmin && scope === "UNASSIGNED" ? " in central stock" : ""}
+            {scoped.length} resources{isSuperAdmin && scope === "UNASSIGNED" ? " in central stock" : ""}
           </p>
         </div>
         <div className="flex flex-wrap justify-center md:justify-start gap-2">
@@ -233,7 +241,7 @@ export const ResourcesPage = () => {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="ALL">All Statuses ({resources.length})</SelectItem>
+              <SelectItem value="ALL">All Statuses ({scoped.length})</SelectItem>
               {STATUS_OPTIONS.map((s) => (
                 <SelectItem key={s} value={s}>
                   {STATUS_LABELS[s]} ({counts[s] ?? 0})
