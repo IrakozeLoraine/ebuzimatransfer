@@ -21,6 +21,7 @@ class ReferralRepository(BaseRepository[Referral]):
                 selectinload(Referral.resource_reservation),
                 selectinload(Referral.transport_events),
                 selectinload(Referral.creator),
+                selectinload(Referral.requested_resource),
             )
         )
         return result.scalar_one_or_none()

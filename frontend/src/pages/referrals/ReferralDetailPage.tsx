@@ -282,9 +282,7 @@ export const ReferralDetailPage = () => {
             {referral.requested_resource_id && (
               <Row
                 label="Requested Resource"
-                value={
-                  resources.find((r) => r.id === referral.requested_resource_id)?.resource_name ?? "—"
-                }
+                value={referral.requested_resource_name ?? "—"}
               />
             )}
           </CardContent>

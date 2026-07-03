@@ -9,8 +9,16 @@ import type { Notification } from "@/types/notification";
 vi.mock("@/api/notifications.api");
 const mocked = vi.mocked(notificationsApi);
 
-const makeNotification = (id: string, is_read = false): Notification =>
-  ({ id, is_read, title: `n-${id}`, body: "", created_at: "2026-01-01T00:00:00Z" } as Notification);
+const makeNotification = (id: string, is_read = false): Notification => ({
+  id,
+  is_read,
+  title: `n-${id}`,
+  message: "",
+  event_type: null,
+  entity_type: null,
+  entity_id: null,
+  created_at: "2026-01-01T00:00:00Z",
+});
 
 beforeEach(() => {
   vi.clearAllMocks();

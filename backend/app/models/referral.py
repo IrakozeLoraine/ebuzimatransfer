@@ -110,6 +110,14 @@ class Referral(Base, UUIDMixin, TimestampMixin):
     requested_resource: Mapped["Resource | None"] = relationship(
         "Resource", foreign_keys=[requested_resource_id]
     )
+
+    @property
+    def requested_resource_name(self) -> str | None:
+        """Name of the requested resource for display, resolved server-side so the
+        requesting facility (which can't see the destination's resources) still
+        sees what was asked for. Relies on ``requested_resource`` being eager
+        loaded — every ReferralOut path goes through the repo's get_with_relations."""
+        return self.requested_resource.resource_name if self.requested_resource else None
     status_history: Mapped[list["ReferralStatusHistory"]] = relationship(
         "ReferralStatusHistory",
         back_populates="referral",

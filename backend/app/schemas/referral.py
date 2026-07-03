@@ -170,6 +170,7 @@ class ReferralOut(BaseModel):
     origin_unit_id: Optional[uuid.UUID] = None
     requested_unit_id: Optional[uuid.UUID] = None
     requested_resource_id: Optional[uuid.UUID] = None
+    requested_resource_name: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     status_history: List[StatusHistoryOut] = []

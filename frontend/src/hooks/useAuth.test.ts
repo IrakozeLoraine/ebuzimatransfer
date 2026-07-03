@@ -79,9 +79,9 @@ describe("useLogin", () => {
     const { wrapper } = createQueryWrapper();
 
     const { result } = renderHook(() => useLogin(), { wrapper });
-    await result.current.mutateAsync({ email: "a@b.rw", password: "pw" });
+    await result.current.mutateAsync({ medical_id: "MED-001", password: "pw" });
 
-    expect(mocked.login).toHaveBeenCalledWith({ email: "a@b.rw", password: "pw" });
+    expect(mocked.login).toHaveBeenCalledWith({ medical_id: "MED-001", password: "pw" });
   });
 });
 

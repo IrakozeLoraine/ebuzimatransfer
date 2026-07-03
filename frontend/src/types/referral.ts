@@ -70,6 +70,7 @@ export interface Referral {
   origin_unit_id: string | null;
   requested_unit_id: string | null;
   requested_resource_id: string | null;
+  requested_resource_name: string | null;
   created_at: string;
   updated_at: string;
   status_history: StatusHistory[];
