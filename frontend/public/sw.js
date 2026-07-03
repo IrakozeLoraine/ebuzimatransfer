@@ -8,9 +8,8 @@
  *  - Google Fonts cache-first; OSM map tiles stale-while-revalidate.
  *  - /api and /ws are never intercepted — live medical data always hits the network.
  *
- * Bump CACHE_VERSION to invalidate every cache on the next activation.
  */
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "__SW_VERSION__";
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const ASSET_CACHE = `assets-${CACHE_VERSION}`;
 const FONT_CACHE = `fonts-${CACHE_VERSION}`;

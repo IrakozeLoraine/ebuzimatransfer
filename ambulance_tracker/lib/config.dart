@@ -1,12 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-// Production server. Use this for real devices / deployed builds.
-// const String kBackendBaseUrl = 'http://ebuzimatransfer.duckdns.org';
-// Local backend during development:
-//   - Android emulator: 10.0.2.2 maps to the host machine's localhost.
-//   - iOS simulator:    use 127.0.0.1.
-//   - Physical phone:   use your computer's LAN IP, e.g. http://192.168.x.x:8000
-const String kBackendBaseUrl = 'http://10.0.2.2:8000';
+const String kBackendBaseUrl = 'https://ebuzimatransfer.duckdns.org';
 
 class Config {
   Config({

@@ -144,13 +144,6 @@ async def already_seeded(session: AsyncSession) -> bool:
 async def ensure_schema(reset: bool) -> None:
     """Build the schema directly from the models.
 
-    This project has no migrations — the SQLAlchemy models are the single source of
-    truth. ``create_all`` only creates tables that don't already exist; it does *not*
-    alter existing ones, so a table left over from an older model would keep its old
-    columns. To guarantee the schema matches the models, ``--force`` (``reset=True``)
-    **drops and recreates** every table first. Without ``--force`` we only create
-    what's missing (safe to run repeatedly, but won't fix drift).
-
     The drop reflects the *live* database rather than the current models, so tables
     from a renamed/removed model (e.g. an old ``ambulance_devices``) are dropped too —
     otherwise their foreign keys would block dropping the tables they point at.
@@ -166,8 +159,8 @@ async def ensure_schema(reset: bool) -> None:
             await conn.run_sync(existing.reflect)
             await conn.run_sync(existing.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-        # No Alembic in the workflow — clear any stale version pointer left behind.
-        await conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
+        if reset:
+            await conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
     print(f"  ✓ Schema ready ({'drop_all + create_all' if reset else 'create_all'})")
 
 

@@ -104,6 +104,12 @@ class Referral(Base, UUIDMixin, TimestampMixin):
     requested_resource_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("resources.id"), nullable=True)
 
     creator: Mapped["User"] = relationship("User", foreign_keys=[created_by])
+    # Display-only link to the requested resource so the referral can surface its
+    # name across facilities (the resources list endpoint is facility-scoped, so
+    # the requesting side can't resolve the destination's resource by id).
+    requested_resource: Mapped["Resource | None"] = relationship(
+        "Resource", foreign_keys=[requested_resource_id]
+    )
     status_history: Mapped[list["ReferralStatusHistory"]] = relationship(
         "ReferralStatusHistory",
         back_populates="referral",
