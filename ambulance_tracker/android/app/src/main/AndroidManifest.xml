@@ -5,6 +5,12 @@
     <!-- Camera is used only to scan the one-time ambulance setup QR code. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- Microphone is used to voice-record the patient monitoring form and for in-app calls. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- In-app WebRTC voice calls with the clinics. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
     <application
         android:label="ambulance_tracker"
         android:name="${applicationName}"

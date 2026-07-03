@@ -1,13 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../config.dart';
+import '../call_controller.dart';
 import '../driver_api.dart';
 import '../location.dart';
 import '../theme.dart';
+import '../widgets/call_overlay.dart';
 import 'history_screen.dart';
+import 'map_screen.dart';
 
 /// The driver's main screen. It shows the single journey assigned to this
 /// ambulance (sending → receiving hospital) and one big button for the next
@@ -36,9 +41,18 @@ class _JourneyScreenState extends State<JourneyScreen> {
   bool _sendingGps = false;
   DateTime? _lastFixAt;
 
+  // Voice recording of the Patient Monitoring Transfer Form.
+  final _recorder = AudioRecorder();
+  bool _recording = false;
+  bool _monitoringBusy = false;
+
+  // In-app voice calls with the clinics (driver app side).
+  late final CallController _call;
+
   @override
   void initState() {
     super.initState();
+    _call = CallController(baseUrl: widget.config.baseUrl, token: widget.config.token)..connect();
     _refresh();
     // Re-check for a newly assigned (or advanced) journey periodically.
     _pollTimer = Timer.periodic(const Duration(seconds: 12), (_) => _refresh(quiet: true));
@@ -48,8 +62,76 @@ class _JourneyScreenState extends State<JourneyScreen> {
   void dispose() {
     _pollTimer?.cancel();
     _gpsTimer?.cancel();
+    _recorder.dispose();
+    _call.dispose();
     WakelockPlus.disable();
     super.dispose();
+  }
+
+  /// Call a clinic for the current journey. ``side`` is "receiving" or "referring".
+  Future<void> _callClinic(String side) async {
+    final j = _journey;
+    if (j == null || j.referralId.isEmpty) return;
+    try {
+      await _call.placeCall(j.referralId, side: side,
+          label: side == 'referring' ? (j.sending?.name ?? 'Referring clinic') : (j.receiving?.name ?? 'Receiving clinic'));
+    } catch (e) {
+      if (mounted) _snack(e.toString());
+    }
+  }
+
+  /// Start voice-recording the monitoring form. Asks for the mic permission first.
+  Future<void> _startRecording() async {
+    try {
+      if (!await _recorder.hasPermission()) {
+        _snack('Microphone permission is needed to record monitoring.');
+        return;
+      }
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/monitoring_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc), path: path);
+      if (mounted) setState(() => _recording = true);
+    } catch (_) {
+      _snack('Could not start recording.');
+    }
+  }
+
+  /// Stop recording and upload it; the backend transcribes and stores it on the
+  /// referral for the clinics and admins to read.
+  Future<void> _stopRecordingAndUpload() async {
+    String? path;
+    try {
+      path = await _recorder.stop();
+    } catch (_) {
+      // fall through to reset state below
+    }
+    if (!mounted) return;
+    setState(() => _recording = false);
+    if (path == null) {
+      _snack('Nothing was recorded.');
+      return;
+    }
+    setState(() => _monitoringBusy = true);
+    try {
+      final result = await _api.recordMonitoring(
+        baseUrl: widget.config.baseUrl,
+        token: widget.config.token,
+        filePath: path,
+      );
+      _snack(
+        'Monitoring saved — ${result.vitalsCount} vital reading(s), ${result.problemsCount} problem(s).',
+      );
+    } on ApiException catch (e) {
+      if (e.message.contains('Session expired')) {
+        await _signOut();
+        return;
+      }
+      _snack(e.message);
+    } catch (_) {
+      _snack('Could not upload the recording. Try again.');
+    } finally {
+      if (mounted) setState(() => _monitoringBusy = false);
+    }
   }
 
   Future<void> _refresh({bool quiet = false}) async {
@@ -154,6 +236,30 @@ class _JourneyScreenState extends State<JourneyScreen> {
       appBar: AppBar(
         title: Text(widget.config.plate.isEmpty ? 'My journey' : widget.config.plate),
         actions: [
+          if (_journey != null) ...[
+            IconButton(
+              icon: const Icon(Icons.map_outlined),
+              tooltip: 'Navigate',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => MapScreen(journey: _journey!)),
+              ),
+            ),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.call),
+              tooltip: 'Call a clinic',
+              onSelected: _callClinic,
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'receiving',
+                  child: Text('Call ${_journey?.receiving?.name ?? 'receiving clinic'}'),
+                ),
+                PopupMenuItem(
+                  value: 'referring',
+                  child: Text('Call ${_journey?.sending?.name ?? 'referring clinic'}'),
+                ),
+              ],
+            ),
+          ],
           IconButton(icon: const Icon(Icons.refresh), tooltip: 'Refresh', onPressed: _busy ? null : () => _refresh()),
           IconButton(
             icon: const Icon(Icons.history),
@@ -169,7 +275,14 @@ class _JourneyScreenState extends State<JourneyScreen> {
           IconButton(icon: const Icon(Icons.logout), tooltip: 'Sign out', onPressed: _busy ? null : _signOut),
         ],
       ),
-      body: SafeArea(child: _body(context)),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            _body(context),
+            CallOverlay(controller: _call),
+          ],
+        ),
+      ),
     );
   }
 
@@ -189,9 +302,12 @@ class _JourneyScreenState extends State<JourneyScreen> {
       journey: j,
       busy: _busy,
       lastFixAt: _lastFixAt,
+      recording: _recording,
+      monitoringBusy: _monitoringBusy,
       onStart: () => _advance(() => _api.start(widget.config.baseUrl, widget.config.token)),
       onPicked: () => _advance(() => _api.picked(widget.config.baseUrl, widget.config.token)),
       onArrived: () => _advance(() => _api.arrived(widget.config.baseUrl, widget.config.token)),
+      onToggleRecording: _recording ? _stopRecordingAndUpload : _startRecording,
     );
   }
 
@@ -236,17 +352,23 @@ class _JourneyView extends StatelessWidget {
     required this.journey,
     required this.busy,
     required this.lastFixAt,
+    required this.recording,
+    required this.monitoringBusy,
     required this.onStart,
     required this.onPicked,
     required this.onArrived,
+    required this.onToggleRecording,
   });
 
   final Journey journey;
   final bool busy;
   final DateTime? lastFixAt;
+  final bool recording;
+  final bool monitoringBusy;
   final VoidCallback onStart;
   final VoidCallback onPicked;
   final VoidCallback onArrived;
+  final VoidCallback onToggleRecording;
 
   @override
   Widget build(BuildContext context) {
@@ -309,6 +431,10 @@ class _JourneyView extends StatelessWidget {
               ),
             ),
           ],
+          if (journey.isTracking) ...[
+            const SizedBox(height: 16),
+            _monitoring(context),
+          ],
           const Spacer(),
           _action(context),
           const SizedBox(height: 12),
@@ -364,6 +490,69 @@ class _JourneyView extends StatelessWidget {
                   Text(label, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 ],
               ),
+      ),
+    );
+  }
+
+  Widget _monitoring(BuildContext context) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                recording ? Icons.fiber_manual_record : Icons.monitor_heart_outlined,
+                size: 20,
+                color: recording ? AppColors.destructive : AppColors.primary,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Patient monitoring',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.foreground,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            recording
+                ? 'Recording… speak the vitals and any problems, then tap Stop & send.'
+                : 'Speak the patient\'s vitals (every ~30 min) and any problems during transport. It is transcribed and shared with both hospitals.',
+            style: const TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: monitoringBusy ? null : onToggleRecording,
+              style: FilledButton.styleFrom(
+                backgroundColor: recording ? AppColors.destructive : AppColors.primary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kRadiusXl)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              icon: monitoringBusy
+                  ? const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : Icon(recording ? Icons.stop : Icons.mic),
+              label: Text(
+                monitoringBusy
+                    ? 'Sending…'
+                    : recording
+                        ? 'Stop & send'
+                        : 'Record monitoring',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

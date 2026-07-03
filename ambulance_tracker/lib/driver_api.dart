@@ -22,6 +22,7 @@ class JourneyPoint {
 class Journey {
   Journey({
     required this.transportId,
+    required this.referralId,
     required this.referralNumber,
     required this.step,
     this.sending,
@@ -32,6 +33,7 @@ class Journey {
   });
 
   final String transportId;
+  final String referralId;
   final String referralNumber;
 
   /// ASSIGNED -> EN_ROUTE_TO_PICKUP -> PATIENT_ONBOARD -> ARRIVED
@@ -53,6 +55,7 @@ class Journey {
 
   static Journey fromJson(Map<String, dynamic> j) => Journey(
         transportId: j['transport_id'] as String,
+        referralId: j['referral_id'] as String? ?? '',
         referralNumber: j['referral_number'] as String? ?? '',
         step: j['step'] as String? ?? 'ASSIGNED',
         sending: JourneyPoint.fromJson(j['sending'] as Map<String, dynamic>?),
@@ -68,6 +71,25 @@ class ApiException implements Exception {
   final String message;
   @override
   String toString() => message;
+}
+
+/// Outcome of uploading a voice-recorded Patient Monitoring Transfer Form.
+class MonitoringResult {
+  MonitoringResult({
+    required this.summary,
+    required this.vitalsCount,
+    required this.problemsCount,
+  });
+
+  final String summary;
+  final int vitalsCount;
+  final int problemsCount;
+
+  static MonitoringResult fromJson(Map<String, dynamic> j) => MonitoringResult(
+        summary: j['summary'] as String? ?? '',
+        vitalsCount: (j['vital_signs'] as List<dynamic>?)?.length ?? 0,
+        problemsCount: (j['problems'] as List<dynamic>?)?.length ?? 0,
+      );
 }
 
 /// Talks to the backend's driver endpoints. The ambulance authenticates with the
@@ -93,6 +115,18 @@ class DriverApi {
         'Authorization': 'Bearer $token',
       };
 
+  /// Pull a human-readable error out of a backend response body. The API returns
+  /// errors as ``{"detail": {"message": "...", ...}}`` (or a plain ``detail`` string).
+  String _errorMessage(http.Response resp, String fallback) {
+    try {
+      final body = jsonDecode(resp.body);
+      final detail = body is Map ? body['detail'] : null;
+      if (detail is Map && detail['message'] is String) return detail['message'] as String;
+      if (detail is String && detail.isNotEmpty) return detail;
+    } catch (_) {/* not JSON — use the fallback */}
+    return fallback;
+  }
+
   /// Signs in with the ambulance login set by the facility. Returns
   /// `(token, plate)`.
   Future<({String token, String plate})> login({
@@ -116,9 +150,9 @@ class DriverApi {
       );
     }
     if (resp.statusCode == 401) {
-      throw ApiException('Wrong login ID or password, or the ambulance is disabled.');
+      throw ApiException(_errorMessage(resp, 'Wrong login ID or password, or the ambulance is disabled.'));
     }
-    throw ApiException('Sign-in failed (${resp.statusCode}).');
+    throw ApiException(_errorMessage(resp, 'Sign-in failed (${resp.statusCode}).'));
   }
 
   /// The current journey, or null when none is assigned.
@@ -176,6 +210,37 @@ class DriverApi {
   Future<Journey> arrived(String baseUrl, String token) =>
       _advance(baseUrl, token, '/driver/journey/arrived');
 
+  /// Uploads a voice recording of the Patient Monitoring Transfer Form for the
+  /// active journey. The backend transcribes it, extracts the vitals/problem log,
+  /// and stores it on the referral for the clinics and admins to read on the web.
+  Future<MonitoringResult> recordMonitoring({
+    required String baseUrl,
+    required String token,
+    required String filePath,
+  }) async {
+    final req = http.MultipartRequest('POST', _uri(baseUrl, '/driver/journey/monitoring'))
+      ..headers['Authorization'] = 'Bearer $token'
+      ..files.add(await http.MultipartFile.fromPath('audio', filePath, filename: 'monitoring.m4a'));
+    final streamed = await req.send().timeout(const Duration(seconds: 180));
+    final resp = await http.Response.fromStream(streamed);
+    if (resp.statusCode == 200) {
+      return MonitoringResult.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
+    }
+    if (resp.statusCode == 401) throw ApiException('Session expired. Sign in again.');
+    if (resp.statusCode == 404) throw ApiException('No active journey to attach monitoring to.');
+    String detail = 'Could not save the recording (${resp.statusCode}).';
+    try {
+      final body = jsonDecode(resp.body);
+      final d = body is Map ? body['detail'] : null;
+      if (d is Map && d['message'] is String) {
+        detail = d['message'] as String;
+      } else if (d is String) {
+        detail = d;
+      }
+    } catch (_) {}
+    throw ApiException(detail);
+  }
+
   /// Streams a single GPS fix for the active journey. Returns true on success;
   /// failures are swallowed so a dropped fix doesn't interrupt the trip.
   Future<bool> ping({
@@ -196,5 +261,62 @@ class DriverApi {
     } catch (_) {
       return false;
     }
+  }
+
+  // ── In-app calling ────────────────────────────────────────────────────────────────
+
+  /// Place a call to a clinic for a referral. ``side`` is "receiving" or "referring".
+  /// Returns the new call id.
+  Future<String> startCall({
+    required String baseUrl,
+    required String token,
+    required String referralId,
+    String side = 'receiving',
+  }) async {
+    final resp = await _client
+        .post(
+          _uri(baseUrl, '/driver/calls'),
+          headers: _authHeaders(token),
+          body: jsonEncode({'referral_id': referralId, 'side': side}),
+        )
+        .timeout(const Duration(seconds: 20));
+    if (resp.statusCode == 201) {
+      return (jsonDecode(resp.body) as Map<String, dynamic>)['id'] as String;
+    }
+    String msg = 'Could not start the call (${resp.statusCode}).';
+    try {
+      final d = jsonDecode(resp.body)['detail'];
+      if (d is Map && d['message'] is String) msg = d['message'] as String;
+    } catch (_) {}
+    throw ApiException(msg);
+  }
+
+  Future<void> answerCall({required String baseUrl, required String token, required String callId}) =>
+      _callAction(baseUrl, token, '/driver/calls/$callId/answer');
+
+  Future<void> endCall({required String baseUrl, required String token, required String callId}) =>
+      _callAction(baseUrl, token, '/driver/calls/$callId/end');
+
+  Future<void> _callAction(String baseUrl, String token, String path) async {
+    await _client
+        .post(_uri(baseUrl, path), headers: _authHeaders(token))
+        .timeout(const Duration(seconds: 20));
+  }
+
+  /// Relay a WebRTC signaling message (offer/answer/ice) to the other party.
+  Future<void> sendSignal({
+    required String baseUrl,
+    required String token,
+    required String callId,
+    required String kind,
+    required Object data,
+  }) async {
+    await _client
+        .post(
+          _uri(baseUrl, '/driver/calls/$callId/signal'),
+          headers: _authHeaders(token),
+          body: jsonEncode({'kind': kind, 'data': data}),
+        )
+        .timeout(const Duration(seconds: 20));
   }
 }
