@@ -53,6 +53,22 @@ const ambulanceIcon = L.divIcon({
   iconAnchor: [16, 16],
 });
 
+// Endpoint pins drawn as self-contained HTML (no image assets) so they always render
+// — Leaflet's default PNG marker can fail to load under the bundler.
+const endpointIcon = (bg: string, glyph: string) =>
+  L.divIcon({
+    className: "",
+    html: `<div style="background:${bg};color:white;border-radius:9999px 9999px 9999px 2px;width:28px;height:28px;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px white,0 1px 4px rgba(0,0,0,.4)">
+      <span style="transform:rotate(45deg);font-size:14px;line-height:1">${glyph}</span>
+    </div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 28],
+    popupAnchor: [0, -26],
+  });
+
+const originIcon = endpointIcon("#475569", "🏥");
+const destinationIcon = endpointIcon("#059669", "🏥");
+
 // The viewer's own live position — a pulsing blue "you are here" dot.
 const myLocationIcon = L.divIcon({
   className: "",
@@ -255,12 +271,12 @@ export const AmbulanceTrackingPage = () => {
               />
 
               {track?.origin && (
-                <Marker position={[track.origin.latitude, track.origin.longitude]}>
+                <Marker position={[track.origin.latitude, track.origin.longitude]} icon={originIcon}>
                   <Popup>Origin: {track.origin.name}</Popup>
                 </Marker>
               )}
               {track?.destination && (
-                <Marker position={[track.destination.latitude, track.destination.longitude]}>
+                <Marker position={[track.destination.latitude, track.destination.longitude]} icon={destinationIcon}>
                   <Popup>Destination: {track.destination.name}</Popup>
                 </Marker>
               )}

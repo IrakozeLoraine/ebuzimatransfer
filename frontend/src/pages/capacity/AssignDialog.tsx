@@ -115,11 +115,13 @@ export default function AssignDialog({
         ? single.facility_id ? "Transfer Resource" : "Assign Resource"
         : `Transfer ${count} resources`;
 
-    // Facility admins must pick a unit; super admins may save (incl. return to stock).
+    // Assigning a resource to a facility always requires a unit; only a super-admin
+    // return to central stock (no target facility) may omit it.
+    const needsUnit = !!targetFacilityId;
     // A quantity is always required, and for a single resource it can't exceed what's movable.
     const saveDisabled =
         isPending ||
-        (!isSuperAdmin && !unitId) ||
+        (needsUnit && !unitId) ||
         qty === null ||
         sameLocation ||
         (single != null && (singleMovable < 1 || qty > singleMovable));
@@ -162,7 +164,7 @@ export default function AssignDialog({
                         <div className="space-y-1.5">
                             <Label>
                                 Unit{" "}
-                                {isSuperAdmin && <span className="text-muted-foreground text-xs">(optional)</span>}
+                                {!needsUnit && <span className="text-muted-foreground text-xs">(optional)</span>}
                             </Label>
                             <Select value={unitId} onValueChange={setUnitId} disabled={!unitFacilityId}>
                                 <SelectTrigger>

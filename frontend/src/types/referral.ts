@@ -24,6 +24,7 @@ export interface StatusHistory {
 
 export interface ReferralTransport {
   id: string;
+  ambulance_id: string | null;
   ambulance_identifier: string;
   driver_name: string | null;
   driver_phone: string | null;
@@ -33,19 +34,31 @@ export interface ReferralTransport {
   arrival_time: string | null;
 }
 
+/** The Patient Monitoring Transfer Form recorded by the ambulance driver by voice. */
+export interface TransportMonitoring {
+  audio_url: string | null;
+  transcript: string;
+  summary: string;
+  vital_signs: Array<Record<string, string | null>>;
+  problems: Array<Record<string, string | null>>;
+  recorded_at: string | null;
+}
+
 export interface Referral {
   id: string;
   referral_number: string;
   patient_code: string;
-  age_band: string;
   sex: string;
   diagnosis: string;
-  comorbidities: string | null;
-  acuity_level: string;
-  urgency: string;
   reason_for_transfer: string;
-  ventilator_needed: boolean;
-  high_flow_oxygen_needed: boolean;
+  form_type: string;
+  form_data: Record<string, unknown> | null;
+  transport_monitoring: TransportMonitoring | null;
+  feedback_data: Record<string, unknown> | null;
+  counter_referral_data: Record<string, unknown> | null;
+  audio_url: string | null;
+  transcript: string | null;
+  ai_summary: string | null;
   status: ReferralStatus;
   rejection_reason: string | null;
   rejection_comment: string | null;
@@ -64,19 +77,38 @@ export interface Referral {
 }
 
 export interface CreateReferralPayload {
-  patient_code: string;
-  age_band: string;
+  patient_code?: string;
   sex: string;
   diagnosis: string;
-  comorbidities?: string;
-  acuity_level: string;
-  urgency: string;
   reason_for_transfer: string;
-  ventilator_needed: boolean;
-  high_flow_oxygen_needed: boolean;
+  form_type: string;
+  form_data?: Record<string, unknown> | null;
   preferred_facility_id?: string;
   requested_unit_id?: string;
   requested_resource_id: string;
+  audio_url?: string;
+  transcript?: string;
+  ai_summary?: string;
+  /** Links a pre-form coordination call to the referral being created. */
+  call_log_id?: string;
+}
+
+/** Form fields extracted from a dictated transcript (all optional — reviewed by the clinician). */
+export interface DictationFields {
+  patient_code?: string | null;
+  sex?: string | null;
+  diagnosis?: string | null;
+  reason_for_transfer?: string | null;
+}
+
+/** Response of POST /referrals/transcribe. */
+export interface DictationResult {
+  audio_url: string | null;
+  transcript: string;
+  summary: string;
+  fields: DictationFields;
+  /** Form-specific values extracted for the chosen MoH form (keyed by field name). */
+  form_data?: Record<string, unknown>;
 }
 
 export interface AcceptReferralPayload {

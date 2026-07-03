@@ -20,6 +20,7 @@ import { CreateAssignUserDialog } from "./CreateAssignUserDialog";
 import { UnitMultiSelect } from "./UnitMultiSelect";
 import { useAssignUser } from "@/hooks/useUser";
 import { useAuthStore } from "@/store/auth.store";
+import { toast } from "@/components/ui/toaster";
 
 interface Props {
   open: boolean;
@@ -41,6 +42,8 @@ export const AssignUserDialog = ({
 }: Props) => {
   const form = useForm<AssignUserFormValues>({ resolver: zodResolver(assignUserSchema) });
   const activeFacilityId = useAuthStore((s) => s.user?.active_facility_id);
+  const myId = useAuthStore((s) => s.user?.id);
+  const myMedicalId = useAuthStore((s) => s.user?.medical_id);
   // Only the super-admin facility picker needs the list; skip the query otherwise.
   const needsFacilityPicker = isSuperAdmin && !fixedFacility;
   // Resolve which facility the unit picker should offer units for.
@@ -65,6 +68,18 @@ export const AssignUserDialog = ({
     setNotFound(false);
     if (!fixedUser && (!data.medical_id || data.medical_id.trim().length < 3)) {
       form.setError("medical_id", { message: "Medical ID is required" });
+      return;
+    }
+    // A facility admin can't assign roles to their own account.
+    const targetingSelf = fixedUser
+      ? fixedUser.id === myId
+      : !!myMedicalId && data.medical_id?.trim().toLowerCase() === myMedicalId.toLowerCase();
+    if (!isSuperAdmin && targetingSelf) {
+      if (fixedUser) {
+        toast({ variant: "destructive", title: "You can't assign roles to your own account." });
+      } else {
+        form.setError("medical_id", { message: "You can't assign roles to your own account." });
+      }
       return;
     }
     if (needsFacilityPicker && !data.facility_id) {

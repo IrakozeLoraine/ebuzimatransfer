@@ -9,8 +9,10 @@ import {
   updateReferralStatus,
   recordArrivalCondition,
   markReferralArrived,
+  saveReferralFeedback,
+  transcribeReferral,
 } from "@/api/referrals.api";
-import { createTransport } from "@/api/transport.api";
+import { createTransport, removeTransport } from "@/api/transport.api";
 import type { CreateReferralPayload, AcceptReferralPayload, RejectReferralPayload, ArrivalCondition } from "@/types/referral";
 import type { CreateTransportPayload } from "@/types/transport";
 
@@ -25,6 +27,15 @@ export const useReferral = (id: string) =>
     queryKey: ["referral", id],
     queryFn: () => getReferral(id),
     enabled: !!id,
+  });
+
+// Turn a dictated recording into prefilled form fields + transcript + summary.
+// ``formSpec`` is the chosen MoH form's field list, so the service also fills the
+// form-specific fields.
+export const useTranscribeReferral = () =>
+  useMutation({
+    mutationFn: ({ audio, formSpec }: { audio: Blob; formSpec?: unknown }) =>
+      transcribeReferral(audio, formSpec),
   });
 
 export const useCreateReferral = () => {
@@ -108,12 +119,42 @@ export const useArrangeTransport = () => {
   });
 };
 
+// Referring clinician removes the assigned ambulance (before the journey starts).
+export const useRemoveTransport = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (referralId: string) => removeTransport(referralId),
+    onSuccess: (_, referralId) => {
+      qc.invalidateQueries({ queryKey: ["referrals"] });
+      qc.invalidateQueries({ queryKey: ["referral", referralId] });
+    },
+  });
+};
+
 // Receiving clinician confirms arrival for a transfer with no tracked transport.
 export const useMarkArrived = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => markReferralArrived(id),
     onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ["referrals"] });
+      qc.invalidateQueries({ queryKey: ["referral", id] });
+    },
+  });
+};
+
+// Receiving clinician records the Referral Feedback / Counter-Referral.
+export const useSaveReferralFeedback = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: { feedback_data?: Record<string, unknown>; counter_referral_data?: Record<string, unknown> };
+    }) => saveReferralFeedback(id, payload),
+    onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: ["referrals"] });
       qc.invalidateQueries({ queryKey: ["referral", id] });
     },

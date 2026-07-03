@@ -27,7 +27,7 @@ export interface AmbulanceTrack {
   arrival_time: string | null;
 }
 
-export type AmbulanceStatus = "AVAILABLE" | "ON_JOURNEY";
+export type AmbulanceStatus = "AVAILABLE" | "ASSIGNED" | "ON_JOURNEY";
 
 export interface Ambulance {
   id: string;

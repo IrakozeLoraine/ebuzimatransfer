@@ -10,6 +10,8 @@ import {
 import { Check, ChevronsUpDown, LogOut, Menu, Settings } from "lucide-react";
 import { Link } from "react-router-dom";
 import { NotificationBell } from "./NotificationBell";
+import { FacilityLocationButton } from "./FacilityLocationButton";
+import { DirectoryCallDialog } from "@/components/call/DirectoryCallDialog";
 import { useUiStore } from "@/store/ui.store";
 
 export const Header = () => {
@@ -81,6 +83,8 @@ export const Header = () => {
             </div>
 
             <div className="flex shrink-0 items-center gap-1">
+                <FacilityLocationButton />
+                <DirectoryCallDialog />
                 <NotificationBell />
 
                 <DropdownMenu>

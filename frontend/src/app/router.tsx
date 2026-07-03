@@ -53,6 +53,11 @@ const AuditLogsPage = lazy(() =>
     default: m.AuditLogsPage,
   }))
 );
+const CallLogsPage = lazy(() =>
+  import("@/pages/admin/CallLogsPage").then((m) => ({
+    default: m.CallLogsPage,
+  }))
+);
 const UnitsCatalogPage = lazy(() =>
   import("@/pages/admin/units/UnitsCatalogPage").then((m) => ({
     default: m.UnitsCatalogPage,
@@ -207,6 +212,7 @@ export const router = createBrowserRouter([
               </RoleGuard>
             ),
           },
+          { path: "/call-logs", element: withSuspense(<CallLogsPage />) },
           // Unknown in-app paths render a 404 within the authenticated shell.
           { path: "*", element: withSuspense(<NotFoundPage />) },
         ],

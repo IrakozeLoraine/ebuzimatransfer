@@ -1,20 +1,29 @@
 import { useState } from "react";
-import { Pencil, KeyRound, Building2 } from "lucide-react";
+import { Pencil, KeyRound, Building2, MapPin } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getRoleColor, ACCOUNT_STATUS_LABELS } from "../admin/users/constants";
 import { EditProfileDialog } from "./EditProfileDialog";
 import { ChangePasswordDialog } from "./ChangePasswordDialog";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useFacilities } from "@/hooks/useFacilities";
+import { FacilityLocationDialog } from "@/components/layout/FacilityLocationDialog";
 
 export const ProfilePage = () => {
   const user = useAuthStore((s) => s.user);
+  const { isFacilityAdmin } = usePermissions();
+  const { data: facilities = [] } = useFacilities();
   const [editing, setEditing] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [settingLocation, setSettingLocation] = useState(false);
 
   if (!user) {
     return <p className="text-muted-foreground">Loading your profile…</p>;
   }
+
+  const myFacility = facilities.find((f) => f.id === user.active_facility_id) ?? null;
+  const hasCoords = myFacility?.latitude != null && myFacility?.longitude != null;
 
   const contactRows = [
     { label: "Email", value: user.email || "—" },
@@ -92,8 +101,32 @@ export const ProfilePage = () => {
         </Card>
       </div>
 
+      {isFacilityAdmin && myFacility && (
+        <Card className="p-6">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold">Facility location</h2>
+            <Button variant="outline" size="sm" onClick={() => setSettingLocation(true)}>
+              <MapPin className="mr-2 h-4 w-4" />
+              {hasCoords ? "Update location" : "Set location"}
+            </Button>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <Building2 className="h-4 w-4 text-muted-foreground" />
+            <span className="font-medium">{myFacility.name}</span>
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {hasCoords ? (
+              <>Pinned at {myFacility.latitude!.toFixed(5)}, {myFacility.longitude!.toFixed(5)} — used for ambulance routing and live tracking.</>
+            ) : (
+              <>No location set yet. Pin it so ambulance routes and live tracking work for this facility.</>
+            )}
+          </p>
+        </Card>
+      )}
+
       <EditProfileDialog open={editing} user={user} onClose={() => setEditing(false)} />
       <ChangePasswordDialog open={changingPassword} onClose={() => setChangingPassword(false)} />
+      <FacilityLocationDialog open={settingLocation} onOpenChange={setSettingLocation} />
     </div>
   );
 };

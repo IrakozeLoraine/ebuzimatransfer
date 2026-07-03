@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useReferral, useAcceptReferral, useQuickAcceptReferral, useRejectReferral, useRecordArrivalCondition, useArrangeTransport, useMarkArrived } from "@/hooks/useReferrals";
+import { useReferral, useAcceptReferral, useQuickAcceptReferral, useRejectReferral, useRecordArrivalCondition, useArrangeTransport, useRemoveTransport, useMarkArrived } from "@/hooks/useReferrals";
 import type { ArrivalCondition } from "@/types/referral";
 import { useResources } from "@/hooks/useResources";
 import { useAmbulances } from "@/hooks/useAmbulances";
 import { useFacilities } from "@/hooks/useFacilities";
+import { useUnits } from "@/hooks/useUnits";
 import { useAuthStore } from "@/store/auth.store";
 import { toast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/utils/apiError";
-import { Zap, Truck } from "lucide-react";
+import { Zap, Truck, Volume2, Sparkles } from "lucide-react";
 import { StatusBadge } from "@/components/atoms/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -26,6 +27,11 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { cn } from "@/utils/cn";
 import RejectDialog from "./RejectDialog";
 import { CallCoordinationCard } from "./CallCoordinationCard";
+import { CallButton } from "@/components/call/CallButton";
+import { DynamicFormDetails } from "@/components/referral/DynamicFormDetails";
+import { TransportMonitoringCard } from "@/components/referral/TransportMonitoringCard";
+import { ReferralFeedbackSection } from "@/components/referral/ReferralFeedbackSection";
+import { getFormDef } from "@/config/transferForms";
 
 const ARRIVAL_CONDITIONS: { value: ArrivalCondition; label: string }[] = [
   { value: "STABLE", label: "Stable" },
@@ -60,11 +66,13 @@ export const ReferralDetailPage = () => {
   const { data: resources = [] } = useResources();
   const { data: ambulances = [] } = useAmbulances(true);
   const { data: facilities = [] } = useFacilities();
+  const { data: allUnits = [] } = useUnits();
   const { mutate: accept, isPending: accepting } = useAcceptReferral();
   const { mutate: quickAccept, isPending: quickAccepting } = useQuickAcceptReferral();
   const { mutate: reject, isPending: rejecting } = useRejectReferral();
   const { mutate: recordCondition, isPending: recordingCondition } = useRecordArrivalCondition();
   const { mutate: arrangeTransport, isPending: arranging } = useArrangeTransport();
+  const { mutate: removeTransport, isPending: removing } = useRemoveTransport();
   const { mutate: markArrived, isPending: markingArrived } = useMarkArrived();
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [selectedResourceId, setSelectedResourceId] = useState("");
@@ -166,6 +174,12 @@ export const ReferralDetailPage = () => {
 
   // The latest transport record (if the referring clinician arranged one).
   const transport = referral.transport_events?.[referral.transport_events.length - 1] ?? null;
+  // Only the referring hospital's own ambulances may be assigned (it runs the
+  // transport). Scope the picker to the referral's referring facility regardless of
+  // who's viewing (a super admin would otherwise see every facility's fleet).
+  const assignableAmbulances = ambulances.filter(
+    (a) => a.facility_id === referral.referring_facility_id
+  );
   const receivingFacilityId = referral.accepted_facility_id ?? referral.preferred_facility_id;
   const myFacility = me?.active_facility_id ?? null;
   const myUnits = me?.unit_ids ?? [];
@@ -181,13 +195,13 @@ export const ReferralDetailPage = () => {
     (!!receivingFacilityId && receivingFacilityId === myFacility) ||
     (!!referral.requested_unit_id && myUnits.includes(referral.requested_unit_id));
 
-  // Phone coordination targets the counterparty hospital. A pure receiving-side
-  // viewer calls the hospital that submitted the request; otherwise (referring side
-  // or super admin) the destination facility.
-  const callFacilityId =
-    isReceivingSide && !isReferringSide
-      ? referral.referring_facility_id
-      : receivingFacilityId;
+  // Phone coordination targets the counterparty hospital + its unit. A pure
+  // receiving-side viewer calls the unit that submitted the request (origin unit);
+  // otherwise (referring side or super admin) the requested destination unit.
+  const callBackToReferrer = isReceivingSide && !isReferringSide;
+  const callFacilityId = callBackToReferrer ? referral.referring_facility_id : receivingFacilityId;
+  const callUnitId = callBackToReferrer ? referral.origin_unit_id : referral.requested_unit_id;
+  const callUnitName = allUnits.find((u) => u.id === callUnitId)?.name;
 
   // Only the destination side may approve/reject, and never the clinician who sent
   // the request — mirrors the server-side guard so the buttons aren't shown in vain.
@@ -250,7 +264,6 @@ export const ReferralDetailPage = () => {
           </CardHeader>
           <CardContent className="space-y-3">
             <Row label="Patient Code" value={referral.patient_code} />
-            <Row label="Age Band" value={referral.age_band} />
             <Row label="Sex" value={referral.sex === "M" ? "Male" : "Female"} />
           </CardContent>
         </Card>
@@ -260,12 +273,8 @@ export const ReferralDetailPage = () => {
             <CardTitle className="text-sm">Clinical Summary</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            <Row label="Form" value={getFormDef(referral.form_type).label} />
             <Row label="Diagnosis" value={referral.diagnosis} />
-            <Row label="Acuity Level" value={referral.acuity_level} />
-            <Row label="Urgency" value={referral.urgency.replace(/_/g, " ")} />
-            <Row label="Ventilator" value={referral.ventilator_needed ? "Required" : "Not required"} />
-            <Row label="High-flow O₂" value={referral.high_flow_oxygen_needed ? "Required" : "Not required"} />
-            {referral.comorbidities && <Row label="Comorbidities" value={referral.comorbidities} />}
             {referral.requested_resource_id && (
               <Row
                 label="Requested Resource"
@@ -287,12 +296,57 @@ export const ReferralDetailPage = () => {
         </CardContent>
       </Card>
 
+      {/* Form-specific MoH fields — only the sections this form variant actually
+          uses, so each unit's referral shows exactly what it captured. */}
+      <DynamicFormDetails formType={referral.form_type} formData={referral.form_data} />
+
+      {/* Patient Monitoring Transfer Form — recorded by the ambulance crew by voice
+          during transport, shown read-only to both clinics and admins. */}
+      <TransportMonitoringCard monitoring={referral.transport_monitoring} />
+
+      {/* Voice referral — the referring clinician's recording, an AI summary, and the
+          full transcript, so the receiving clinic can listen to the original handover. */}
+      {(referral.audio_url || referral.ai_summary || referral.transcript) && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Sparkles className="h-4 w-4 text-primary" /> Voice Referral
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {referral.ai_summary && (
+              <p className="text-sm leading-relaxed text-foreground/80">{referral.ai_summary}</p>
+            )}
+            {referral.audio_url && (
+              <div className="space-y-1.5">
+                <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <Volume2 className="h-3.5 w-3.5" /> Original recording
+                </p>
+                <audio controls src={referral.audio_url} className="w-full" />
+              </div>
+            )}
+            {referral.transcript && (
+              <details className="text-sm">
+                <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                  View full transcript
+                </summary>
+                <p className="mt-2 whitespace-pre-wrap leading-relaxed text-foreground/70">
+                  {referral.transcript}
+                </p>
+              </details>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Coordinate by phone with the *other* hospital: the receiving side calls the
           hospital that submitted the request; the referring side calls the destination. */}
       <CallCoordinationCard
         referralId={referral.id}
         facilityId={callFacilityId}
         facilityName={facilities.find((f) => f.id === callFacilityId)?.name}
+        unitId={callUnitId ?? undefined}
+        unitName={callUnitName}
       />
 
       {/* Transport — arranged by the referring clinician (their hospital's ambulance).
@@ -320,6 +374,39 @@ export const ReferralDetailPage = () => {
                     The driver advances the journey (start → picked up → arrived) from their phone app.
                   </p>
                 )}
+                {/* Call the ambulance crew in-app; the referring side can also swap the
+                    assigned ambulance until the driver starts the journey. */}
+                {!transport.arrival_time && (
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {transport.ambulance_id && (
+                      <CallButton
+                        facilityId={null}
+                        ambulanceId={transport.ambulance_id}
+                        ambulanceLabel={`Ambulance ${transport.ambulance_identifier}`}
+                        referralId={referral.id}
+                        label="Call ambulance"
+                        variant="outline"
+                        size="sm"
+                      />
+                    )}
+                    {isReferringSide && !transport.dispatch_time && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        disabled={removing}
+                        onClick={() =>
+                          removeTransport(referral.id, {
+                            onSuccess: () => toast({ variant: "success", title: "Ambulance removed — assign another" }),
+                            onError: (e) => toast({ variant: "destructive", title: "Could not remove ambulance", description: getApiErrorMessage(e) }),
+                          })
+                        }
+                      >
+                        {removing ? "Removing…" : "Remove ambulance"}
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -335,10 +422,10 @@ export const ReferralDetailPage = () => {
                   <Label className="text-xs">Available ambulance</Label>
                   <Select value={ambulanceId} onValueChange={setAmbulanceId}>
                     <SelectTrigger>
-                      <SelectValue placeholder={ambulances.length ? "Select an ambulance" : "No ambulances available"} />
+                      <SelectValue placeholder={assignableAmbulances.length ? "Select an ambulance" : "No ambulances available"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {ambulances.map((a) => (
+                      {assignableAmbulances.map((a) => (
                         <SelectItem key={a.id} value={a.id}>
                           {a.plate_number}{a.driver_name ? ` — ${a.driver_name}` : ""}
                         </SelectItem>
@@ -434,6 +521,13 @@ export const ReferralDetailPage = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Referral Feedback & Counter-Referral — filled by the receiving facility once
+          the transfer is accepted; read-only for the referring side. */}
+      <ReferralFeedbackSection
+        referral={referral}
+        canEdit={canRecordArrival && (referral.status === "ACCEPTED" || isInTransit)}
+      />
 
       {/* Status Timeline */}
       <Card>

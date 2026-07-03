@@ -15,7 +15,8 @@ import { getRoleColor, ACCOUNT_STATUS_LABELS } from "./constants";
 export const UserDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { isSuperAdmin, isFacilityAdmin } = usePermissions();
+  const { user: currentUser } = useAuthStore();
+  const { isSuperAdmin, isFacilityAdmin, isAdmin } = usePermissions();
   const activeFacilityId = useAuthStore((s) => s.user?.active_facility_id);
   const { data: user, isLoading } = useUser(id);
   const [editing, setEditing] = useState(false);
@@ -82,9 +83,11 @@ export const UserDetailPage = () => {
         </div>
         {user && (
           <div className="flex flex-wrap justify-center md:justify-start gap-2">
+            {(isAdmin && currentUser?.id != user.id) && (
             <Button variant="outline" onClick={() => setAssigning(true)}>
               <UserPlus className="mr-2 h-4 w-4" /> Assign to Facility
             </Button>
+            )}
             {canRequestReset && (
               <Button variant="outline" onClick={() => setConfirmReset(true)}>
                 <KeyRound className="mr-2 h-4 w-4" /> Request Password Reset
@@ -95,7 +98,7 @@ export const UserDetailPage = () => {
                 <Pencil className="mr-2 h-4 w-4" /> Edit
               </Button>
             )}
-            {isSuperAdmin && !user.global_roles.includes("SUPER_ADMIN") && user.is_active && (
+            {isAdmin  && !user.global_roles.includes("SUPER_ADMIN") && user.is_active && (
               <Button
                 variant="outline"
                 className="text-destructive hover:text-destructive hover:bg-destructive/10"
@@ -108,7 +111,7 @@ export const UserDetailPage = () => {
         )}
       </div>
 
-      <div className={`grid gap-6 ${isSuperAdmin ? 'lg:grid-cols-2' : 'lg:grid-cols-1'}`}>
+      <div className={`grid gap-6 ${isAdmin ? 'lg:grid-cols-2' : 'lg:grid-cols-1'}`}>
         <Card className="p-6">
           <h2 className="text-sm font-semibold mb-4">Account</h2>
           <dl className="grid gap-5 sm:grid-cols-2">
@@ -120,7 +123,7 @@ export const UserDetailPage = () => {
             ))}
           </dl>
         </Card>
-        {isSuperAdmin && (
+        {isAdmin && (
           <Card className="p-6">
             <h2 className="text-sm font-semibold mb-4">Roles by facility</h2>
             {user && user.global_roles.length === 0 && user.facility_roles.length === 0 && (
@@ -149,7 +152,7 @@ export const UserDetailPage = () => {
                       {fr.facility.name}
                       <ChevronRight className="h-3 w-3 opacity-70 group-hover:translate-x-0.5 transition-transform" />
                     </Link>
-                    {isSuperAdmin && (
+                    {isAdmin && (
                       <Button
                         size="sm"
                         variant="ghost"

@@ -3,6 +3,7 @@ import { Plus, Truck, Search } from "lucide-react";
 import { DataTable } from "@/components/organisms/DataTable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 import { toast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/utils/apiError";
 import { useAmbulances, useUpdateAmbulance } from "@/hooks/useAmbulances";
@@ -16,7 +17,14 @@ import AmbulanceSetupDialog from "./AmbulanceSetupDialog";
 
 const STATUS_STYLES: Record<string, string> = {
   AVAILABLE: "bg-emerald-100 text-emerald-700",
+  ASSIGNED: "bg-blue-100 text-blue-700",
   ON_JOURNEY: "bg-amber-100 text-amber-700",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  AVAILABLE: "Available",
+  ASSIGNED: "Assigned",
+  ON_JOURNEY: "On journey",
 };
 
 export const AmbulancesPage = () => {
@@ -26,19 +34,27 @@ export const AmbulancesPage = () => {
   const { data: facilities = [] } = useFacilities();
 
   const [search, setSearch] = useState("");
+  const [facilityFilter, setFacilityFilter] = useState<string>("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Ambulance | null>(null);
   const [setupCreds, setSetupCreds] = useState<AmbulanceCredentials | null>(null);
 
   const query = search.trim().toLowerCase();
-  const filtered = query
-    ? ambulances.filter(
-        (a) =>
-          a.plate_number.toLowerCase().includes(query) ||
-          (a.driver_name ?? "").toLowerCase().includes(query) ||
-          a.login_id.toLowerCase().includes(query)
-      )
-    : ambulances;
+  const filtered = ambulances.filter((a) => {
+    const matchesSearch =
+      !query ||
+      a.plate_number.toLowerCase().includes(query) ||
+      (a.driver_name ?? "").toLowerCase().includes(query) ||
+      a.login_id.toLowerCase().includes(query);
+    const matchesFacility = !facilityFilter || a.facility_id === facilityFilter;
+    return matchesSearch && matchesFacility;
+  });
+
+  // Super admins can narrow the all-facility list to one facility.
+  const facilityOptions = [
+    { value: "", label: "All facilities" },
+    ...facilities.map((f) => ({ value: f.id, label: f.name })),
+  ];
 
   const toggleActive = (a: Ambulance) =>
     update(
@@ -77,8 +93,8 @@ export const AmbulancesPage = () => {
         !a.is_active ? (
           <span className="text-xs font-medium text-muted-foreground">Disabled</span>
         ) : (
-          <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", STATUS_STYLES[a.status])}>
-            {a.status === "ON_JOURNEY" ? "On journey" : "Available"}
+          <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", STATUS_STYLES[a.status] ?? STATUS_STYLES.AVAILABLE)}>
+            {STATUS_LABELS[a.status] ?? a.status}
           </span>
         ),
     },
@@ -118,14 +134,28 @@ export const AmbulancesPage = () => {
         </Button>
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
-        <Input
-          placeholder="Search by plate, driver, or login…"
-          className="pl-9"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative w-full sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+          <Input
+            placeholder="Search by plate, driver, or login…"
+            className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        {isSuperAdmin && (
+          <div className="w-full sm:max-w-xs">
+            <Combobox
+              options={facilityOptions}
+              value={facilityFilter}
+              onChange={setFacilityFilter}
+              placeholder="All facilities"
+              searchPlaceholder="Filter by facility…"
+              emptyMessage="No matching facilities."
+            />
+          </div>
+        )}
       </div>
 
       <DataTable

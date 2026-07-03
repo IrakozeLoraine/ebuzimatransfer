@@ -18,11 +18,6 @@ const CATEGORIES = [
   { key: "REJECTED", label: "Rejected", statuses: ["REJECTED", "CANCELLED"] },
 ] as const;
 
-const URGENCY_COLORS: Record<string, string> = {
-  IMMEDIATE: "text-rose-600 font-semibold",
-  URGENT: "text-amber-600 font-medium",
-  NON_URGENT: "text-muted-foreground",
-};
 
 export const ReferralsPage = () => {
   const navigate = useNavigate();
@@ -62,12 +57,6 @@ export const ReferralsPage = () => {
       header: "Diagnosis",
       accessor: (r: Referral) => (
         <span className="max-w-[200px] truncate block text-sm text-muted-foreground">{r.diagnosis}</span>
-      ),
-    },
-    {
-      header: "Urgency",
-      accessor: (r: Referral) => (
-        <span className={URGENCY_COLORS[r.urgency] ?? ""}>{r.urgency.replace(/_/g, " ")}</span>
       ),
     },
     { header: "Status", accessor: (r: Referral) => <StatusBadge status={r.status} /> },
@@ -138,7 +127,6 @@ export const ReferralsPage = () => {
             { header: "Ref #", value: (r) => r.referral_number },
             { header: "Patient Code", value: (r) => r.patient_code },
             { header: "Diagnosis", value: (r) => r.diagnosis },
-            { header: "Urgency", value: (r) => r.urgency.replace(/_/g, " ") },
             { header: "Status", value: (r) => r.status.replace(/_/g, " ") },
             { header: "Created", value: (r) => formatDateTime(r.created_at) },
           ],

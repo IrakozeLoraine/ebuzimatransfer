@@ -10,6 +10,7 @@ import {
   Search,
   Layers,
   Truck,
+  PhoneCall,
 } from "lucide-react";
 import logo from "@/assets/ebuzimaTransfer.svg";
 import { cn } from "@/utils/cn";
@@ -41,6 +42,7 @@ export const SidebarNav = ({ onNavigate }: Props) => {
     ...(canViewResources ? [navItem("/find-resources", "Resource Lookup", Search)] : []),
     ...(canViewResources ? [navItem("/resources", "Resources", Package)] : []),
     navItem("/transfer-requests", "Transfer Requests", FileText),
+    navItem("/call-logs", "Call Logs", PhoneCall),
   ];
 
   const adminLinks = [

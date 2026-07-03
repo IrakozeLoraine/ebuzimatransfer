@@ -10,6 +10,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useUnits } from "@/hooks/useUnits";
 import { useAvailableResources } from "@/hooks/useResources";
 import { useAuthStore } from "@/store/auth.store";
+import { CallButton } from "@/components/call/CallButton";
 import type { Resource } from "@/types/resource";
 
 export const FindResourcesPage = () => {
@@ -64,10 +65,10 @@ export const FindResourcesPage = () => {
 
   // Group filtered resources by owning facility.
   const byFacility = useMemo(() => {
-    const groups = new Map<string, { facility: string; rows: Resource[] }>();
+    const groups = new Map<string, { id: string | null; facility: string; rows: Resource[] }>();
     for (const r of filtered) {
       const key = r.facility_id ?? "—";
-      if (!groups.has(key)) groups.set(key, { facility: r.facility_name ?? "Unknown facility", rows: [] });
+      if (!groups.has(key)) groups.set(key, { id: r.facility_id ?? null, facility: r.facility_name ?? "Unknown facility", rows: [] });
       groups.get(key)!.rows.push(r);
     }
     return [...groups.values()].sort((a, b) => a.facility.localeCompare(b.facility));
@@ -127,40 +128,56 @@ export const FindResourcesPage = () => {
             {byFacility.length === 1 ? "y" : "ies"}
           </p>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {byFacility.map((group) => (
-              <Card key={group.facility} className="flex h-full flex-col p-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <Building2 className="h-5 w-5 shrink-0 text-muted-foreground" />
-                  <h2 className="flex-1 font-semibold leading-tight">{group.facility}</h2>
-                  <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                    {group.rows.reduce((sum, r) => sum + r.available, 0)} available
-                  </span>
-                </div>
-                <ul className="flex-1">
-                  {group.rows.map((r) => (
-                    <li key={r.id} className="flex flex-col gap-2 border-b border-b-neutral-100 py-2 last:border-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
+            {byFacility.map((group) => {
+              const total = group.rows.reduce((sum, r) => sum + r.available, 0);
+              return (
+                <Card key={group.facility} className="flex h-full flex-col p-4">
+                  {/* Facility header: name and total availability. Calls are placed
+                      per unit on each resource row below. */}
+                  <div className="flex items-start gap-2.5 border-b pb-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                      <Building2 className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h2 className="truncate font-semibold leading-tight">{group.facility}</h2>
+                      <p className="text-xs font-medium text-emerald-700">{total} available</p>
+                    </div>
+                  </div>
+
+                  <ul className="flex-1 divide-y divide-border/35">
+                    {group.rows.map((r) => (
+                      <li key={r.id} className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-2 justify-between pt-2">
                           <p className="text-sm font-medium">{r.resource_name}</p>
-                          <p className="font-mono text-xs text-muted-foreground">
-                            {r.unit_name ? `${r.unit_name}` : ""}
-                          </p>
+                          {canCreateReferral && (
+                            <div className="flex shrink-0 items-center gap-1">
+                              {group.id && r.unit_id && (
+                                <CallButton
+                                  facilityId={group.id}
+                                  facilityName={group.facility}
+                                  unitId={r.unit_id}
+                                  unitName={r.unit_name ?? undefined}
+                                  label="Call"
+                                  variant="link"
+                                  size="sm"
+                                />
+                              )}
+                              <Button size="sm" variant="link" onClick={() => requestTransfer(r)}>
+                                <ArrowLeftRight className="mr-1.5 h-3.5 w-3.5" />
+                                Request
+                              </Button>
+                            </div>
+                          )}
                         </div>
-                        <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                          {r.available} available
-                        </span>
-                      </div>
-                      {canCreateReferral && (
-                        <Button size="sm" variant="outline" className="w-fit border-primary text-primary bg-white cursor-pointer" onClick={() => requestTransfer(r)}>
-                          <ArrowLeftRight className="mr-1.5 h-3.5 w-3.5" />
-                          Request Transfer
-                        </Button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            ))}
+                        <p className="text-xs text-muted-foreground pb-2">
+                          {[r.unit_name, `${r.available} available`].filter(Boolean).join(" · ")}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              );
+            })}
           </div>
         </div>
       )}
