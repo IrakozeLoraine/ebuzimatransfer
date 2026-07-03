@@ -7,19 +7,19 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str
     SECRET_KEY: str
-    JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    ALLOWED_ORIGINS: str = "http://localhost:5173,http://10.110.9.42:5173"
-    ENVIRONMENT: str = "development"
+    JWT_ALGORITHM: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
+    REFRESH_TOKEN_EXPIRE_DAYS: int
+    ALLOWED_ORIGINS: str
+    ENVIRONMENT: str
 
-    REDIS_URL: str = "redis://localhost:6379/0"
-    OSRM_BASE_URL: str = "http://localhost:5000"
+    REDIS_URL: str
+    OSRM_BASE_URL: str
 
-    WHISPER_MODEL_SIZE: str = "small"
-    OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "llama3.2"
-    MEDIA_ROOT: str = "media"
+    WHISPER_MODEL_SIZE: str
+    OLLAMA_BASE_URL: str
+    OLLAMA_MODEL: str
+    MEDIA_ROOT: str
 
     @property
     def origins(self) -> List[str]:

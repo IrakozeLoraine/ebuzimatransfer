@@ -54,7 +54,7 @@ docker compose up --build          # add -d to run it in the background
 
 On the first boot the backend automatically applies the database migrations
 (`alembic upgrade head`) and seeds the roles and a single super-admin account
-(`seeds.py`). The first build takes a few minutes; later starts are fast.
+(`seeds.py`).
 
 **3. Open the app**
 
@@ -137,6 +137,10 @@ Environment variables (`backend/.env`):
 | `ENVIRONMENT`                 | `development` or `production`                    | `development`        |
 | `REDIS_URL`                   | Redis DSN for WebSocket fan-out                  | `redis://localhost:6379/0` |
 | `OSRM_BASE_URL`               | OSRM routing server base URL                     | `http://localhost:5000` |
+| `WHISPER_MODEL_SIZE`            | OpenAI Whisper model size for audio transcription | `small`              |
+| `OLLAMA_BASE_URL`        | Ollama server base URL for LLM processing         | `http://localhost:11434` |
+| `OLLAMA_MODEL`        | Ollama model name for LLM processing              | `llama3.2`             |
+| `MEDIA_ROOT`                     | Path to store uploaded media files               | `media`            |
 
 ### 3. Frontend
 
