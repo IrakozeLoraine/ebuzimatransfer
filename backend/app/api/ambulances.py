@@ -1,5 +1,5 @@
 import uuid
-from typing import List, Optional, Set
+from typing import List, Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -34,21 +34,29 @@ def _visible_facility(user) -> uuid.UUID | None:
     )
 
 
-async def _busy_ambulance_ids(session: AsyncSession, ids: List[uuid.UUID]) -> Set[uuid.UUID]:
-    """Of the given ambulances, those currently on an in-progress journey
-    (assigned to a transfer that has not yet arrived)."""
+async def _active_status(session: AsyncSession, ids: List[uuid.UUID]) -> dict[uuid.UUID, str]:
+    """Of the given ambulances, those reserved by an in-progress transfer (not yet
+    arrived), mapped to their state: ``ON_JOURNEY`` once the driver has started the
+    journey (dispatch time set), otherwise ``ASSIGNED`` (reserved but not started)."""
     if not ids:
-        return set()
+        return {}
     rows = await session.execute(
-        select(TransportEvent.ambulance_id).where(
+        select(TransportEvent.ambulance_id, TransportEvent.dispatch_time).where(
             TransportEvent.ambulance_id.in_(ids),
             TransportEvent.arrival_time.is_(None),
         )
     )
-    return {r[0] for r in rows if r[0] is not None}
+    out: dict[uuid.UUID, str] = {}
+    for amb_id, dispatch in rows:
+        if amb_id is None:
+            continue
+        status = "ON_JOURNEY" if dispatch is not None else "ASSIGNED"
+        if out.get(amb_id) != "ON_JOURNEY":  # ON_JOURNEY wins over ASSIGNED
+            out[amb_id] = status
+    return out
 
 
-def _to_out(amb: Ambulance, busy: bool) -> AmbulanceOut:
+def _to_out(amb: Ambulance, status: str = "AVAILABLE") -> AmbulanceOut:
     return AmbulanceOut(
         id=amb.id,
         facility_id=amb.facility_id,
@@ -58,7 +66,7 @@ def _to_out(amb: Ambulance, busy: bool) -> AmbulanceOut:
         driver_phone=amb.driver_phone,
         login_id=amb.login_id,
         is_active=amb.is_active,
-        status="ON_JOURNEY" if busy else "AVAILABLE",
+        status=status,
         created_at=amb.created_at,
     )
 
@@ -84,8 +92,8 @@ async def list_ambulances(
     if not _is_super(current_user):
         stmt = stmt.where(Ambulance.facility_id == _visible_facility(current_user))
     ambulances = list((await session.execute(stmt)).scalars())
-    busy = await _busy_ambulance_ids(session, [a.id for a in ambulances])
-    out = [_to_out(a, a.id in busy) for a in ambulances]
+    statuses = await _active_status(session, [a.id for a in ambulances])
+    out = [_to_out(a, statuses.get(a.id, "AVAILABLE")) for a in ambulances]
     if available:
         out = [o for o in out if o.is_active and o.status == "AVAILABLE"]
     return out
@@ -130,7 +138,7 @@ async def create_ambulance(
     result = await session.execute(
         select(Ambulance).where(Ambulance.id == amb.id).options(selectinload(Ambulance.facility))
     )
-    return _with_password(_to_out(result.scalar_one(), busy=False), password)
+    return _with_password(_to_out(result.scalar_one()), password)
 
 
 @router.patch("/{ambulance_id}", response_model=AmbulanceOut)
@@ -176,9 +184,9 @@ async def update_ambulance(
         "UPDATE_AMBULANCE", "ambulance", user_id=current_user.id, entity_id=ambulance_id
     )
     await session.commit()
-    busy = (await _busy_ambulance_ids(session, [amb.id])) and True
+    statuses = await _active_status(session, [amb.id])
     await session.refresh(amb)
-    return _to_out(amb, busy=bool(busy))
+    return _to_out(amb, statuses.get(amb.id, "AVAILABLE"))
 
 
 @router.post("/{ambulance_id}/reset-password", response_model=AmbulanceCredentials)
@@ -205,6 +213,6 @@ async def reset_ambulance_password(
         "RESET_AMBULANCE_PASSWORD", "ambulance", user_id=current_user.id, entity_id=ambulance_id
     )
     await session.commit()
-    busy = (await _busy_ambulance_ids(session, [amb.id])) and True
+    statuses = await _active_status(session, [amb.id])
     await session.refresh(amb)
-    return _with_password(_to_out(amb, busy=bool(busy)), password)
+    return _with_password(_to_out(amb, statuses.get(amb.id, "AVAILABLE")), password)

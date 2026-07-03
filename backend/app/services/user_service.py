@@ -123,8 +123,11 @@ class UserService:
         return await self.assign_roles(user.medical_id, facility_id, roles, unit_ids)
 
     async def remove_from_facility(self, user_id: uuid.UUID, facility_id: uuid.UUID) -> User:
+        """Remove all of a user's grants at a facility — both role grants and the
+        clinical-unit memberships, so they're fully detached from the facility."""
         user = await self.get_user(user_id)
         user.facility_roles = [fr for fr in user.facility_roles if fr.facility_id != facility_id]
+        user.facility_units = [fu for fu in user.facility_units if fu.facility_id != facility_id]
         await self.session.flush()
         return user
 

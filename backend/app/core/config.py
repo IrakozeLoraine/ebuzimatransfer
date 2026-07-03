@@ -21,6 +21,20 @@ class Settings(BaseSettings):
     # data; the public demo server is unsuitable for production traffic.
     OSRM_BASE_URL: str = "http://localhost:5000"
 
+    # Voice-dictated referrals — fully open-source and offline-capable.
+    # Self-hosted Whisper model size for speech-to-text. "small" balances accuracy
+    # and CPU speed; use "medium"/"large-v3" if a GPU is available.
+    WHISPER_MODEL_SIZE: str = "small"
+    # Local Ollama extracts structured form fields + a summary from the transcript
+    # using JSON-schema-constrained output. Runs entirely on your own machine —
+    # no API key, no cost. Leave the base URL reachable or extraction degrades to
+    # transcript-only.
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "llama3.2"
+    # Where the kept recordings are stored on disk (served back via the API so the
+    # receiving clinic can play them). Relative paths resolve from the backend cwd.
+    MEDIA_ROOT: str = "media"
+
     @property
     def origins(self) -> List[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",")]

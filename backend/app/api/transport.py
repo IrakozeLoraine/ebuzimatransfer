@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -77,3 +78,44 @@ async def create_transport(
     await session.refresh(event)
     await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_TRANSPORT_ARRANGED", "referral_id": str(payload.referral_id)})
     return event
+
+
+@router.delete("/{referral_id}", status_code=200)
+async def remove_transport(
+    referral_id: uuid.UUID,
+    current_user=Depends(require_roles("CLINICIAN", "SUPER_ADMIN")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Remove the assigned ambulance from a referral before the journey has started,
+    freeing the ambulance and returning the request to ACCEPTED so a different
+    ambulance can be assigned."""
+    referral = await session.get(Referral, referral_id)
+    if not referral:
+        raise NotFoundError("Referral")
+    # Referring side only (non-super clinicians act on their own facility's transfers).
+    if "SUPER_ADMIN" not in set(current_user.effective_roles):
+        if referral.referring_facility_id not in {f.id for f in current_user.facilities}:
+            raise ForbiddenError()
+
+    event = await session.scalar(
+        select(TransportEvent)
+        .where(TransportEvent.referral_id == referral_id, TransportEvent.arrival_time.is_(None))
+        .order_by(TransportEvent.created_at.desc())
+    )
+    if not event:
+        raise NotFoundError("Transport")
+    if event.dispatch_time is not None:
+        raise ConflictError("The journey has already started — the ambulance can't be removed.")
+
+    await session.delete(event)
+    svc = ReferralService(session)
+    referral = await svc.change_status(referral_id, ReferralStatus.ACCEPTED, current_user.id)
+    await _notify_receiving(
+        session, referral, "Transport changed",
+        f"{referral.referral_number}: the assigned ambulance was removed; a new one will be arranged.",
+        "REFERRAL_TRANSPORT_REMOVED",
+    )
+    await AuditService(session).log("REMOVE_TRANSPORT", "transport", user_id=current_user.id, entity_id=referral_id)
+    await session.commit()
+    await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_TRANSPORT_REMOVED", "referral_id": str(referral_id)})
+    return {"success": True}

@@ -13,6 +13,7 @@ from app.api import (
     transport,
     notifications,
     calls,
+    incall,
     ambulance,
     ambulances,
     driver,
@@ -32,6 +33,7 @@ router.include_router(referrals.router, prefix="/referrals", tags=["Transfer Req
 router.include_router(transport.router, prefix="/transport", tags=["Transport"])
 router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 router.include_router(calls.router, prefix="/calls", tags=["Calls"])
+router.include_router(incall.router, prefix="/calls", tags=["Calls"])
 router.include_router(ambulance.router, prefix="/ambulance", tags=["Ambulance Tracking"])
 router.include_router(ambulances.router, prefix="/ambulances", tags=["Ambulances"])
 router.include_router(driver.router, prefix="/driver", tags=["Driver App"])

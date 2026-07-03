@@ -1,15 +1,24 @@
+import os
+import json
 import uuid
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile, File, Form
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_session
 from app.core.permissions import require_roles, get_current_user
+from app.core.exceptions import ValidationError, NotFoundError
 from app.services.referral_service import ReferralService
 from app.services.audit_service import AuditService
 from app.services.notification_service import NotificationService
+from app.services.dictation_service import DictationService, audio_path, monitoring_audio_path
 from app.websocket.manager import ws_manager
 from app.models.referral import ReferralStatus
-from app.schemas.referral import ReferralCreate, ReferralOut, ReferralSummary, AcceptReferralRequest, RejectReferralRequest, ArrivalConditionRequest
+from app.schemas.referral import ReferralCreate, ReferralOut, ReferralSummary, AcceptReferralRequest, RejectReferralRequest, ArrivalConditionRequest, ReferralFeedbackRequest, DictationResult
+
+# Cap dictated recordings at ~25 MB (well over a minute of speech) to bound
+# transcription time and upload size.
+_MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
 router = APIRouter()
 
@@ -55,10 +64,36 @@ async def create_referral(
         active_facility_id,
         origin_unit_id=origin_unit_id,
     )
+    # Link an earlier coordination call (placed before the form was filled) to this
+    # referral, so both sides see the call in the referral's history.
+    if payload.call_log_id is not None:
+        from app.models.call import CallLog
+        call = await session.get(CallLog, payload.call_log_id)
+        if call is not None and call.referral_id is None:
+            call.referral_id = referral.id
+
+    # Auto-link recent in-app coordination calls this clinician placed to the chosen
+    # destination (from Resource Lookup / "coordinate first") so they're traceable on
+    # the referral even though no referral existed when the call was made.
+    if referral.preferred_facility_id is not None:
+        from datetime import datetime, timezone, timedelta
+        from sqlalchemy import select
+        from app.models.incall import InAppCall
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=2)
+        recent = await session.execute(
+            select(InAppCall).where(
+                InAppCall.caller_id == current_user.id,
+                InAppCall.callee_facility_id == referral.preferred_facility_id,
+                InAppCall.referral_id.is_(None),
+                InAppCall.created_at >= cutoff,
+            )
+        )
+        for call in recent.scalars().all():
+            call.referral_id = referral.id
     await AuditService(session).log("CREATE_REFERRAL", "referral", user_id=current_user.id, entity_id=referral.id)
     notif = NotificationService(session)
     title = "New transfer request"
-    message = f"{referral.referral_number}: {referral.diagnosis} ({referral.urgency})"
+    message = f"{referral.referral_number}: {referral.diagnosis}"
     # Notify the receiving side — clinicians in the requested unit at the destination.
     if referral.preferred_facility_id and referral.requested_unit_id:
         await notif.notify_facility_unit(
@@ -70,6 +105,55 @@ async def create_referral(
     await session.commit()
     await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_CREATED", "referral_id": str(referral.id)})
     return await svc.get(referral.id)
+
+
+@router.post("/transcribe", response_model=DictationResult)
+async def transcribe_referral(
+    audio: UploadFile = File(...),
+    form_spec: Optional[str] = Form(None),
+    current_user=Depends(require_roles("CLINICIAN", "SUPER_ADMIN")),
+):
+    """Turn a dictated recording into a prefilled transfer request: transcribe the
+    audio, extract the core fields and a summary, and store the recording. When
+    ``form_spec`` (a JSON list of the chosen MoH form's fields) is supplied, the
+    form-specific values are extracted too. The clinician reviews and edits the
+    result before submitting — nothing is persisted here."""
+    audio_bytes = await audio.read()
+    if len(audio_bytes) > _MAX_AUDIO_BYTES:
+        raise ValidationError("Recording is too large — keep it under ~25 MB")
+    spec = None
+    if form_spec:
+        try:
+            parsed = json.loads(form_spec)
+            if isinstance(parsed, list):
+                spec = parsed
+        except (json.JSONDecodeError, TypeError):
+            spec = None
+    return await DictationService().transcribe_to_form(
+        audio_bytes, audio.filename or "referral.webm", form_spec=spec
+    )
+
+
+@router.get("/audio/{filename}")
+async def get_referral_audio(filename: str):
+    """Stream a kept dictation recording for playback. Public (no auth) because an
+    <audio> tag can't send a bearer token; filenames are unguessable UUIDs and the
+    name is validated against path traversal."""
+    path = audio_path(filename)
+    if path is None or not os.path.isfile(path):
+        raise NotFoundError("Recording")
+    return FileResponse(path)
+
+
+@router.get("/monitoring-audio/{filename}")
+async def get_monitoring_audio(filename: str):
+    """Stream a kept transport-monitoring recording for playback. Public for the
+    same reason as referral audio; filenames are unguessable UUIDs validated
+    against path traversal."""
+    path = monitoring_audio_path(filename)
+    if path is None or not os.path.isfile(path):
+        raise NotFoundError("Recording")
+    return FileResponse(path)
 
 
 @router.get("/{referral_id}", response_model=ReferralOut)
@@ -183,6 +267,30 @@ async def mark_arrived(
     )
     await session.commit()
     await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_ARRIVED", "referral_id": str(referral_id)})
+    return await svc.get(referral_id)
+
+
+@router.patch("/{referral_id}/feedback", response_model=ReferralOut)
+async def save_referral_feedback(
+    referral_id: uuid.UUID,
+    payload: ReferralFeedbackRequest,
+    current_user=Depends(require_roles("CLINICIAN", "FACILITY_ADMIN", "SUPER_ADMIN")),
+    session: AsyncSession = Depends(get_session),
+):
+    """The receiving facility fills the Referral Feedback / Counter-Referral for a
+    transferred patient. The referring side is notified."""
+    svc = ReferralService(session)
+    referral = await svc.save_feedback(
+        referral_id, payload.feedback_data, payload.counter_referral_data, current_user
+    )
+    await AuditService(session).log("SAVE_REFERRAL_FEEDBACK", "referral", user_id=current_user.id, entity_id=referral_id)
+    await NotificationService(session).create(
+        referral.created_by, "Referral feedback available",
+        f"{referral.referral_number}: the receiving facility added feedback / counter-referral.",
+        "REFERRAL_FEEDBACK", "referral", referral_id,
+    )
+    await session.commit()
+    await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_FEEDBACK", "referral_id": str(referral_id)})
     return await svc.get(referral_id)
 
 

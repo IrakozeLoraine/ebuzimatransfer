@@ -135,6 +135,11 @@ async def assign_user_to_facility(
         from app.core.exceptions import ForbiddenError
         raise ForbiddenError("No facility associated with this admin")
 
+    # A facility admin can't grant roles to their own account.
+    if payload.medical_id.strip().lower() == (current_user.medical_id or "").lower():
+        from app.core.exceptions import ForbiddenError
+        raise ForbiddenError("You can't assign roles to your own account.")
+
     user = await svc.assign_roles(payload.medical_id, facility_id, payload.roles, payload.unit_ids)
     await AuditService(session).log("ASSIGN_USER", "user", user_id=current_user.id, entity_id=user.id)
     await session.commit()

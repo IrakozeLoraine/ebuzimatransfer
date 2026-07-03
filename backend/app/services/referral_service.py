@@ -36,12 +36,20 @@ class ReferralService:
             raise ValidationError("The requested resource is no longer available")
 
         number = await self.repo.next_referral_number()
+        payload = data.model_dump(exclude={"call_log_id"})
+        # Serial number / EMR ID and age band are optional; store empty rather than
+        # null (both DB columns are non-null).
+        payload["patient_code"] = (payload.get("patient_code") or "").strip()
+        # Fields dropped from the forms but kept as non-null DB columns.
+        payload["age_band"] = payload.get("age_band") or ""
+        payload["acuity_level"] = payload.get("acuity_level") or ""
+        payload["urgency"] = payload.get("urgency") or ""
         referral = Referral(
             referral_number=number,
             created_by=created_by,
             referring_facility_id=referring_facility_id,
             origin_unit_id=origin_unit_id,
-            **data.model_dump(),
+            **payload,
         )
         await self.repo.create(referral)
         await self._record_history(referral.id, ReferralStatus.REQUESTED, created_by)
@@ -211,6 +219,27 @@ class ReferralService:
         await self._record_history(
             referral_id, ReferralStatus.ARRIVED, actor.id, f"Arrival condition: {condition.value}"
         )
+        await self.session.flush()
+        return referral
+
+    async def save_feedback(
+        self,
+        referral_id: uuid.UUID,
+        feedback_data: Optional[dict],
+        counter_referral_data: Optional[dict],
+        actor,
+    ) -> Referral:
+        """The receiving facility records the Referral Feedback and/or Counter-Referral
+        for a transferred patient. Only the receiving side may do this (never the
+        clinician who sent the request)."""
+        referral = await self.repo.get_by_id(referral_id)
+        if not referral:
+            raise NotFoundError("Referral")
+        self.assert_can_record_arrival(referral, actor)
+        if feedback_data is not None:
+            referral.feedback_data = feedback_data
+        if counter_referral_data is not None:
+            referral.counter_referral_data = counter_referral_data
         await self.session.flush()
         return referral
 

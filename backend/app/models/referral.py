@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from enum import Enum as PyEnum
-from sqlalchemy import String, Boolean, ForeignKey, Enum as SAEnum
+from sqlalchemy import String, Text, Boolean, ForeignKey, JSON, Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, UUIDMixin, TimestampMixin
@@ -32,7 +32,9 @@ ALLOWED_TRANSITIONS: dict[ReferralStatus, list[ReferralStatus]] = {
     # ACCEPTED can go straight to ARRIVED when the transfer uses no tracked transport
     # (the receiving clinician simply confirms the patient arrived).
     ReferralStatus.ACCEPTED: [ReferralStatus.TRANSPORT_ARRANGED, ReferralStatus.ARRIVED, ReferralStatus.CANCELLED],
-    ReferralStatus.TRANSPORT_ARRANGED: [ReferralStatus.EN_ROUTE, ReferralStatus.CANCELLED],
+    # Back to ACCEPTED when the referring clinician removes the assigned ambulance
+    # before the journey has started (so they can pick a different one).
+    ReferralStatus.TRANSPORT_ARRANGED: [ReferralStatus.ACCEPTED, ReferralStatus.EN_ROUTE, ReferralStatus.CANCELLED],
     ReferralStatus.EN_ROUTE: [ReferralStatus.ARRIVED],
     ReferralStatus.ARRIVED: [],
     ReferralStatus.REJECTED: [],
@@ -54,6 +56,32 @@ class Referral(Base, UUIDMixin, TimestampMixin):
     reason_for_transfer: Mapped[str] = mapped_column(String(1000), nullable=False)
     ventilator_needed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     high_flow_oxygen_needed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Which Rwanda MoH transfer-form variant this request was filled with — drives
+    # the form-specific fields shown to both sides. The core columns above stay the
+    # same across all variants (they're what routing/decisions need); everything
+    # specific to a given paper form lives in ``form_data`` as a flat JSON map.
+    form_type: Mapped[str] = mapped_column(String(20), default="EXTERNAL", nullable=False)
+    form_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    # The Patient Monitoring Transfer Form, captured by the ambulance driver by
+    # voice during transport: the recording, its transcript and summary, and the
+    # extracted vital-signs / problem log. Shown read-only to both clinics and
+    # admins on the referral detail. Null until the driver records monitoring.
+    transport_monitoring: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    # Filled at the receiving facility per case: the Referral Feedback (outcome of
+    # the transferred patient) and the Counter-Referral (recommendations / refer-back).
+    # Both are flat JSON maps keyed by the receiving-form field names.
+    feedback_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    counter_referral_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    # Voice-dictated referrals: the kept recording (URL served by the API), the raw
+    # speech-to-text transcript, and a short AI summary. All optional — a referral
+    # may be filled in entirely by hand with no audio attached.
+    audio_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     status: Mapped[ReferralStatus] = mapped_column(
         SAEnum(ReferralStatus, name="referral_status"), default=ReferralStatus.REQUESTED, nullable=False

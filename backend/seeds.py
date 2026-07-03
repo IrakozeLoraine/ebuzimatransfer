@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import AsyncSessionLocal
 from app.core.security import hash_password
 from app.models.user import Role, User, UserRole, UserFacilityRole, AccountStatus
+from app.models.location import Location
 
 
 # ---------------------------------------------------------------------------
@@ -41,6 +42,8 @@ async def clear_data(session: AsyncSession) -> None:
     """Wipe every table so --force re-seeds onto a clean slate. Order respects
     foreign keys (children before parents)."""
     for table in [
+        "locations",
+        "in_app_calls",
         "call_logs",
         "facility_phone_lines",
         "resource_reservations",
@@ -98,6 +101,41 @@ async def seed_super_admin(session: AsyncSession, roles_map: dict[str, Role]) ->
 # Entry point
 # ---------------------------------------------------------------------------
 
+# Administrative-hierarchy levels, top → bottom, matching Location.level.
+_LOCATION_LEVELS = ["PROVINCE", "DISTRICT", "SECTOR", "CELL", "VILLAGE"]
+
+
+async def _insert_location(session: AsyncSession, name: str, level_idx: int, parent_id, value) -> None:
+    """Insert one location node and recurse into its children. ``value`` is a dict
+    (keyed children), a list (leaf village names), or empty (no deeper data)."""
+    loc = Location(name=name, level=_LOCATION_LEVELS[level_idx], parent_id=parent_id)
+    session.add(loc)
+    await session.flush()
+    if isinstance(value, dict):
+        for child_name, child_value in value.items():
+            await _insert_location(session, child_name, level_idx + 1, loc.id, child_value)
+    elif isinstance(value, list):
+        for village in value:
+            await _insert_location(session, village, level_idx + 1, loc.id, {})
+
+
+async def seed_locations(session: AsyncSession) -> None:
+    """Seed the Rwanda administrative hierarchy into the database (idempotent — skips
+    if any locations already exist). The source data lives in
+    ``app.data.rwanda_locations`` and is loaded into the ``locations`` table so the
+    app queries the database, not the in-code dict."""
+    count = await session.scalar(select(func.count()).select_from(Location))
+    if count:
+        print("  ↪ Locations already present — skipping location seed")
+        return
+    from app.data.rwanda_locations import LOCATIONS
+
+    for province, districts in LOCATIONS.items():
+        await _insert_location(session, province, 0, None, districts)
+    await session.commit()
+    print("  ✓ Seeded locations")
+
+
 async def already_seeded(session: AsyncSession) -> bool:
     count = await session.scalar(select(func.count()).select_from(User))
     return bool(count)
@@ -138,6 +176,10 @@ async def main() -> None:
 
     print("\n🌱 Seeding eBuzimaTransfer database...\n")
     await ensure_schema(reset=force)
+    # Locations are reference data — seed them on every run (idempotent), independent
+    # of whether the demo accounts already exist.
+    async with AsyncSessionLocal() as session:
+        await seed_locations(session)
     async with AsyncSessionLocal() as session:
         if not force and await already_seeded(session):
             print("  ↪ Data already present — skipping seed (use --force to reset).\n")

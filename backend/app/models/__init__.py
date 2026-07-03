@@ -14,6 +14,8 @@ from app.models.transport import TransportEvent
 from app.models.notification import Notification
 from app.models.call import FacilityPhoneLine, CallLog, PhoneLineType
 from app.models.ambulance import AmbulanceLocationPing, Ambulance
+from app.models.location import Location
+from app.models.incall import InAppCall, InAppCallStatus
 
 __all__ = [
     "AmbulanceLocationPing", "Ambulance",
@@ -23,4 +25,6 @@ __all__ = [
     "Referral", "ReferralStatus", "ReferralStatusHistory", "ArrivalCondition", "ALLOWED_TRANSITIONS",
     "TransportEvent", "Notification",
     "FacilityPhoneLine", "CallLog", "PhoneLineType",
+    "Location",
+    "InAppCall", "InAppCallStatus",
 ]

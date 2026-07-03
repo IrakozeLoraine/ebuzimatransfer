@@ -1,22 +1,20 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Any
 from pydantic import BaseModel
 from app.models.referral import ReferralStatus, ArrivalCondition
 
 
 class ReferralCreate(BaseModel):
-    patient_code: str
-    age_band: str
+    patient_code: Optional[str] = None
     sex: str
     diagnosis: str
-    comorbidities: Optional[str] = None
-    acuity_level: str
-    urgency: str
     reason_for_transfer: str
-    ventilator_needed: bool = False
-    high_flow_oxygen_needed: bool = False
+    # Which MoH transfer-form variant was used, and its form-specific field values
+    # (a flat map keyed by field name — see the frontend transfer-form definitions).
+    form_type: str = "EXTERNAL"
+    form_data: Optional[dict[str, Any]] = None
     # The destination is required so a request is always routed to a specific
     # facility + unit (and only that side's staff can approve it).
     preferred_facility_id: uuid.UUID
@@ -24,15 +22,77 @@ class ReferralCreate(BaseModel):
     # The specific resource being requested at the destination. Validated as
     # currently available at the preferred facility when creating the request.
     requested_resource_id: uuid.UUID
+    # Optional voice-dictation artifacts, carried over from /referrals/transcribe
+    # so the recording, transcript, and summary are stored with the referral.
+    audio_url: Optional[str] = None
+    transcript: Optional[str] = None
+    ai_summary: Optional[str] = None
+    # When the request follows a coordination call placed before the form was filled,
+    # the call log's id — the new referral is linked back to it so both sides see it.
+    call_log_id: Optional[uuid.UUID] = None
+
+
+class DictationFields(BaseModel):
+    """Form fields extracted from a dictated transcript. Every field is optional —
+    the clinician reviews and corrects before submitting."""
+    patient_code: Optional[str] = None
+    sex: Optional[str] = None
+    diagnosis: Optional[str] = None
+    reason_for_transfer: Optional[str] = None
+
+
+class DictationResult(BaseModel):
+    """Response of /referrals/transcribe: the kept audio, the transcript, a short
+    summary for the receiving clinic, and the extracted fields to prefill the form."""
+    audio_url: Optional[str] = None
+    transcript: str
+    summary: str
+    fields: DictationFields
+    # Form-specific values extracted for the chosen MoH form variant (keyed by the
+    # field names in the frontend transfer-form definitions). Empty when no form
+    # spec was sent or nothing matched.
+    form_data: dict[str, Any] = {}
+
+
+class MonitoringVitalRow(BaseModel):
+    """One vital-signs reading taken during transport (every ~30 minutes)."""
+    time: Optional[str] = None
+    bp: Optional[str] = None
+    temp: Optional[str] = None
+    spo2: Optional[str] = None
+    rr: Optional[str] = None
+    pulse: Optional[str] = None
+    fhr: Optional[str] = None
+    membranes_ruptured: Optional[str] = None
+
+
+class MonitoringProblemRow(BaseModel):
+    """A problem encountered during transport and how it was managed."""
+    problem: Optional[str] = None
+    management: Optional[str] = None
+
+
+class TransportMonitoringResult(BaseModel):
+    """The Patient Monitoring Transfer Form as recorded by the driver's voice:
+    the kept recording, its transcript and summary, and the extracted log."""
+    audio_url: Optional[str] = None
+    transcript: str
+    summary: str
+    vital_signs: List[MonitoringVitalRow] = []
+    problems: List[MonitoringProblemRow] = []
+    recorded_at: Optional[datetime] = None
 
 
 class ReferralUpdate(BaseModel):
     diagnosis: Optional[str] = None
-    acuity_level: Optional[str] = None
-    urgency: Optional[str] = None
     reason_for_transfer: Optional[str] = None
-    ventilator_needed: Optional[bool] = None
-    high_flow_oxygen_needed: Optional[bool] = None
+
+
+class ReferralFeedbackRequest(BaseModel):
+    """Receiving-side Referral Feedback and/or Counter-Referral. Either may be sent;
+    each is a flat map keyed by the receiving-form field names."""
+    feedback_data: Optional[dict[str, Any]] = None
+    counter_referral_data: Optional[dict[str, Any]] = None
 
 
 class AcceptReferralRequest(BaseModel):
@@ -72,6 +132,7 @@ class StatusHistoryOut(BaseModel):
 
 class TransportEventRef(BaseModel):
     id: uuid.UUID
+    ambulance_id: Optional[uuid.UUID] = None
     ambulance_identifier: str
     driver_name: Optional[str] = None
     driver_phone: Optional[str] = None
@@ -87,15 +148,17 @@ class ReferralOut(BaseModel):
     id: uuid.UUID
     referral_number: str
     patient_code: str
-    age_band: str
     sex: str
     diagnosis: str
-    comorbidities: Optional[str]
-    acuity_level: str
-    urgency: str
     reason_for_transfer: str
-    ventilator_needed: bool
-    high_flow_oxygen_needed: bool
+    form_type: str = "EXTERNAL"
+    form_data: Optional[dict[str, Any]] = None
+    transport_monitoring: Optional[dict[str, Any]] = None
+    feedback_data: Optional[dict[str, Any]] = None
+    counter_referral_data: Optional[dict[str, Any]] = None
+    audio_url: Optional[str] = None
+    transcript: Optional[str] = None
+    ai_summary: Optional[str] = None
     status: ReferralStatus
     rejection_reason: Optional[str]
     rejection_comment: Optional[str]
@@ -120,7 +183,6 @@ class ReferralSummary(BaseModel):
     referral_number: str
     patient_code: str
     diagnosis: str
-    urgency: str
     status: ReferralStatus
     created_at: datetime
     referring_facility_id: Optional[uuid.UUID]

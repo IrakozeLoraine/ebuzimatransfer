@@ -177,6 +177,11 @@ async def assign_resources(
             target_facility = resource.facility_id
             target_unit = payload.unit_id
 
+        # Assigning a resource to a facility requires a specific clinical unit;
+        # only a return to central stock (no facility) may omit the unit.
+        if target_facility is not None and target_unit is None:
+            raise ValidationError("Select a clinical unit to assign the resource to.")
+
         result = await svc.assign(resource_id, target_facility, target_unit, payload.quantity)
         if result is None:
             # Nothing movable on this resource (e.g. all units occupied) — skip it.
