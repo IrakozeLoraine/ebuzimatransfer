@@ -12,8 +12,9 @@ disk_free() { df -h / | awk 'NR==2 {print $4 " free (" $5 " used)"}'; }
 log "Disk before: $(disk_free)"
 
 # 1. Remove dangling images left behind by previous rebuilds.
-log "Pruning dangling images..."
-docker image prune -f >/dev/null
+log "Reclaiming disk before build..."
+docker builder prune -af >/dev/null
+docker image prune -af >/dev/null
 
 # 2. Build the images.
 log "Building images..."

@@ -17,7 +17,7 @@ tracks the assigned ambulance live on a map from pickup to arrival.
 The system is a monorepo with four deployable pieces, wired together by Docker
 Compose behind an Nginx reverse proxy.
 
-![alt text](docs/architecture.png)
+![Architecture Image](docs/architecture.png)
 
 | Component           | Path                  | Stack                                            |
 | ------------------- | --------------------- | ------------------------------------------------ |
