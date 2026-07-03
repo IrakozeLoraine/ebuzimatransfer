@@ -39,6 +39,13 @@ services:
       REFRESH_TOKEN_EXPIRE_DAYS: 7
       ALLOWED_ORIGINS: https://ebuzimatransfer.duckdns.org,http://ebuzimatransfer.duckdns.org,http://localhost:5173,http://localhost:80
       ENVIRONMENT: production
+      OSRM_BASE_URL: http://host.docker.internal:5000
+      WHISPER_MODEL_SIZE: small
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: llama3.2
+      MEDIA_ROOT: /app/media
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     depends_on:
