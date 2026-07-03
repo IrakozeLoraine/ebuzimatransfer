@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { useFacilities } from "@/hooks/useFacilities";
 import { useUnits } from "@/hooks/useUnits";
-import { useCall } from "./CallProvider";
+import { useCall } from "./call-context";
 
 /** Header entry point: pick a hospital and a clinical unit, then call that unit in-app
  *  — a directory call not tied to a referral. Clinicians in that unit answer. */

@@ -1,6 +1,6 @@
 import { Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useCall } from "./CallProvider";
+import { useCall } from "./call-context";
 
 interface Props {
   /** The receiving hospital whose unit will be called. */

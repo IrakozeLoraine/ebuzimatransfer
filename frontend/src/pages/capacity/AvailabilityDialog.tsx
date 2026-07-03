@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -36,8 +36,12 @@ export default function AvailabilityDialog({ resource, onClose }: Props) {
     out_of_service: 0,
   });
 
-  // Seed the steppers from the resource each time the dialog opens.
-  useEffect(() => {
+  // Seed the steppers from the resource each time the dialog opens (i.e. whenever
+  // the resource reference changes) — adjusting state during render rather than in
+  // an effect avoids a cascading re-render.
+  const [seededFor, setSeededFor] = useState<Resource | null>(null);
+  if (resource !== seededFor) {
+    setSeededFor(resource);
     if (resource) {
       setCounts({
         occupied: resource.occupied,
@@ -45,7 +49,7 @@ export default function AvailabilityDialog({ resource, onClose }: Props) {
         out_of_service: resource.out_of_service,
       });
     }
-  }, [resource]);
+  }
 
   const quantity = resource?.quantity ?? 0;
   const used = counts.occupied + counts.reserved + counts.out_of_service;

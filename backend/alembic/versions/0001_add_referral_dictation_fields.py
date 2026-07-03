@@ -5,13 +5,13 @@ to the referrals table. Written with IF NOT EXISTS so it is safe to run against 
 database where the columns may already exist.
 
 Revision ID: 0001_dictation
-Revises:
+Revises: 0000_base
 Create Date: 2026-06-27
 """
 from alembic import op
 
 revision = "0001_dictation"
-down_revision = None
+down_revision = "0000_base"
 branch_labels = None
 depends_on = None
 

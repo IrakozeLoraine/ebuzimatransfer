@@ -1,10 +1,11 @@
-import { createContext, useContext, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Phone, PhoneOff, PhoneIncoming, Mic, MicOff, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { toast } from "@/components/ui/toaster";
 import { initiateCall, initiateAmbulanceCall, answerCall, endCall, sendSignal } from "@/api/incall.api";
 import { getApiErrorMessage } from "@/utils/apiError";
 import { WS_BASE } from "@/lib/wsBase";
+import { CallContext, type CallTarget } from "./call-context";
 
 // Stop ringing if nobody on the desk picks up within this window.
 const RING_TIMEOUT_MS = 35_000;
@@ -20,27 +21,6 @@ if (import.meta.env.VITE_TURN_URL) {
 }
 
 type Phase = "idle" | "outgoing" | "incoming" | "ongoing";
-
-/** A call target: a clinical unit at a hospital (its clinicians are rung). When
- *  ``unitId`` is omitted the whole-facility desk is rung. */
-export interface CallTarget {
-  facilityId: string;
-  facilityName?: string;
-  unitId?: string;
-  unitName?: string;
-  /** When set, the call rings this ambulance's driver app instead of a unit. */
-  ambulanceId?: string;
-  ambulanceLabel?: string;
-}
-
-interface CallContextValue {
-  /** Call a clinical unit at a receiving hospital, optionally tied to a referral. */
-  startCall: (target: CallTarget, referralId?: string) => void;
-  busy: boolean;
-}
-
-const CallContext = createContext<CallContextValue>({ startCall: () => {}, busy: false });
-export const useCall = () => useContext(CallContext);
 
 export const CallProvider = ({ children }: { children: React.ReactNode }) => {
   const userId = useAuthStore((s) => s.user?.id);
@@ -95,6 +75,12 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
     timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
   };
 
+  const hangup = useCallback(() => {
+    const id = callIdRef.current;
+    if (id) endCall(id).catch(() => {});
+    cleanup();
+  }, [cleanup]);
+
   const createPeer = useCallback((callId: string) => {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     pc.onicecandidate = (e) => {
@@ -111,7 +97,7 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
     };
     pcRef.current = pc;
     return pc;
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hangup]);
 
   const addMic = useCallback(async (pc: RTCPeerConnection) => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -127,12 +113,6 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
     }
     pendingIceRef.current = [];
   }, []);
-
-  const hangup = useCallback(() => {
-    const id = callIdRef.current;
-    if (id) endCall(id).catch(() => {});
-    cleanup();
-  }, [cleanup]);
 
   // Caller starts a call to a hospital desk; the offer is created once someone on
   // duty answers (we don't know who that is until then).

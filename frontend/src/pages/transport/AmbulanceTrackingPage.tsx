@@ -162,8 +162,16 @@ export const AmbulanceTrackingPage = () => {
   // Journey timing comes from the transport event (start = departure, actual = arrival).
   const startMs = track?.departure_time ? new Date(track.departure_time).getTime() : null;
   const actualArrivalMs = track?.arrival_time ? new Date(track.arrival_time).getTime() : null;
+  // Tick a clock once a second while the trip is still in progress so the "so far"
+  // duration stays live; once arrived we freeze on the recorded arrival time.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (actualArrivalMs) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [actualArrivalMs]);
   // Duration = arrival − departure once arrived, otherwise elapsed so far.
-  const journeyMs = startMs ? (actualArrivalMs ?? Date.now()) - startMs : 0;
+  const journeyMs = startMs ? (actualArrivalMs ?? now) - startMs : 0;
 
   const bounds: LatLngBoundsExpression | null = useMemo(() => {
     const pts: LatLngExpression[] = [];

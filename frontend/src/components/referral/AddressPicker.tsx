@@ -19,6 +19,44 @@ interface Props {
 
 const toOptions = (xs: string[]) => xs.map((x) => ({ value: x, label: x }));
 
+/** One level of the cascade: a searchable select where the dataset has entries, or a
+ *  free-text input where it doesn't yet. Declared at module scope so it isn't
+ *  recreated on every render of AddressPicker. */
+const Level = ({
+  label,
+  options,
+  disabled,
+  currentValue,
+  onSet,
+}: {
+  label: string;
+  options: string[];
+  disabled?: boolean;
+  currentValue: string;
+  onSet: (val: string) => void;
+}) => (
+  <div className="space-y-1.5">
+    <Label className="text-xs">{label}</Label>
+    {options.length > 0 ? (
+      <Combobox
+        options={toOptions(options)}
+        value={currentValue}
+        onChange={onSet}
+        placeholder={disabled ? "Select the level above first" : `Select ${label.toLowerCase()}`}
+        searchPlaceholder={`Search ${label.toLowerCase()}…`}
+        disabled={disabled}
+      />
+    ) : (
+      <Input
+        value={currentValue}
+        onChange={(e) => onSet(e.target.value)}
+        placeholder={disabled ? "Select the level above first" : label}
+        disabled={disabled}
+      />
+    )}
+  </div>
+);
+
 /** Cascading Province → District → Sector → Cell → Village picker. Each level is a
  *  searchable select where the dataset has entries, and falls back to free text
  *  where it doesn't yet — so clinicians are never blocked. Selecting a level clears
@@ -49,46 +87,13 @@ export const AddressPicker = ({ value, onChange }: Props) => {
     for (const k of below[level]) onChange(k, "");
   };
 
-  const Level = ({
-    level,
-    label,
-    options,
-    disabled,
-  }: {
-    level: "province" | "district" | "sector" | "cell" | "village";
-    label: string;
-    options: string[];
-    disabled?: boolean;
-  }) => (
-    <div className="space-y-1.5">
-      <Label className="text-xs">{label}</Label>
-      {options.length > 0 ? (
-        <Combobox
-          options={toOptions(options)}
-          value={v(level)}
-          onChange={(val) => set(level, val)}
-          placeholder={disabled ? "Select the level above first" : `Select ${label.toLowerCase()}`}
-          searchPlaceholder={`Search ${label.toLowerCase()}…`}
-          disabled={disabled}
-        />
-      ) : (
-        <Input
-          value={v(level)}
-          onChange={(e) => set(level, e.target.value)}
-          placeholder={disabled ? "Select the level above first" : label}
-          disabled={disabled}
-        />
-      )}
-    </div>
-  );
-
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <Level level="province" label="Province" options={provinces} />
-      <Level level="district" label="District" options={districts} disabled={!province} />
-      <Level level="sector" label="Sector" options={sectors} disabled={!district} />
-      <Level level="cell" label="Cell" options={cells} disabled={!sector} />
-      <Level level="village" label="Village" options={villages} disabled={!cell} />
+      <Level label="Province" options={provinces} currentValue={province} onSet={(val) => set("province", val)} />
+      <Level label="District" options={districts} disabled={!province} currentValue={district} onSet={(val) => set("district", val)} />
+      <Level label="Sector" options={sectors} disabled={!district} currentValue={sector} onSet={(val) => set("sector", val)} />
+      <Level label="Cell" options={cells} disabled={!sector} currentValue={cell} onSet={(val) => set("cell", val)} />
+      <Level label="Village" options={villages} disabled={!cell} currentValue={v("village")} onSet={(val) => set("village", val)} />
     </div>
   );
 };

@@ -7,6 +7,31 @@ import { toast } from "@/components/ui/toaster";
 import type { AmbulanceCredentials } from "@/types/ambulance";
 import { buildSetupQr, driverServerUrl } from "@/utils/ambulanceSetup";
 
+/** A read-only credential row with a copy button. */
+function Field({
+  label,
+  value,
+  copied,
+  onCopy,
+}: {
+  label: string;
+  value: string;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2">
+      <div className="min-w-0">
+        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+        <p className="truncate font-mono text-sm">{value}</p>
+      </div>
+      <Button variant="ghost" size="sm" className="shrink-0" onClick={onCopy}>
+        {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+      </Button>
+    </div>
+  );
+}
+
 /** Shown once after registering an ambulance or resetting its password. The admin
  *  points the driver's phone camera at the QR code to sign it in — or reads out the
  *  login ID and password. The password is not retrievable later. */
@@ -38,18 +63,6 @@ export default function AmbulanceSetupDialog({
     }
   };
 
-  const Field = ({ label, value }: { label: string; value: string }) => (
-    <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2">
-      <div className="min-w-0">
-        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
-        <p className="truncate font-mono text-sm">{value}</p>
-      </div>
-      <Button variant="ghost" size="sm" className="shrink-0" onClick={() => copy(label, value)}>
-        {copied === label ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
-      </Button>
-    </div>
-  );
-
   return (
     <Dialog open={!!credentials} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
@@ -74,9 +87,9 @@ export default function AmbulanceSetupDialog({
             <p className="text-xs text-muted-foreground">
               No camera? Enter these in the app by hand instead:
             </p>
-            <Field label="Server address" value={serverUrl} />
-            <Field label="Login ID" value={credentials.login_id} />
-            <Field label="Password" value={credentials.password} />
+            <Field label="Server address" value={serverUrl} copied={copied === "Server address"} onCopy={() => copy("Server address", serverUrl)} />
+            <Field label="Login ID" value={credentials.login_id} copied={copied === "Login ID"} onCopy={() => copy("Login ID", credentials.login_id)} />
+            <Field label="Password" value={credentials.password} copied={copied === "Password"} onCopy={() => copy("Password", credentials.password)} />
           </div>
 
           <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">

@@ -50,4 +50,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 );
 Button.displayName = "Button";
 
+// buttonVariants is a styling helper consumed across the app, so it lives alongside
+// the Button component by convention (shadcn/ui); the co-located non-component export
+// only disables Fast Refresh for this leaf file.
+// eslint-disable-next-line react-refresh/only-export-components
 export { Button, buttonVariants };

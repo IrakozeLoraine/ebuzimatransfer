@@ -28,6 +28,10 @@ const useToastStore = create<ToastStore>((set) => ({
   remove: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 }));
 
+// `toast` is the imperative entry point used across the app; it lives with the
+// Toaster component it drives. The co-located non-component export only disables Fast
+// Refresh for this leaf file.
+// eslint-disable-next-line react-refresh/only-export-components
 export const toast = (options: Omit<ToastItem, "id">) =>
   useToastStore.getState().add(options);
 

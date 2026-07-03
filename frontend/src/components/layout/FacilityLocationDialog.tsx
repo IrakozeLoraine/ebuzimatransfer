@@ -88,14 +88,21 @@ export const FacilityLocationDialog = ({ open, onOpenChange }: Props) => {
     Number.isFinite(latNum) && Number.isFinite(lngNum) &&
     latNum >= -90 && latNum <= 90 && lngNum >= -180 && lngNum <= 180;
 
-  // Prefill from the facility's existing coordinates each time the dialog opens.
-  useEffect(() => {
+  // Prefill from the facility's existing coordinates each time the dialog opens (and
+  // if the facility record loads/changes while open). Adjusting state during render
+  // rather than in an effect avoids a cascading re-render.
+  const [seeded, setSeeded] = useState<{ open: boolean; facility: typeof facility }>({
+    open: false,
+    facility: null,
+  });
+  if (seeded.open !== open || seeded.facility !== facility) {
+    setSeeded({ open, facility });
     if (open) {
       setLat(facility?.latitude != null ? String(facility.latitude) : "");
       setLng(facility?.longitude != null ? String(facility.longitude) : "");
       setError(null);
     }
-  }, [open, facility]);
+  }
 
   const useMyLocation = () => {
     setError(null);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useReferral, useAcceptReferral, useQuickAcceptReferral, useRejectReferral, useRecordArrivalCondition, useArrangeTransport, useRemoveTransport, useMarkArrived } from "@/hooks/useReferrals";
 import type { ArrivalCondition } from "@/types/referral";
@@ -82,13 +82,17 @@ export const ReferralDetailPage = () => {
   const availableResources = resources.filter((r) => r.available > 0);
 
   // Default the manual pick to the resource the requester actually asked for, when
-  // it's still available — the approver can override it.
-  useEffect(() => {
-    const requested = referral?.requested_resource_id;
-    if (requested && !selectedResourceId && availableResources.some((r) => r.id === requested)) {
-      setSelectedResourceId(requested);
-    }
-  }, [referral?.requested_resource_id, availableResources, selectedResourceId]);
+  // it's still available — the approver can override it. Adjusting state during
+  // render (rather than in an effect) avoids a cascading re-render; the guard on
+  // selectedResourceId makes it a one-shot that converges immediately.
+  const requestedResourceId = referral?.requested_resource_id;
+  if (
+    requestedResourceId &&
+    !selectedResourceId &&
+    availableResources.some((r) => r.id === requestedResourceId)
+  ) {
+    setSelectedResourceId(requestedResourceId);
+  }
 
   const handleAccept = () => {
     if (!selectedResourceId || !id) return;
