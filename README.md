@@ -10,6 +10,7 @@ tracks the assigned ambulance live on a map from pickup to arrival.
 | --- | --- |
 | **Live app** | **https://ebuzimatransfer.duckdns.org** |
 | **Demo video (5 min)** |  |
+| **Driver app (APK)** | [Download from GitHub Releases](https://github.com/IrakozeLoraine/ebuzimatransfer/releases/latest) |
 | **Technical report** | [TECHNICAL_REPORT.md](TECHNICAL_REPORT.md) |
 
 ## Architecture
@@ -162,7 +163,9 @@ Scripts: `npm run lint`, `npm run build` (type-check + production build),
 ### 4. Ambulance tracker (Flutter)
 
 Requires the **Flutter SDK** (stable). See [`ambulance_tracker/README.md`](ambulance_tracker/README.md)
-for how the driver app pairs with the backend.
+for how the driver app pairs with the backend. To install the app on an Android
+device without building it yourself, download the prebuilt APK from the
+[latest GitHub release](https://github.com/IrakozeLoraine/ebuzimatransfer/releases/latest).
 
 ```bash
 cd ambulance_tracker
