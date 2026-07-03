@@ -2,8 +2,7 @@ import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/auth.store";
 import { useNotificationStore } from "@/store/notification.store";
-
-const WS_BASE = import.meta.env.VITE_WS_BASE_URL;
+import { WS_BASE } from "@/lib/wsBase";
 
 export const useCapacityWebSocket = () => {
   const queryClient = useQueryClient();

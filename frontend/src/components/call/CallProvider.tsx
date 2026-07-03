@@ -4,11 +4,10 @@ import { useAuthStore } from "@/store/auth.store";
 import { toast } from "@/components/ui/toaster";
 import { initiateCall, initiateAmbulanceCall, answerCall, endCall, sendSignal } from "@/api/incall.api";
 import { getApiErrorMessage } from "@/utils/apiError";
+import { WS_BASE } from "@/lib/wsBase";
 
 // Stop ringing if nobody on the desk picks up within this window.
 const RING_TIMEOUT_MS = 35_000;
-
-const WS_BASE = import.meta.env.VITE_WS_BASE_URL;
 
 // Public STUN + optional self-hosted TURN (needed to traverse strict NATs in prod).
 const ICE_SERVERS: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];

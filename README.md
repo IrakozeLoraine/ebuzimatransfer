@@ -6,10 +6,18 @@ eBuzimaTransfer lets clinicians create transfer requests, lets receiving
 hospitals accept or decline them based on real-time bed/resource capacity, and
 tracks the assigned ambulance live on a map from pickup to arrival.
 
+| | |
+| --- | --- |
+| **Live app** | **https://ebuzimatransfer.duckdns.org** |
+| **Demo video (5 min)** |  |
+| **Technical report** | [TECHNICAL_REPORT.md](TECHNICAL_REPORT.md) |
+
 ## Architecture
 
 The system is a monorepo with four deployable pieces, wired together by Docker
 Compose behind an Nginx reverse proxy.
+
+![alt text](docs/architecture.png)
 
 | Component           | Path                  | Stack                                            |
 | ------------------- | --------------------- | ------------------------------------------------ |
@@ -28,25 +36,57 @@ Compose behind an Nginx reverse proxy.
 
 ## Quick start (Docker)
 
-The fastest way to run the whole stack locally.
+This is the fastest way to run the whole stack. You only need **Docker** and
+**Docker Compose** installed — nothing else.
+
+**1. Clone the repository**
 
 ```bash
 git clone https://github.com/IrakozeLoraine/ebuzimatransfer.git
 cd ebuzimatransfer
-docker compose up --build
 ```
 
-On first boot the backend automatically applies migrations (`alembic upgrade
-head`) and seeds reference data (`seeds.py`). Once it's up:
+**2. Start the stack**
 
-| Service        | URL                              |
-| -------------- | -------------------------------- |
-| Web app        | http://localhost (via Nginx)     |
-| Frontend (dev) | http://localhost:5173            |
-| API docs       | http://localhost:8000/api/docs   |
-| Health check   | http://localhost:8000/health     |
+```bash
+docker compose up --build          # add -d to run it in the background
+```
 
-> `docker compose up -d`.
+On the first boot the backend automatically applies the database migrations
+(`alembic upgrade head`) and seeds the roles and a single super-admin account
+(`seeds.py`). The first build takes a few minutes; later starts are fast.
+
+**3. Open the app**
+
+| What            | URL                              |
+| --------------- | -------------------------------- |
+| Web app         | http://localhost                 |
+| API docs (Swagger) | http://localhost:8000/api/docs |
+| Health check    | http://localhost:8000/health     |
+
+Confirm it's up by opening the health check — it should return
+`{"status":"ok"}`.
+
+**4. Log in and build your data**
+
+Log in with the seeded super admin. **Sign in with the Medical ID:**
+
+| Field | Value |
+| ----- | ----- |
+| Medical ID | `SA-0001` |
+| Password | `Admin@1234` |
+
+The seed intentionally creates only the super admin. Everything else —
+facilities, units, resources, ambulances and clinician/facility-admin accounts —
+is created from inside the app by the super admin. So after logging in, create a
+facility, add a unit and some resources, and create a couple of clinician
+accounts to try a full referral. (Change the super-admin password in production.)
+
+**Stop the stack**
+
+```bash
+docker compose down                # add -v to also delete the database volume
+```
 
 ## Local development (without Docker)
 
@@ -172,8 +212,45 @@ On a server with Docker installed and this repo checked out:
 ./deploy.sh
 ```
 
-For HTTPS, place certificates in [`nginx/certs/`](nginx/certs/) and enable the
-TLS `server` block in [`nginx/nginx.conf`](nginx/nginx.conf).
+### HTTPS (Let's Encrypt)
+
+Nginx serves the app over TLS on `:443` using a Let's Encrypt certificate for
+`ebuzimatransfer.duckdns.org`. Point the domain's DNS at the server, open ports
+80/443, then issue the certificate **once**:
+
+```bash
+./nginx/init-letsencrypt.sh
+```
+
+This drops in a temporary self-signed cert so Nginx can boot, then obtains the
+real certificate over the HTTP-01 challenge and reloads. Afterwards the
+`certbot` service in [`docker-compose.yml`](docker-compose.yml) **renews it
+automatically** (every 12 h) and Nginx reloads every 6 h to pick up renewals.
+HTTP is redirected to HTTPS. To use a different domain, change it in
+[`init-letsencrypt.sh`](nginx/init-letsencrypt.sh) and [`nginx/nginx.conf`](nginx/nginx.conf).
+
+> The web app builds its API and WebSocket URLs from the page's own address, so
+> the same production build works over both HTTP and HTTPS (`wss://`) without
+> being rebuilt for each one.
+
+---
+
+## Testing
+
+There are three groups of tests: backend unit tests for the domain logic,
+backend integration tests that run the FastAPI app against a real PostgreSQL
+database, and frontend tests for the utilities, form schemas, store and
+components. The testing approach and results are written up in
+[TECHNICAL_REPORT.md](TECHNICAL_REPORT.md#4-testing).
+
+```bash
+# Backend (the integration tests need Postgres; they skip if it isn't reachable)
+cd backend && pytest -q          # 46 passed, 10 skipped locally
+
+# Frontend (Vitest + Testing Library)
+cd frontend && npm run test      # 64 tests
+cd frontend && npm run test:coverage
+```
 
 ---
 
