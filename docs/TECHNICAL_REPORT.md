@@ -136,8 +136,7 @@ renewed automatically by the `certbot` service. HTTP is redirected to HTTPS and
   over `wss://` on the same origin — the frontend derives the protocol from the
   page, so no rebuild is needed between HTTP and HTTPS.
 
-> **Screenshot placeholder:** browser address bar showing the valid HTTPS
-> padlock on `ebuzimatransfer.duckdns.org`, and the `/health` 200 response.
+![Deployed app served over HTTPS at ebuzimatransfer.duckdns.org with a valid certificate](deployment.png)
 
 ### 3.3 CI/CD pipeline
 
@@ -153,8 +152,7 @@ renewed automatically by the `certbot` service. HTTP is redirected to HTTPS and
 `deploy.yml` runs after CI passes on `main`, SSHes to the host and runs
 [`deploy.sh`](deploy.sh) (rebuild → `docker compose up -d` → prune cache).
 
-> **Screenshot placeholder:** a green GitHub Actions run showing all jobs
-> passing.
+![GitHub Actions pipeline with all backend, frontend, mobile and Docker-build jobs passing](cicd.png)
 
 ---
 
@@ -195,9 +193,7 @@ $ cd backend && .venv/bin/pytest -q
 46 passed, 10 skipped in 0.71s
 ```
 
-> **Screenshot placeholder:** terminal showing `46 passed, 10 skipped`.
-> Run the same command in CI (with Postgres) to show the 10 integration tests
-> also passing — paste that screenshot here too.
+![Backend pytest run reporting 46 passed and 10 skipped](backend-test.png)
 
 ### 4.3 Strategy 3 — Frontend unit & component tests
 
@@ -221,9 +217,7 @@ $ npm run test
    Duration  3.78s
 ```
 
-> **Screenshot placeholder:** terminal showing `13 passed (13)` / `64 passed
-> (64)`. Optionally run `npm run test:coverage` and screenshot the coverage
-> table.
+![Frontend Vitest run reporting 13 test files and 64 tests passing](frontend-test.png)
 
 ### 4.4 Strategy 4 — Static analysis & type safety
 
@@ -248,9 +242,43 @@ screenshots:
 | Ambulance tracking | Live GPS pings · OSRM up · **OSRM down** | Map/ETA update live; Haversine fallback ETA when OSRM down |
 | Roles | Each of the 4 roles | UI and API expose only permitted actions (O5) |
 
-> **Screenshot placeholders:** (a) capacity search with a full hospital
-> excluded; (b) referral form showing validation errors; (c) the "bed no longer
-> available" rejection on a double-accept; (d) live ambulance on the map.
+Screenshots captured from the running app during this testing:
+
+**Capacity search — available beds and equipment listed for referral (O1):**
+
+![Clinical resource lookup listing available beds and ICU ventilators across a facility](available-resource.png)
+
+**Capacity search — a search with no available match returns a clear empty state:**
+
+![Resource lookup with a search term that matches no available resources](unknown-resource.png)
+
+**Updating live availability — bed counts split by status (O1):**
+
+![Update-availability dialog splitting a resource into occupied, reserved, out-of-service and available counts](update-availability.png)
+
+**Create referral — required-field validation blocks an incomplete form:**
+
+![New referral form showing inline errors and a summary of missing required fields](required-request-fields.png)
+
+**Ambulance tracking — live position on the map with a road-based ETA (O4):**
+
+![Ambulance tracking view showing the ambulance's live position on a map of Rwanda with tracking status and a last-fix timestamp](ambulance-tracked.png)
+
+**Role assignment — roles are scoped per facility (O5):**
+
+![Assign-user dialog granting CLINICIAN and FACILITY ADMIN roles at a facility](available-roles.png)
+
+**In-app voice call — placing a call to a receiving unit (O6):**
+
+![Resource lookup with an outgoing call widget showing "Calling…"](making-call.png)
+
+**In-app voice call — incoming call with accept/decline controls (O6):**
+
+![Incoming voice-call widget with accept and decline controls](receiving-call.png)
+
+**Call history — every in-app call is logged with direction, status and time:**
+
+![Call logs table listing outgoing (missed) and incoming (ringing) calls](call-logs.png)
 
 ### 4.6 Strategy 6 — Cross-environment / cross-device (performance & compatibility)
 
@@ -264,9 +292,13 @@ The product was run on different software/hardware to confirm portability:
 | Web: Chrome & Firefox, desktop + mobile widths | Frontend compatibility | Responsive layout (Tailwind) |
 | Android device/emulator | Ambulance tracker | Flutter GPS app reports position |
 
-> **Screenshot placeholders:** the web app open side-by-side on desktop and a
-> mobile viewport; the Flutter tracker running on Android. If you can, note page
-> load / API response times from the browser Network tab to evidence performance.
+**Responsive web layout on a mobile viewport:**
+
+![The clinical resource lookup rendered in a mobile phone browser](mobile.PNG)
+
+**Flutter ambulance tracker on Android — journey history of completed transfers:**
+
+![The Flutter tracker app on Android showing a journey history of delivered referrals](driver-app.jpg)
 
 ---
 
