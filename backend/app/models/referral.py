@@ -1,10 +1,21 @@
 import uuid
 from datetime import datetime
 from enum import Enum as PyEnum
-from sqlalchemy import String, Text, Boolean, ForeignKey, JSON, Enum as SAEnum
+from sqlalchemy import String, Text, Boolean, ForeignKey, JSON, Table, Column, Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, UUIDMixin, TimestampMixin
+
+
+# A request can ask for several distinct resources at the destination (e.g. a
+# ventilator *and* a CT scan), one unit of each. This join table holds that set;
+# the receiving side reserves every one of them when it accepts the request.
+referral_requested_resources = Table(
+    "referral_requested_resources",
+    Base.metadata,
+    Column("referral_id", UUID(as_uuid=True), ForeignKey("referrals.id", ondelete="CASCADE"), primary_key=True),
+    Column("resource_id", UUID(as_uuid=True), ForeignKey("resources.id", ondelete="CASCADE"), primary_key=True),
+)
 
 
 class ReferralStatus(str, PyEnum):
@@ -97,26 +108,16 @@ class Referral(Base, UUIDMixin, TimestampMixin):
     accepted_facility_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("facilities.id"), nullable=True)
     origin_unit_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("units.id"), nullable=True)
     requested_unit_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("units.id"), nullable=True)
-    # The specific resource the requester is asking for at the destination. Captured
-    # (and validated as available) up front so the receiving side knows exactly what
-    # was requested; the approver still reserves the actual unit on accept.
-    requested_resource_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("resources.id"), nullable=True)
 
     creator: Mapped["User"] = relationship("User", foreign_keys=[created_by])
-    # Display-only link to the requested resource so the referral can surface its
-    # name across facilities (the resources list endpoint is facility-scoped, so
-    # the requesting side can't resolve the destination's resource by id).
-    requested_resource: Mapped["Resource | None"] = relationship(
-        "Resource", foreign_keys=[requested_resource_id]
+    # The resources the requester is asking for at the destination — one or more,
+    # captured (and validated as available) up front so the receiving side knows
+    # exactly what was requested. Loaded so the referral can surface their names
+    # across facilities (the resources list endpoint is facility-scoped, so the
+    # requesting side can't resolve the destination's resources by id).
+    requested_resources: Mapped[list["Resource"]] = relationship(
+        "Resource", secondary=referral_requested_resources
     )
-
-    @property
-    def requested_resource_name(self) -> str | None:
-        """Name of the requested resource for display, resolved server-side so the
-        requesting facility (which can't see the destination's resources) still
-        sees what was asked for. Relies on ``requested_resource`` being eager
-        loaded — every ReferralOut path goes through the repo's get_with_relations."""
-        return self.requested_resource.resource_name if self.requested_resource else None
     status_history: Mapped[list["ReferralStatusHistory"]] = relationship(
         "ReferralStatusHistory",
         back_populates="referral",
@@ -126,9 +127,19 @@ class Referral(Base, UUIDMixin, TimestampMixin):
     transport_events: Mapped[list["TransportEvent"]] = relationship(
         "TransportEvent", back_populates="referral", cascade="all, delete-orphan"
     )
-    resource_reservation: Mapped["ResourceReservation | None"] = relationship(
-        "ResourceReservation", back_populates="referral", uselist=False
+    # One reservation per resource held for this request (the receiving side
+    # reserves every requested resource that's still available when it accepts).
+    resource_reservations: Mapped[list["ResourceReservation"]] = relationship(
+        "ResourceReservation", back_populates="referral"
     )
+
+    @property
+    def reserved_resource_ids(self) -> list[uuid.UUID]:
+        """Ids of the requested resources actually held for this request. A request
+        can be accepted with only some of its resources reserved (the rest were no
+        longer available), so both sides can tell which asks were fulfilled. Relies
+        on ``resource_reservations`` being eager loaded (get_with_relations does)."""
+        return [r.resource_id for r in self.resource_reservations]
 
 
 class ReferralStatusHistory(Base, UUIDMixin, TimestampMixin):

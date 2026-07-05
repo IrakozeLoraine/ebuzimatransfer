@@ -4,7 +4,7 @@ from typing import List, Optional
 from datetime import datetime
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.exceptions import NotFoundError, InvalidStatusTransitionError, ValidationError, ForbiddenError
+from app.core.exceptions import NotFoundError, InvalidStatusTransitionError, ValidationError, ForbiddenError, ResourceReservedError
 from app.models.referral import Referral, ReferralStatus, ReferralStatusHistory, ArrivalCondition, ALLOWED_TRANSITIONS
 from app.repositories.referral_repository import ReferralRepository
 from app.repositories.resource_repository import ResourceRepository
@@ -26,17 +26,24 @@ class ReferralService:
         referring_facility_id: Optional[uuid.UUID] = None,
         origin_unit_id: Optional[uuid.UUID] = None,
     ) -> Referral:
-        # The requested resource must actually exist at the destination facility and
+        # Each requested resource must actually exist at the destination facility and
         # have at least one unit available right now — you can't request something
-        # that isn't there.
-        resource = await self.resource_service.get(data.requested_resource_id)
-        if resource.facility_id != data.preferred_facility_id:
-            raise ValidationError("The requested resource is not at the selected facility")
-        if resource.available < 1:
-            raise ValidationError("The requested resource is no longer available")
+        # that isn't there. De-duplicate the ids so a resource can't be listed twice.
+        resources = []
+        seen: set[uuid.UUID] = set()
+        for resource_id in data.requested_resource_ids:
+            if resource_id in seen:
+                continue
+            seen.add(resource_id)
+            resource = await self.resource_service.get(resource_id)
+            if resource.facility_id != data.preferred_facility_id:
+                raise ValidationError("A requested resource is not at the selected facility")
+            if resource.available < 1:
+                raise ValidationError("A requested resource is no longer available")
+            resources.append(resource)
 
         number = await self.repo.next_referral_number()
-        payload = data.model_dump(exclude={"call_log_id"})
+        payload = data.model_dump(exclude={"call_log_id", "requested_resource_ids"})
         # Fields dropped from the forms but kept as non-null DB columns.
         payload["age_band"] = payload.get("age_band") or ""
         payload["acuity_level"] = payload.get("acuity_level") or ""
@@ -46,6 +53,7 @@ class ReferralService:
             created_by=created_by,
             referring_facility_id=referring_facility_id,
             origin_unit_id=origin_unit_id,
+            requested_resources=resources,
             **payload,
         )
         await self.repo.create(referral)
@@ -128,7 +136,8 @@ class ReferralService:
             raise ForbiddenError("Only staff in the requested unit can approve this request.")
 
     async def accept(self, referral_id: uuid.UUID, data: AcceptReferralRequest, actor) -> Referral:
-        referral = await self.repo.get_by_id(referral_id)
+        # get_with_relations eager-loads requested_resources — we reserve every one.
+        referral = await self.repo.get_with_relations(referral_id)
         if not referral:
             raise NotFoundError("Referral")
         self.assert_can_approve(referral, actor)
@@ -136,42 +145,37 @@ class ReferralService:
         if ReferralStatus.ACCEPTED not in ALLOWED_TRANSITIONS.get(referral.status, []):
             raise InvalidStatusTransitionError(referral.status, ReferralStatus.ACCEPTED)
 
-        resource = await self.resource_service.get(data.resource_id)
-        await self.resource_service.reserve(
-            resource_id=data.resource_id,
-            referral_id=referral_id,
-            reserved_by=actor_id,
-            planned_admission_time=data.planned_admission_time,
-        )
+        if not referral.requested_resources:
+            raise ValidationError("This request has no requested resources to reserve")
+
+        # Reserve every requested resource that's still available, skipping any that
+        # were taken since the request was raised. reserve() locks the row and raises
+        # ResourceReservedError when a unit is gone; we catch that and move on so the
+        # accept holds what it can (the caller tells the user what couldn't be held).
+        reserved_any = False
+        for resource in referral.requested_resources:
+            try:
+                await self.resource_service.reserve(
+                    resource_id=resource.id,
+                    referral_id=referral_id,
+                    reserved_by=actor_id,
+                    planned_admission_time=data.planned_admission_time,
+                )
+                reserved_any = True
+            except ResourceReservedError:
+                continue
+        # Accepting with nothing reserved would be meaningless — fail so the receiving
+        # side can reject or the requester can pick a different destination.
+        if not reserved_any:
+            raise ValidationError("None of the requested resources are still available to reserve")
+
         referral.status = ReferralStatus.ACCEPTED
-        # The receiving facility is the one that owns the reserved resource.
-        referral.accepted_facility_id = resource.facility_id
+        # Every requested resource lives at the preferred facility (validated on
+        # create), so that's the receiving facility.
+        referral.accepted_facility_id = referral.preferred_facility_id
         await self._record_history(referral_id, ReferralStatus.ACCEPTED, actor_id)
         await self.session.flush()
         return referral
-
-    async def auto_pick_resource(self, referral_id: uuid.UUID, facility_id: uuid.UUID) -> Optional[uuid.UUID]:
-        """Pick an available resource at ``facility_id`` in the request's requested
-        unit (falls back to any available resource at the facility). Enables
-        one-click approval."""
-        referral = await self.repo.get_by_id(referral_id)
-        if not referral:
-            raise NotFoundError("Referral")
-        resources = await self.resource_service.repo.list_scoped(facility_id=facility_id)
-        available = [
-            r for r in resources
-            if r.available > 0
-        ]
-        # Prefer the exact resource the requester asked for, if it's still available.
-        if referral.requested_resource_id is not None:
-            requested = next((r for r in available if r.id == referral.requested_resource_id), None)
-            if requested is not None:
-                return requested.id
-        if referral.requested_unit_id is not None:
-            in_unit = [r for r in available if r.unit_id == referral.requested_unit_id]
-            if in_unit:
-                return in_unit[0].id
-        return available[0].id if available else None
 
     async def reject(self, referral_id: uuid.UUID, data: RejectReferralRequest, actor) -> Referral:
         referral = await self.repo.get_by_id(referral_id)

@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from typing import Optional, List, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.models.referral import ReferralStatus, ArrivalCondition
 
 
@@ -18,9 +18,10 @@ class ReferralCreate(BaseModel):
     # facility + unit (and only that side's staff can approve it).
     preferred_facility_id: uuid.UUID
     requested_unit_id: uuid.UUID
-    # The specific resource being requested at the destination. Validated as
-    # currently available at the preferred facility when creating the request.
-    requested_resource_id: uuid.UUID
+    # The resources being requested at the destination — one or more distinct
+    # resources, each validated as currently available at the preferred facility
+    # when creating the request.
+    requested_resource_ids: List[uuid.UUID] = Field(min_length=1)
     # Optional voice-dictation artifacts, carried over from /referrals/transcribe
     # so the recording, transcript, and summary are stored with the referral.
     audio_url: Optional[str] = None
@@ -94,8 +95,19 @@ class ReferralFeedbackRequest(BaseModel):
 
 
 class AcceptReferralRequest(BaseModel):
-    resource_id: uuid.UUID
+    # Accepting reserves every resource the request asked for, so no resource is
+    # chosen here — only the optional planned admission time applied to them all.
     planned_admission_time: Optional[datetime] = None
+
+
+class RequestedResourceOut(BaseModel):
+    """A resource named on a request, surfaced with its name so both facilities
+    can see what was asked for (resolved server-side; the requesting side can't
+    look up the destination's resources by id)."""
+    id: uuid.UUID
+    resource_name: str
+
+    model_config = {"from_attributes": True}
 
 
 class RejectReferralRequest(BaseModel):
@@ -166,8 +178,10 @@ class ReferralOut(BaseModel):
     accepted_facility_id: Optional[uuid.UUID]
     origin_unit_id: Optional[uuid.UUID] = None
     requested_unit_id: Optional[uuid.UUID] = None
-    requested_resource_id: Optional[uuid.UUID] = None
-    requested_resource_name: Optional[str] = None
+    requested_resources: List[RequestedResourceOut] = []
+    # Which of the requested resources are actually reserved for this request — an
+    # accept holds every one that was still available, so this can be a subset.
+    reserved_resource_ids: List[uuid.UUID] = []
     created_at: datetime
     updated_at: datetime
     status_history: List[StatusHistoryOut] = []

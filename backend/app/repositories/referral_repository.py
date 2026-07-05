@@ -18,10 +18,10 @@ class ReferralRepository(BaseRepository[Referral]):
             .where(Referral.id == referral_id)
             .options(
                 selectinload(Referral.status_history).selectinload(ReferralStatusHistory.actor),
-                selectinload(Referral.resource_reservation),
+                selectinload(Referral.resource_reservations),
                 selectinload(Referral.transport_events),
                 selectinload(Referral.creator),
-                selectinload(Referral.requested_resource),
+                selectinload(Referral.requested_resources),
             )
         )
         return result.scalar_one_or_none()

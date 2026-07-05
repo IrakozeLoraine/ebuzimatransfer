@@ -71,8 +71,10 @@ describe("exportToCsv", () => {
 // The Excel writer is a thin wrapper over write-excel-file; assert we hand it a
 // bold header row followed by typed body cells and write to the .xlsx filename.
 const toFile = vi.fn().mockResolvedValue(undefined);
-const writeXlsxFile = vi.fn<(...args: unknown[]) => { toFile: typeof toFile }>(() => ({ toFile }));
-vi.mock("write-excel-file/browser", () => ({ default: (...args: unknown[]) => writeXlsxFile(...args) }));
+const writeXlsxFile = vi.fn((_data: unknown[][], _options: { sheet: string }) => ({ toFile }));
+vi.mock("write-excel-file/browser", () => ({
+  default: (data: unknown[][], options: { sheet: string }) => writeXlsxFile(data, options),
+}));
 
 describe("exportToExcel", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -81,7 +83,7 @@ describe("exportToExcel", () => {
     await exportToExcel("facilities", columns, rows);
 
     expect(writeXlsxFile).toHaveBeenCalledTimes(1);
-    const [data, opts] = writeXlsxFile.mock.calls[0] as [unknown[][], { sheet: string }];
+    const [data, opts] = writeXlsxFile.mock.calls[0];
 
     expect(data[0]).toEqual([
       { value: "Name", fontWeight: "bold" },

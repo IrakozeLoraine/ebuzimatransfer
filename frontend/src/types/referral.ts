@@ -34,6 +34,13 @@ export interface ReferralTransport {
   arrival_time: string | null;
 }
 
+/** A resource named on a request, with its name resolved server-side so both
+ *  facilities can see what was asked for. */
+export interface RequestedResource {
+  id: string;
+  resource_name: string;
+}
+
 /** The Patient Monitoring Transfer Form recorded by the ambulance driver by voice. */
 export interface TransportMonitoring {
   audio_url: string | null;
@@ -68,8 +75,8 @@ export interface Referral {
   accepted_facility_id: string | null;
   origin_unit_id: string | null;
   requested_unit_id: string | null;
-  requested_resource_id: string | null;
-  requested_resource_name: string | null;
+  requested_resources: RequestedResource[];
+  reserved_resource_ids: string[];
   created_at: string;
   updated_at: string;
   status_history: StatusHistory[];
@@ -84,7 +91,7 @@ export interface CreateReferralPayload {
   form_data?: Record<string, unknown> | null;
   preferred_facility_id?: string;
   requested_unit_id?: string;
-  requested_resource_id: string;
+  requested_resource_ids: string[];
   audio_url?: string;
   transcript?: string;
   ai_summary?: string;
@@ -110,7 +117,6 @@ export interface DictationResult {
 }
 
 export interface AcceptReferralPayload {
-  resource_id: string;
   planned_admission_time?: string;
 }
 

@@ -8,6 +8,7 @@ import { useUnits } from "@/hooks/useUnits";
 import { useAvailableResources } from "@/hooks/useResources";
 import { useAuthStore } from "@/store/auth.store";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
@@ -41,7 +42,7 @@ const CORE_SET = new Set<string>(CORE_FIELD_NAMES);
 const REQUIRED_FIELD_LABELS: Record<string, string> = {
   preferred_facility_id: "Preferred facility",
   requested_unit_id: "Requested clinical unit",
-  requested_resource_id: "Requested resource",
+  requested_resource_ids: "Requested resources",
   form_type: "Form type",
   sex: "Sex",
   diagnosis: "Diagnosis",
@@ -77,10 +78,14 @@ export const NewReferralPage = () => {
   const myFacilityId = useAuthStore((s) => s.user?.active_facility_id ?? null);
   const myUnitIds = useAuthStore((s) => s.user?.unit_ids ?? []);
   const myName = useAuthStore((s) => (s.user ? `${s.user.first_name} ${s.user.last_name}`.trim() : ""));
-  const [preferredFacilityDetails, setPreferredFacilityDetails] = useState({
+  const [preferredFacilityDetails, setPreferredFacilityDetails] = useState<{
+    facilityId: string;
+    unitId: string;
+    resourceIds: string[];
+  }>({
     facilityId: searchParams.get("facility") || "",
     unitId: searchParams.get("unit") || "",
-    resourceId: searchParams.get("resource") || "",
+    resourceIds: searchParams.get("resource") ? [searchParams.get("resource") as string] : [],
   });
 
   const {
@@ -100,7 +105,7 @@ export const NewReferralPage = () => {
       reason_for_transfer: "",
       preferred_facility_id: "",
       requested_unit_id: "",
-      requested_resource_id: "",
+      requested_resource_ids: [],
       form_type: "EXTERNAL",
       form_data: {},
     },
@@ -194,16 +199,16 @@ export const NewReferralPage = () => {
     const resource = searchParams.get("resource");
     if (facility) setPreferredFacilityDetails((prev) => ({ ...prev, facilityId: facility }));
     if (unit) setPreferredFacilityDetails((prev) => ({ ...prev, unitId: unit }));
-    if (resource) setPreferredFacilityDetails((prev) => ({ ...prev, resourceId: resource }));
+    if (resource) setPreferredFacilityDetails((prev) => ({ ...prev, resourceIds: [resource] }));
   }, [searchParams]);
 
-  // Keep the destination selections in the RHF payload. The resource mirrors the
-  // selection too, so it's set whether picked manually, re-picked, or prefilled.
+  // Keep the destination selections in the RHF payload. The resources mirror the
+  // selection too, so they're set whether picked manually, re-picked, or prefilled.
   useEffect(() => {
     setValue("preferred_facility_id", preferredFacilityDetails.facilityId, { shouldValidate: true });
     setValue("requested_unit_id", preferredFacilityDetails.unitId, { shouldValidate: true });
-    setValue("requested_resource_id", preferredFacilityDetails.resourceId, { shouldValidate: true });
-  }, [preferredFacilityDetails.facilityId, preferredFacilityDetails.unitId, preferredFacilityDetails.resourceId, setValue]);
+    setValue("requested_resource_ids", preferredFacilityDetails.resourceIds, { shouldValidate: true });
+  }, [preferredFacilityDetails.facilityId, preferredFacilityDetails.unitId, preferredFacilityDetails.resourceIds, setValue]);
 
   // Autofill the receiving facility & service from the destination, and the referring
   // health provider with the logged-in clinician's name.
@@ -225,14 +230,17 @@ export const NewReferralPage = () => {
     }
   }, [preferredFacilityDetails.facilityId, preferredFacilityDetails.unitId, facilities, units, myName, setValue, getValues]);
 
-  // If the destination changes so the chosen resource is no longer available there,
-  // drop the stale selection (the RHF field follows via the sync effect above).
+  // If the destination changes so a chosen resource is no longer available there,
+  // drop the stale selections (the RHF field follows via the sync effect above).
   useEffect(() => {
     if (resourcesLoading) return;
-    if (preferredFacilityDetails.resourceId && !facilityResources.some((r) => r.id === preferredFacilityDetails.resourceId)) {
-      setPreferredFacilityDetails((prev) => ({ ...prev, resourceId: "" }));
-    }
-  }, [facilityResources, preferredFacilityDetails.resourceId, resourcesLoading]);
+    setPreferredFacilityDetails((prev) => {
+      const stillAvailable = prev.resourceIds.filter((id) => facilityResources.some((r) => r.id === id));
+      return stillAvailable.length === prev.resourceIds.length
+        ? prev
+        : { ...prev, resourceIds: stillAvailable };
+    });
+  }, [facilityResources, resourcesLoading]);
 
   // Apply a dictation result: core fields go to their columns; form-specific values
   // merge into form_data. The clinician reviews everything before submitting.
@@ -325,39 +333,48 @@ export const NewReferralPage = () => {
               )}
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label>Requested Resource <span className="text-destructive">*</span></Label>
-              <Select
-                value={preferredFacilityDetails.resourceId}
-                onValueChange={(v) => setPreferredFacilityDetails((prev) => ({ ...prev, resourceId: v }))}
-                disabled={!preferredFacilityDetails.facilityId}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      !preferredFacilityDetails.facilityId
-                        ? "Select a facility first"
-                        : facilityResources.length === 0
-                          ? "No resources available at this facility"
-                          : "Select an available resource"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {facilityResources.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.resource_name}
-                      {r.unit_name ? ` · ${r.unit_name}` : ""} — {r.available} available
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Requested Resources <span className="text-destructive">*</span></Label>
+              {!preferredFacilityDetails.facilityId ? (
+                <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">Select a facility first</p>
+              ) : facilityResources.length === 0 ? (
+                <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">No resources available at this facility</p>
+              ) : (
+                <div className="space-y-1 rounded-lg border p-1">
+                  {facilityResources.map((r) => {
+                    const checked = preferredFacilityDetails.resourceIds.includes(r.id);
+                    return (
+                      <label
+                        key={r.id}
+                        className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-muted/50"
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(v) =>
+                            setPreferredFacilityDetails((prev) => ({
+                              ...prev,
+                              resourceIds: v === true
+                                ? [...prev.resourceIds, r.id]
+                                : prev.resourceIds.filter((id) => id !== r.id),
+                            }))
+                          }
+                        />
+                        <span className="flex-1">
+                          {r.resource_name}
+                          {r.unit_name ? ` · ${r.unit_name}` : ""}
+                          <span className="text-muted-foreground"> — {r.available} available</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
               {preferredFacilityDetails.facilityId && (
                 <p className="text-xs text-muted-foreground">
-                  {facilityResources.length} resource type{facilityResources.length === 1 ? "" : "s"} with availability at this facility
-                  {preferredFacilityDetails.unitId ? " in the requested unit" : ""}.
+                  Select every resource this patient needs at the destination — all of them are
+                  reserved when the request is accepted.
                 </p>
               )}
-              {errors.requested_resource_id && <p className="text-xs text-destructive">{errors.requested_resource_id.message}</p>}
+              {errors.requested_resource_ids && <p className="text-xs text-destructive">{errors.requested_resource_ids.message}</p>}
             </div>
 
             {/* Coordinate by an in-app voice call with an on-call clinician at the

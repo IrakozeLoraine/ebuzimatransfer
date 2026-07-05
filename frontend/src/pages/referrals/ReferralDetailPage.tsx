@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useReferral, useAcceptReferral, useQuickAcceptReferral, useRejectReferral, useRecordArrivalCondition, useArrangeTransport, useRemoveTransport, useMarkArrived } from "@/hooks/useReferrals";
+import { useReferral, useQuickAcceptReferral, useRejectReferral, useRecordArrivalCondition, useArrangeTransport, useRemoveTransport, useMarkArrived } from "@/hooks/useReferrals";
 import type { ArrivalCondition } from "@/types/referral";
-import { useResources } from "@/hooks/useResources";
 import { useAmbulances } from "@/hooks/useAmbulances";
 import { useFacilities } from "@/hooks/useFacilities";
 import { useUnits } from "@/hooks/useUnits";
@@ -63,11 +62,9 @@ export const ReferralDetailPage = () => {
   const { canAcceptReferral, isSuperAdmin } = usePermissions();
   const me = useAuthStore((s) => s.user);
   const { data: referral, isLoading } = useReferral(id!);
-  const { data: resources = [] } = useResources();
   const { data: ambulances = [] } = useAmbulances(true);
   const { data: facilities = [] } = useFacilities();
   const { data: allUnits = [] } = useUnits();
-  const { mutate: accept, isPending: accepting } = useAcceptReferral();
   const { mutate: quickAccept, isPending: quickAccepting } = useQuickAcceptReferral();
   const { mutate: reject, isPending: rejecting } = useRejectReferral();
   const { mutate: recordCondition, isPending: recordingCondition } = useRecordArrivalCondition();
@@ -75,40 +72,32 @@ export const ReferralDetailPage = () => {
   const { mutate: removeTransport, isPending: removing } = useRemoveTransport();
   const { mutate: markArrived, isPending: markingArrived } = useMarkArrived();
   const [showRejectDialog, setShowRejectDialog] = useState(false);
-  const [selectedResourceId, setSelectedResourceId] = useState("");
   const [selectedCondition, setSelectedCondition] = useState<ArrivalCondition | "">("");
   const [ambulanceId, setAmbulanceId] = useState("");
-
-  const availableResources = resources.filter((r) => r.available > 0);
-
-  // Default the manual pick to the resource the requester actually asked for, when
-  // it's still available — the approver can override it. Adjusting state during
-  // render (rather than in an effect) avoids a cascading re-render; the guard on
-  // selectedResourceId makes it a one-shot that converges immediately.
-  const requestedResourceId = referral?.requested_resource_id;
-  if (
-    requestedResourceId &&
-    !selectedResourceId &&
-    availableResources.some((r) => r.id === requestedResourceId)
-  ) {
-    setSelectedResourceId(requestedResourceId);
-  }
-
-  const handleAccept = () => {
-    if (!selectedResourceId || !id) return;
-    accept(
-      { id, payload: { resource_id: selectedResourceId } },
-      {
-        onSuccess: () => toast({ variant: "success", title: "Transfer request approved" }),
-        onError: (e) => toast({ variant: "destructive", title: "Could not approve", description: getApiErrorMessage(e) }),
-      }
-    );
-  };
 
   const handleQuickApprove = () => {
     if (!id) return;
     quickAccept(id, {
-      onSuccess: () => toast({ variant: "success", title: "Approved", description: "An available resource was reserved automatically." }),
+      onSuccess: (updated) => {
+        const reserved = new Set(updated.reserved_resource_ids);
+        const unavailable = updated.requested_resources.filter((r) => !reserved.has(r.id));
+        const total = updated.requested_resources.length;
+        if (unavailable.length > 0) {
+          // Some requested resources were taken before approval — reserve the rest
+          // and tell the approver exactly which ones couldn't be held.
+          toast({
+            variant: "warning",
+            title: `Approved — reserved ${reserved.size} of ${total}`,
+            description: `Could not reserve: ${unavailable.map((r) => r.resource_name).join(", ")} (no longer available).`,
+          });
+        } else {
+          toast({
+            variant: "success",
+            title: "Transfer request approved",
+            description: `All ${total} requested resource${total === 1 ? "" : "s"} reserved.`,
+          });
+        }
+      },
       onError: (e) => toast({ variant: "destructive", title: "Could not approve", description: getApiErrorMessage(e) }),
     });
   };
@@ -288,11 +277,30 @@ export const ReferralDetailPage = () => {
           <CardContent className="space-y-3">
             <Row label="Form" value={getFormDef(referral.form_type).label} />
             <Row label="Diagnosis" value={referral.diagnosis} />
-            {referral.requested_resource_id && (
-              <Row
-                label="Requested Resource"
-                value={referral.requested_resource_name ?? "—"}
-              />
+            {referral.requested_resources.length > 0 && (
+              <div className="flex gap-3">
+                <span className="w-36 shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Requested Resource{referral.requested_resources.length === 1 ? "" : "s"}
+                </span>
+                <div className="space-y-1 text-sm font-medium text-foreground">
+                  {referral.requested_resources.map((r) => {
+                    // Once the request has been decided, some resources may have been
+                    // reserved and others not (unavailable at accept time).
+                    const decided = referral.reserved_resource_ids.length > 0;
+                    const isReserved = referral.reserved_resource_ids.includes(r.id);
+                    return (
+                      <div key={r.id} className="flex items-center gap-2">
+                        <span>{r.resource_name}</span>
+                        {decided && (
+                          <span className={`text-xs font-normal ${isReserved ? "text-emerald-600" : "text-amber-600"}`}>
+                            {isReserved ? "reserved" : "not reserved"}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -579,12 +587,13 @@ export const ReferralDetailPage = () => {
       {/* Action bar */}
       {canAction && (
         <div className="space-y-3 rounded-xl border border-border/60 bg-card p-4 shadow-card">
-          {/* One-click approve for fast decisions */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium">Provide Decision</p>
               <p className="text-xs text-muted-foreground">
-                Approve auto-reserves an available resource in the requested unit at your facility.
+                {referral.requested_resources.length > 1
+                  ? "Approving reserves all requested resources at your facility."
+                  : "Approving reserves the requested resource at your facility."}
               </p>
             </div>
             <div className="flex gap-2">
@@ -601,27 +610,6 @@ export const ReferralDetailPage = () => {
                 Reject
               </Button>
             </div>
-          </div>
-
-          {/* Or pick a specific resource manually */}
-          <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-end">
-            <div className="flex-1 space-y-1.5">
-              <Label className="text-sm font-medium">Or choose a specific resource</Label>
-              <Select onValueChange={setSelectedResourceId}>
-                <SelectTrigger>
-                  <SelectValue placeholder={availableResources.length > 0 ? "Choose a resource…" : "No resources available"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableResources.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>{r.resource_code ?? r.resource_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button onClick={handleAccept} disabled={!selectedResourceId || accepting} variant="outline">
-              <Check className="mr-2 h-4 w-4" />
-              {accepting ? "Approving…" : "Approve with selected"}
-            </Button>
           </div>
         </div>
       )}

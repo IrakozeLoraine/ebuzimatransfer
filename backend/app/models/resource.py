@@ -90,7 +90,7 @@ class ResourceReservation(Base, UUIDMixin, TimestampMixin):
     )
 
     resource: Mapped[Resource] = relationship("Resource", back_populates="reservations")
-    referral: Mapped["Referral | None"] = relationship("Referral", back_populates="resource_reservation")
+    referral: Mapped["Referral | None"] = relationship("Referral", back_populates="resource_reservations")
 
 from app.models.unit import Unit
 from app.models.facility import Facility

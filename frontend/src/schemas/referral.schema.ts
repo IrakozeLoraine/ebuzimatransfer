@@ -9,7 +9,8 @@ export const newReferralSchema = z.object({
   form_data: z.record(z.string(), z.unknown()).optional(),
   preferred_facility_id: z.string().min(1, "Select a destination facility"),
   requested_unit_id: z.string().min(1, "Select a requested unit"),
-  requested_resource_id: z.string().min(1, "Select an available resource"),
+  // One or more distinct resources requested at the destination.
+  requested_resource_ids: z.array(z.string().min(1)).min(1, "Select at least one available resource"),
   // Voice-dictation artifacts, carried with the form when a recording was used.
   audio_url: z.string().optional(),
   transcript: z.string().optional(),

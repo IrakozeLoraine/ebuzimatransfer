@@ -32,6 +32,19 @@ def _active_facility_id(user) -> Optional[uuid.UUID]:
     return facilities[0].id if len(facilities) == 1 else None
 
 
+def _accept_notification_message(referral) -> str:
+    """Message for the requester when a request is approved, spelling out how many
+    resources were reserved and naming any that couldn't be (accept holds whatever
+    is still available). Expects a get_with_relations-loaded referral."""
+    reserved_ids = set(referral.reserved_resource_ids)
+    reserved = len(reserved_ids)
+    unreserved = [r.resource_name for r in referral.requested_resources if r.id not in reserved_ids]
+    msg = f"{referral.referral_number} was approved — {reserved} resource{'' if reserved == 1 else 's'} reserved."
+    if unreserved:
+        msg += f" Could not reserve: {', '.join(unreserved)} (no longer available)."
+    return msg
+
+
 @router.get("", response_model=List[ReferralSummary])
 async def list_referrals(
     status: Optional[ReferralStatus] = Query(None),
@@ -173,17 +186,18 @@ async def accept_referral(
     session: AsyncSession = Depends(get_session),
 ):
     svc = ReferralService(session)
-    referral = await svc.accept(referral_id, payload, current_user)
+    await svc.accept(referral_id, payload, current_user)
+    full = await svc.get(referral_id)
     await AuditService(session).log("ACCEPT_REFERRAL", "referral", user_id=current_user.id, entity_id=referral_id)
     await NotificationService(session).create(
-        referral.created_by, "Transfer request approved",
-        f"{referral.referral_number} was approved — a resource is reserved.",
+        full.created_by, "Transfer request approved",
+        _accept_notification_message(full),
         "REFERRAL_ACCEPTED", "referral", referral_id,
     )
     await session.commit()
     await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_ACCEPTED", "referral_id": str(referral_id)})
     await ws_manager.broadcast_to_channel("capacity", {"event": "RESOURCE_UPDATED"})
-    return await svc.get(referral_id)
+    return full
 
 
 @router.post("/{referral_id}/quick-accept", response_model=ReferralOut)
@@ -192,27 +206,20 @@ async def quick_accept_referral(
     current_user=Depends(require_roles("CLINICIAN", "FACILITY_ADMIN", "SUPER_ADMIN")),
     session: AsyncSession = Depends(get_session),
 ):
-    """One-click approve: auto-pick an available resource in the requested unit at
-    the receiving clinician's facility, then accept."""
-    from app.core.exceptions import ValidationError
+    """One-click approve: reserve every requested resource that's still available."""
     svc = ReferralService(session)
-    facility_id = _active_facility_id(current_user)
-    if facility_id is None:
-        raise ValidationError("Could not determine your facility")
-    resource_id = await svc.auto_pick_resource(referral_id, facility_id)
-    if resource_id is None:
-        raise ValidationError("No available resource in the requested unit at your facility")
-    referral = await svc.accept(referral_id, AcceptReferralRequest(resource_id=resource_id), current_user)
+    await svc.accept(referral_id, AcceptReferralRequest(), current_user)
+    full = await svc.get(referral_id)
     await AuditService(session).log("ACCEPT_REFERRAL", "referral", user_id=current_user.id, entity_id=referral_id)
     await NotificationService(session).create(
-        referral.created_by, "Transfer request approved",
-        f"{referral.referral_number} was approved — a resource is reserved.",
+        full.created_by, "Transfer request approved",
+        _accept_notification_message(full),
         "REFERRAL_ACCEPTED", "referral", referral_id,
     )
     await session.commit()
     await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_ACCEPTED", "referral_id": str(referral_id)})
     await ws_manager.broadcast_to_channel("capacity", {"event": "RESOURCE_UPDATED"})
-    return await svc.get(referral_id)
+    return full
 
 
 @router.post("/{referral_id}/reject", response_model=ReferralOut)

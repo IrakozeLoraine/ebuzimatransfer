@@ -14,7 +14,6 @@ import pytest_asyncio
 
 from app.core.exceptions import (
     ValidationError,
-    ResourceReservedError,
     InvalidStatusTransitionError,
 )
 from app.models.facility import Facility
@@ -65,14 +64,14 @@ async def env(db_session, user_factory):
     )
 
 
-def build_payload(env, resource_id):
+def build_payload(env, *resource_ids):
     return ReferralCreate(
         sex="F",
         diagnosis="Severe sepsis",
         reason_for_transfer="Requires ICU care",
         preferred_facility_id=env.facility.id,
         requested_unit_id=env.unit.id,
-        requested_resource_id=resource_id,
+        requested_resource_ids=list(resource_ids),
     )
 
 
@@ -129,7 +128,7 @@ class TestAcceptReject:
         service, referral = await self._make_referral(env, resource)
 
         accepted = await service.accept(
-            referral.id, AcceptReferralRequest(resource_id=resource.id), super_admin_actor(env.creator.id)
+            referral.id, AcceptReferralRequest(), super_admin_actor(env.creator.id)
         )
 
         assert accepted.status == ReferralStatus.ACCEPTED
@@ -139,19 +138,57 @@ class TestAcceptReject:
         assert resource.reserved == 1
         assert resource.available == 0
 
-    async def test_two_referrals_cannot_reserve_the_same_last_bed(self, env):
-        # One bed, two accepted transfers racing for it — the second must fail.
+    async def test_accept_reserves_every_requested_resource(self, env):
+        # A request naming two distinct resources reserves a unit of each on accept.
+        bed = env.make_resource(quantity=1)
+        ventilator = env.make_resource(quantity=1)
+        await env.session.flush()
+        service = ReferralService(env.session)
+        referral = await service.create(build_payload(env, bed.id, ventilator.id), created_by=env.creator.id)
+
+        await service.accept(referral.id, AcceptReferralRequest(), super_admin_actor(env.creator.id))
+
+        await env.session.refresh(bed)
+        await env.session.refresh(ventilator)
+        assert bed.reserved == 1 and bed.available == 0
+        assert ventilator.reserved == 1 and ventilator.available == 0
+
+    async def test_accept_reserves_available_and_skips_taken(self, env):
+        # When one requested resource is gone at accept time, the accept still holds
+        # the ones that are available and simply skips the taken one.
+        bed = env.make_resource(quantity=1)
+        ventilator = env.make_resource(quantity=1)
+        await env.session.flush()
+        service = ReferralService(env.session)
+        referral = await service.create(build_payload(env, bed.id, ventilator.id), created_by=env.creator.id)
+        # The ventilator gets taken elsewhere before this request is accepted.
+        ventilator.occupied = 1
+
+        accepted = await service.accept(referral.id, AcceptReferralRequest(), super_admin_actor(env.creator.id))
+
+        assert accepted.status == ReferralStatus.ACCEPTED
+        await env.session.refresh(bed)
+        await env.session.refresh(ventilator)
+        assert bed.reserved == 1        # the available bed is held
+        assert ventilator.reserved == 0  # the taken ventilator is skipped
+        # Only the reserved resource is reported as reserved for this request.
+        full = await service.get(referral.id)
+        assert full.reserved_resource_ids == [bed.id]
+
+    async def test_accept_fails_when_no_requested_resource_is_available(self, env):
+        # One bed, two accepted transfers racing for it — the second has nothing else
+        # to fall back on, so its accept fails.
         resource = env.make_resource(quantity=1)
         await env.session.flush()
         service = ReferralService(env.session)
         r1 = await service.create(build_payload(env, resource.id), created_by=env.creator.id)
         r2 = await service.create(build_payload(env, resource.id), created_by=env.creator.id)
 
-        await service.accept(r1.id, AcceptReferralRequest(resource_id=resource.id), super_admin_actor(env.creator.id))
+        await service.accept(r1.id, AcceptReferralRequest(), super_admin_actor(env.creator.id))
 
-        with pytest.raises(ResourceReservedError):
+        with pytest.raises(ValidationError):
             await service.accept(
-                r2.id, AcceptReferralRequest(resource_id=resource.id), super_admin_actor(env.creator.id)
+                r2.id, AcceptReferralRequest(), super_admin_actor(env.creator.id)
             )
 
     async def test_reject_sets_reason_and_does_not_reserve(self, env):
