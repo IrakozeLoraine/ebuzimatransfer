@@ -95,7 +95,6 @@ export const NewReferralPage = () => {
     // "required" with a clear message, instead of a raw "expected string, received
     // undefined" type error.
     defaultValues: {
-      patient_code: "",
       sex: "",
       diagnosis: "",
       reason_for_transfer: "",
@@ -109,7 +108,7 @@ export const NewReferralPage = () => {
 
   const formType = (watch("form_type") || "EXTERNAL") as FormType;
   // All form values flattened for the dynamic renderer: top-level core fields
-  // (patient_code, diagnosis…) plus everything in form_data. The renderer reads by
+  // (sex, diagnosis…) plus everything in form_data. The renderer reads by
   // field name; the change handler below routes each back to the right place.
   const allValues = watch();
   const combinedValue = useMemo(
@@ -126,6 +125,24 @@ export const NewReferralPage = () => {
     }
     return out;
   }, [errors]);
+
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const requiredFormDataFields = useMemo(
+    () =>
+      getFormDef(formType)
+        .sections.flatMap((s) => s.fields)
+        .filter((f) => f.required && !CORE_SET.has(f.name)),
+    [formType]
+  );
+  const formDataErrors = useMemo(() => {
+    const out: Record<string, string> = {};
+    if (!submitAttempted) return out;
+    for (const f of requiredFormDataFields) {
+      const v = (combinedValue as Record<string, unknown>)[f.name];
+      if (v == null || v === "") out[f.name] = "Required";
+    }
+    return out;
+  }, [submitAttempted, requiredFormDataFields, combinedValue]);
 
   // Route a dynamic field change to a top-level core column or into form_data.
   const handleFieldChange = (name: string, value: unknown) => {
@@ -221,7 +238,6 @@ export const NewReferralPage = () => {
   // merge into form_data. The clinician reviews everything before submitting.
   const applyDictation = (r: DictationResult) => {
     const f = r.fields;
-    if (f.patient_code) setValue("patient_code", f.patient_code, { shouldValidate: true });
     if (f.sex) setValue("sex", f.sex, { shouldValidate: true });
     if (f.diagnosis) setValue("diagnosis", f.diagnosis, { shouldValidate: true });
     if (f.reason_for_transfer) setValue("reason_for_transfer", f.reason_for_transfer, { shouldValidate: true });
@@ -234,7 +250,14 @@ export const NewReferralPage = () => {
   };
 
   const onSubmit = (data: NewReferralFormValues) => {
+    setSubmitAttempted(true);
     if (isOwnDepartment) return;
+    // Block if a required form_data field (e.g. the client name) is still empty.
+    const missingRequired = requiredFormDataFields.some((f) => {
+      const v = (combinedValue as Record<string, unknown>)[f.name];
+      return v == null || v === "";
+    });
+    if (missingRequired) return;
     create(data, {
       onSuccess: (referral) => navigate(`/transfer-requests/${referral.id}`),
     });
@@ -259,7 +282,7 @@ export const NewReferralPage = () => {
           <AlertDescription>Failed to create the transfer request. Please check all fields and try again.</AlertDescription>
         </Alert>
       )}
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      <form onSubmit={handleSubmit(onSubmit, () => setSubmitAttempted(true))} className="space-y-5">
         {/* Preferred Destination */}
         <Card>
           <CardHeader className="pb-4">
@@ -388,18 +411,19 @@ export const NewReferralPage = () => {
               sections={getFormDef(formType).sections}
               value={combinedValue}
               onChange={handleFieldChange}
-              errors={coreErrors}
+              errors={{ ...coreErrors, ...formDataErrors }}
             />
           </CardContent>
         </Card>
 
-        {Object.keys(errors).length > 0 && (
+        {(Object.keys(errors).length > 0 || Object.keys(formDataErrors).length > 0) && (
           <Alert variant="destructive">
             <AlertDescription>
               Please complete these required fields:{" "}
-              {Object.keys(errors)
-                .map((k) => REQUIRED_FIELD_LABELS[k] ?? k)
-                .join(", ")}
+              {[
+                ...Object.keys(errors).map((k) => REQUIRED_FIELD_LABELS[k] ?? k),
+                ...requiredFormDataFields.filter((f) => formDataErrors[f.name]).map((f) => f.label),
+              ].join(", ")}
               .
             </AlertDescription>
           </Alert>

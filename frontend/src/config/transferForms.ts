@@ -1,8 +1,8 @@
 /**
  * Declarative definitions of the Rwanda Ministry of Health patient-transfer forms.
  *
- * The platform routes/decides on a small set of core fields (patient code, age,
- * sex, diagnosis, acuity, urgency, reason, destination) that are the same across
+ * The platform routes/decides on a small set of core fields (sex, diagnosis,
+ * reason, destination) that are the same across
  * every form. Everything else on each paper form differs by clinical context, so
  * it is described here once and rendered from a single source of truth both as an
  * input form (DynamicFormFields) and as a read-only summary (DynamicFormDetails).
@@ -97,15 +97,14 @@ const sel = (name: string, label: string, options: string[], opts: Partial<Field
 // Field names that map to top-level referral columns (used for routing/decisions)
 // rather than the form_data JSON. The new-request form routes these accordingly.
 export const CORE_FIELD_NAMES = [
-  "patient_code", "sex", "diagnosis", "reason_for_transfer",
+  "sex", "diagnosis", "reason_for_transfer",
 ] as const;
 
 // Core patient-identity fields (shown within each form's own identification section).
-// patient_code / sex back top-level columns; name + DOB are the paper-form identity
-// captured in form_data. (Age band was dropped — DOB is captured instead.)
+// sex backs a top-level column; name + DOB are the paper-form identity captured in
+// form_data. Client name is required. (Age band was dropped — DOB is captured instead.)
 const PATIENT_CORE: FieldDef[] = [
-  t("patient_name", "Client name"),
-  t("patient_code", "Serial number in register / EMR ID"),
+  t("patient_name", "Client name", { required: true }),
   date("date_of_birth", "Date of birth (DOB)"),
   sel("sex", "Sex", ["M", "F"], { required: true, optionLabels: { M: "Male", F: "Female" } }),
 ];
@@ -225,8 +224,7 @@ const NEONATAL: TransferFormDef = {
     {
       title: "Neonate Identification",
       fields: [
-        t("baby_name", "Name of baby"),
-        t("patient_code", "Serial number in register / EMR ID"),
+        t("baby_name", "Name of baby", { required: true }),
         date("date_of_birth", "Date of birth (DOB)"),
         sel("sex", "Sex", ["M", "F"], { required: true, optionLabels: { M: "Male", F: "Female" } }),
         num("gestational_age_weeks", "Gestational age", "weeks"),

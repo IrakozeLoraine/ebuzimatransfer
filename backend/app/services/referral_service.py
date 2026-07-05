@@ -37,9 +37,6 @@ class ReferralService:
 
         number = await self.repo.next_referral_number()
         payload = data.model_dump(exclude={"call_log_id"})
-        # Serial number / EMR ID and age band are optional; store empty rather than
-        # null (both DB columns are non-null).
-        payload["patient_code"] = (payload.get("patient_code") or "").strip()
         # Fields dropped from the forms but kept as non-null DB columns.
         payload["age_band"] = payload.get("age_band") or ""
         payload["acuity_level"] = payload.get("acuity_level") or ""

@@ -267,7 +267,16 @@ export const ReferralDetailPage = () => {
             <CardTitle className="text-sm">Patient Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Row label="Patient Code" value={referral.patient_code} />
+            <Row
+              label="Patient Name"
+              value={
+                String(
+                  (referral.form_data?.patient_name as string) ||
+                    (referral.form_data?.baby_name as string) ||
+                    "—"
+                )
+              }
+            />
             <Row label="Sex" value={referral.sex === "M" ? "Male" : "Female"} />
           </CardContent>
         </Card>

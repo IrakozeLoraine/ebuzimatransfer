@@ -121,8 +121,7 @@ export const DictationPanel = ({ onResult, formSpec, disabled }: Props) => {
             <p className="text-sm font-semibold text-foreground">Dictate the referral</p>
             <p className="text-xs text-muted-foreground">
               Speak the patient details, the reason for transfer, and the form's clinical fields
-              (vitals, findings, history…). We'll transcribe it, fill the matching fields below — the
-              sections you mention open automatically — and keep the recording. Review before submitting.
+              (vitals, findings, history…). We'll transcribe it, fill the matching fields below. Review before submitting.
             </p>
           </div>
         </div>

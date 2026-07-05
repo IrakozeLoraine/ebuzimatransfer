@@ -46,7 +46,6 @@ class Referral(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "referrals"
 
     referral_number: Mapped[str] = mapped_column(String(30), unique=True, nullable=False, index=True)
-    patient_code: Mapped[str] = mapped_column(String(50), nullable=False)
     age_band: Mapped[str] = mapped_column(String(20), nullable=False)
     sex: Mapped[str] = mapped_column(String(10), nullable=False)
     diagnosis: Mapped[str] = mapped_column(String(500), nullable=False)

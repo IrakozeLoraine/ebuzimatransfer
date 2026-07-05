@@ -7,7 +7,6 @@ from app.models.referral import ReferralStatus, ArrivalCondition
 
 
 class ReferralCreate(BaseModel):
-    patient_code: Optional[str] = None
     sex: str
     diagnosis: str
     reason_for_transfer: str
@@ -35,7 +34,6 @@ class ReferralCreate(BaseModel):
 class DictationFields(BaseModel):
     """Form fields extracted from a dictated transcript. Every field is optional —
     the clinician reviews and corrects before submitting."""
-    patient_code: Optional[str] = None
     sex: Optional[str] = None
     diagnosis: Optional[str] = None
     reason_for_transfer: Optional[str] = None
@@ -147,7 +145,6 @@ class TransportEventRef(BaseModel):
 class ReferralOut(BaseModel):
     id: uuid.UUID
     referral_number: str
-    patient_code: str
     sex: str
     diagnosis: str
     reason_for_transfer: str
@@ -182,7 +179,6 @@ class ReferralOut(BaseModel):
 class ReferralSummary(BaseModel):
     id: uuid.UUID
     referral_number: str
-    patient_code: str
     diagnosis: str
     status: ReferralStatus
     created_at: datetime

@@ -36,8 +36,7 @@ export const DynamicFormFields = ({ sections, value, onChange, errors }: Props) 
   const arr = (name: string): string[] => (Array.isArray(value[name]) ? (value[name] as string[]) : []);
   const rows = (name: string): TableRow[] => (Array.isArray(value[name]) ? (value[name] as TableRow[]) : []);
 
-  // Sections are collapsed by default and expand once they have data (so voice-
-  // filled sections open automatically). A user click overrides that per section.
+  // Sections are collapsed by default and expand once they have data. A user click overrides that per section.
   const [openOverride, setOpenOverride] = useState<Record<string, boolean>>({});
 
   const fieldFilled = (f: FieldDef): boolean => {

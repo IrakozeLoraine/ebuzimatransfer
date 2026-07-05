@@ -11,6 +11,9 @@ import { formatDateTime } from "@/utils/format";
 import { usePermissions } from "@/hooks/usePermissions";
 import { cn } from "@/utils/cn";
 
+const clientName = (r: Referral): string =>
+  String((r.form_data?.patient_name as string) || (r.form_data?.baby_name as string) || "");
+
 // Requests are grouped into three decision categories.
 const CATEGORIES = [
   { key: "PENDING", label: "Pending", statuses: ["REQUESTED", "UNDER_REVIEW"] },
@@ -41,7 +44,7 @@ export const ReferralsPage = () => {
     (r) =>
       activeStatuses.includes(r.status) &&
       (r.referral_number.toLowerCase().includes(search.toLowerCase()) ||
-        r.patient_code.toLowerCase().includes(search.toLowerCase()) ||
+        clientName(r).toLowerCase().includes(search.toLowerCase()) ||
         r.diagnosis.toLowerCase().includes(search.toLowerCase()))
   );
 
@@ -52,7 +55,7 @@ export const ReferralsPage = () => {
         <span className="font-mono text-xs font-semibold text-foreground/80">{r.referral_number}</span>
       ),
     },
-    { header: "Patient Code", accessor: (r: Referral) => <span className="font-medium">{r.patient_code}</span> },
+    { header: "Patient", accessor: (r: Referral) => <span className="font-medium">{clientName(r) || "—"}</span> },
     {
       header: "Diagnosis",
       accessor: (r: Referral) => (
@@ -106,7 +109,7 @@ export const ReferralsPage = () => {
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
         <Input
-          placeholder="Search by ref #, patient code, diagnosis…"
+          placeholder="Search by ref #, patient name, diagnosis…"
           className="pl-9"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -125,7 +128,7 @@ export const ReferralsPage = () => {
           filename: "transfer-requests",
           columns: [
             { header: "Ref #", value: (r) => r.referral_number },
-            { header: "Patient Code", value: (r) => r.patient_code },
+            { header: "Patient", value: (r) => clientName(r) },
             { header: "Diagnosis", value: (r) => r.diagnosis },
             { header: "Status", value: (r) => r.status.replace(/_/g, " ") },
             { header: "Created", value: (r) => formatDateTime(r.created_at) },

@@ -47,7 +47,6 @@ export interface TransportMonitoring {
 export interface Referral {
   id: string;
   referral_number: string;
-  patient_code: string;
   sex: string;
   diagnosis: string;
   reason_for_transfer: string;
@@ -78,7 +77,6 @@ export interface Referral {
 }
 
 export interface CreateReferralPayload {
-  patient_code?: string;
   sex: string;
   diagnosis: string;
   reason_for_transfer: string;
@@ -96,7 +94,6 @@ export interface CreateReferralPayload {
 
 /** Form fields extracted from a dictated transcript (all optional — reviewed by the clinician). */
 export interface DictationFields {
-  patient_code?: string | null;
   sex?: string | null;
   diagnosis?: string | null;
   reason_for_transfer?: string | null;

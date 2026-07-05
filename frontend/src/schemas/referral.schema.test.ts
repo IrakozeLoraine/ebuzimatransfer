@@ -16,7 +16,7 @@ describe("newReferralSchema", () => {
     expect(newReferralSchema.safeParse(validReferral).success).toBe(true);
   });
 
-  it("treats patient_code and dictation fields as optional", () => {
+  it("treats dictation fields as optional", () => {
     const result = newReferralSchema.safeParse({
       ...validReferral,
       transcript: "spoken notes",

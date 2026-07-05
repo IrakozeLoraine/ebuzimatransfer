@@ -65,13 +65,12 @@ _EXTRACTION_SCHEMA = {
     "type": "object",
     "properties": {
         "summary": {"type": "string"},
-        "patient_code": {"type": "string"},
         "sex": {"type": "string"},
         "diagnosis": {"type": "string"},
         "reason_for_transfer": {"type": "string"},
     },
     "required": [
-        "summary", "patient_code", "sex", "diagnosis", "reason_for_transfer",
+        "summary", "sex", "diagnosis", "reason_for_transfer",
     ],
 }
 
@@ -80,8 +79,8 @@ _EXTRACTION_SYSTEM = (
     "You are given a verbatim transcript of a referring clinician dictating a "
     "transfer request. Extract the structured fields and write a concise summary. "
     "Rules:\n"
-    "- Only use information stated in the transcript. Never invent a patient code, "
-    "diagnosis, or vital. If something wasn't said, leave that field empty (\"\") "
+    "- Only use information stated in the transcript. Never invent a "
+    "diagnosis or vital. If something wasn't said, leave that field empty (\"\") "
     "or false.\n"
     "- sex must be \"M\" or \"F\", else \"\".\n"
     "- summary: 1-3 sentences a receiving clinician can read at a glance — who the "
@@ -452,7 +451,6 @@ class DictationService:
             return val.strip() if isinstance(val, str) and val.strip() else None
 
         fields = DictationFields(
-            patient_code=s("patient_code"),
             sex=_clean_enum(s("sex"), _SEXES),
             diagnosis=s("diagnosis"),
             reason_for_transfer=s("reason_for_transfer"),
