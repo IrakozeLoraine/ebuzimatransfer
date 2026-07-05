@@ -1,6 +1,6 @@
 # eBuzimaTransfer
 
-ICU/HDU referral and inter-hospital patient-transfer management system for Rwanda.
+A referral and inter-hospital patient-transfer management system for Rwanda.
 
 eBuzimaTransfer lets clinicians create transfer requests, lets receiving
 hospitals accept or decline them based on real-time bed/resource capacity, and

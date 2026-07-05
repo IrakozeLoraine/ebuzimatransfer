@@ -75,7 +75,7 @@ _EXTRACTION_SCHEMA = {
 }
 
 _EXTRACTION_SYSTEM = (
-    "You are a clinical scribe for an ICU/HDU patient-transfer system in Rwanda. "
+    "You are a clinical scribe for a patient-transfer system in Rwanda. "
     "You are given a verbatim transcript of a referring clinician dictating a "
     "transfer request. Extract the structured fields and write a concise summary. "
     "Rules:\n"

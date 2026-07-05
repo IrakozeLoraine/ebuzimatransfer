@@ -26,7 +26,7 @@ limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title="eBuzimaTransfer API",
     version="1.0.0",
-    description="ICU/HDU Referral Management System for Rwanda",
+    description="A Referral Management System for Rwanda",
     lifespan=lifespan,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
