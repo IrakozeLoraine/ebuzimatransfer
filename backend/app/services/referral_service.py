@@ -169,6 +169,8 @@ class ReferralService:
         if not reserved_any:
             raise ValidationError("None of the requested resources are still available to reserve")
 
+        self.session.expire(referral, ["resource_reservations"])
+
         referral.status = ReferralStatus.ACCEPTED
         # Every requested resource lives at the preferred facility (validated on
         # create), so that's the receiving facility.

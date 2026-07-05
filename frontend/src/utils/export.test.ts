@@ -71,7 +71,7 @@ describe("exportToCsv", () => {
 // The Excel writer is a thin wrapper over write-excel-file; assert we hand it a
 // bold header row followed by typed body cells and write to the .xlsx filename.
 const toFile = vi.fn().mockResolvedValue(undefined);
-const writeXlsxFile = vi.fn((_data: unknown[][], _options: { sheet: string }) => ({ toFile }));
+const writeXlsxFile = vi.fn<(data: unknown[][], options: { sheet: string }) => { toFile: typeof toFile }>(() => ({ toFile }));
 vi.mock("write-excel-file/browser", () => ({
   default: (data: unknown[][], options: { sheet: string }) => writeXlsxFile(data, options),
 }));
