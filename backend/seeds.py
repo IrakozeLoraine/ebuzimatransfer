@@ -42,7 +42,6 @@ async def clear_data(session: AsyncSession) -> None:
     """Wipe every table so --force re-seeds onto a clean slate. Order respects
     foreign keys (children before parents)."""
     for table in [
-        "locations",
         "in_app_calls",
         "call_logs",
         "facility_phone_lines",
