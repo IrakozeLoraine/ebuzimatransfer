@@ -20,14 +20,22 @@ from app.services.referral_service import ReferralService
 service = ReferralService.__new__(ReferralService)
 
 
-def make_actor(*, roles=("CLINICIAN",), id=None, active_facility_id=None, facilities=(), unit_ids=()):
-    return SimpleNamespace(
+def make_actor(
+    *, roles=("CLINICIAN",), id=None, active_facility_id=None, facilities=(), unit_ids=(), facility_units=()
+):
+    # ``facility_units`` models real (facility, unit) memberships — units are a
+    # global catalog, so which facility a unit membership belongs to matters.
+    fus = [SimpleNamespace(facility_id=f, unit_id=u) for f, u in facility_units]
+    actor = SimpleNamespace(
         effective_roles=list(roles),
         id=id or uuid.uuid4(),
         active_facility_id=active_facility_id,
         facilities=[SimpleNamespace(id=f) for f in facilities],
         unit_ids=list(unit_ids),
+        facility_units=fus,
     )
+    actor.units_for_facility = lambda fid: [fu for fu in fus if fu.facility_id == fid]
+    return actor
 
 
 def make_referral(
@@ -152,11 +160,27 @@ class TestAssertCanArrangeTransport:
         actor = make_actor(active_facility_id=facility)
         service.assert_can_arrange_transport(referral, actor)
 
-    def test_origin_unit_staff_may_arrange_transport(self):
-        unit = uuid.uuid4()
-        referral = make_referral(origin_unit_id=unit)
-        actor = make_actor(active_facility_id=uuid.uuid4(), unit_ids=(unit,))
+    def test_origin_unit_staff_at_referring_facility_may_arrange_transport(self):
+        referring, unit = uuid.uuid4(), uuid.uuid4()
+        referral = make_referral(referring_facility_id=referring, origin_unit_id=unit)
+        actor = make_actor(active_facility_id=uuid.uuid4(), facility_units=((referring, unit),))
         service.assert_can_arrange_transport(referral, actor)
+
+    def test_origin_unit_membership_elsewhere_cannot_arrange_transport(self):
+        referring, receiving = uuid.uuid4(), uuid.uuid4()
+        unit = uuid.uuid4()  # shared catalog unit — both origin and requested
+        referral = make_referral(
+            referring_facility_id=referring,
+            accepted_facility_id=receiving,
+            preferred_facility_id=receiving,
+            origin_unit_id=unit,
+            requested_unit_id=unit,
+        )
+        actor = make_actor(
+            active_facility_id=receiving, unit_ids=(unit,), facility_units=((receiving, unit),)
+        )
+        with pytest.raises(ForbiddenError):
+            service.assert_can_arrange_transport(referral, actor)
 
     def test_receiving_facility_cannot_arrange_transport(self):
         # Staff at the destination (accepted/preferred) facility must not arrange

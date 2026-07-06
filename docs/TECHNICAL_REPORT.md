@@ -54,7 +54,7 @@ Section 5 analyses how each objective was verified.
 The system is a monorepo with four deployable pieces behind an Nginx reverse
 proxy, orchestrated by Docker Compose.
 
-![alt text](architecture.png)
+![alt text](img/architecture.png)
 
 | Component | Path | Stack |
 | --- | --- | --- |
@@ -137,7 +137,7 @@ renewed automatically by the `certbot` service. HTTP is redirected to HTTPS and
   over `wss://` on the same origin — the frontend derives the protocol from the
   page, so no rebuild is needed between HTTP and HTTPS.
 
-![Deployed app served over HTTPS at ebuzimatransfer.duckdns.org with a valid certificate](deployment.png)
+![Deployed app served over HTTPS at ebuzimatransfer.duckdns.org with a valid certificate](img/deployment.png)
 
 ### 3.3 CI/CD pipeline
 
@@ -153,7 +153,7 @@ renewed automatically by the `certbot` service. HTTP is redirected to HTTPS and
 `deploy.yml` runs after CI passes on `main`, SSHes to the host and runs
 [`deploy.sh`](deploy.sh) (rebuild → `docker compose up -d` → prune cache).
 
-![GitHub Actions pipeline with all backend, frontend, mobile and Docker-build jobs passing](cicd.png)
+![GitHub Actions pipeline with all backend, frontend, mobile and Docker-build jobs passing](img/cicd.png)
 
 ---
 
@@ -194,7 +194,7 @@ $ cd backend && .venv/bin/pytest -q
 46 passed, 10 skipped in 0.71s
 ```
 
-![Backend pytest run reporting 46 passed and 10 skipped](backend-test.png)
+![Backend pytest run reporting 46 passed and 10 skipped](img/backend-test.png)
 
 ### 4.3 Strategy 3 — Frontend unit & component tests
 
@@ -218,7 +218,7 @@ $ npm run test
    Duration  3.78s
 ```
 
-![Frontend Vitest run reporting 13 test files and 64 tests passing](frontend-test.png)
+![Frontend Vitest run reporting 13 test files and 64 tests passing](img/frontend-test.png)
 
 ### 4.4 Strategy 4 — Static analysis & type safety
 
@@ -247,39 +247,39 @@ Screenshots captured from the running app during this testing:
 
 **Capacity search — available beds and equipment listed for referral (O1):**
 
-![Clinical resource lookup listing available beds and ICU ventilators across a facility](available-resource.png)
+![Clinical resource lookup listing available beds and ICU ventilators across a facility](img/available-resource.png)
 
 **Capacity search — a search with no available match returns a clear empty state:**
 
-![Resource lookup with a search term that matches no available resources](unknown-resource.png)
+![Resource lookup with a search term that matches no available resources](img/unknown-resource.png)
 
 **Updating live availability — bed counts split by status (O1):**
 
-![Update-availability dialog splitting a resource into occupied, reserved, out-of-service and available counts](update-availability.png)
+![Update-availability dialog splitting a resource into occupied, reserved, out-of-service and available counts](img/update-availability.png)
 
 **Create referral — required-field validation blocks an incomplete form:**
 
-![New referral form showing inline errors and a summary of missing required fields](required-request-fields.png)
+![New referral form showing inline errors and a summary of missing required fields](img/required-request-fields.png)
 
 **Ambulance tracking — live position on the map with a road-based ETA (O4):**
 
-![Ambulance tracking view showing the ambulance's live position on a map of Rwanda with tracking status and a last-fix timestamp](ambulance-tracked.png)
+![Ambulance tracking view showing the ambulance's live position on a map of Rwanda with tracking status and a last-fix timestamp](img/ambulance-tracked.png)
 
 **Role assignment — roles are scoped per facility (O5):**
 
-![Assign-user dialog granting CLINICIAN and FACILITY ADMIN roles at a facility](available-roles.png)
+![Assign-user dialog granting CLINICIAN and FACILITY ADMIN roles at a facility](img/available-roles.png)
 
 **In-app voice call — placing a call to a receiving unit (O6):**
 
-![Resource lookup with an outgoing call widget showing "Calling…"](making-call.png)
+![Resource lookup with an outgoing call widget showing "Calling…"](img/making-call.png)
 
 **In-app voice call — incoming call with accept/decline controls (O6):**
 
-![Incoming voice-call widget with accept and decline controls](receiving-call.png)
+![Incoming voice-call widget with accept and decline controls](img/receiving-call.png)
 
 **Call history — every in-app call is logged with direction, status and time:**
 
-![Call logs table listing outgoing (missed) and incoming (ringing) calls](call-logs.png)
+![Call logs table listing outgoing (missed) and incoming (ringing) calls](img/call-logs.png)
 
 ### 4.6 Strategy 6 — Cross-environment / cross-device (performance & compatibility)
 
@@ -295,11 +295,11 @@ The product was run on different software/hardware to confirm portability:
 
 **Responsive web layout on a mobile viewport:**
 
-![The clinical resource lookup rendered in a mobile phone browser](mobile.PNG)
+![The clinical resource lookup rendered in a mobile phone browser](img/mobile.PNG)
 
 **Flutter ambulance tracker on Android — journey history of completed transfers:**
 
-![The Flutter tracker app on Android showing a journey history of delivered referrals](driver-app.jpg)
+![The Flutter tracker app on Android showing a journey history of delivered referrals](img/driver-app.jpg)
 
 ---
 

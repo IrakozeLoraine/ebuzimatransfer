@@ -174,19 +174,24 @@ export const ReferralDetailPage = () => {
     (a) => a.facility_id === referral.referring_facility_id
   );
   const receivingFacilityId = referral.accepted_facility_id ?? referral.preferred_facility_id;
-  const myFacility = me?.active_facility_id ?? null;
-  const myUnits = me?.unit_ids ?? [];
-
+  // Facilities the user can act on behalf of. Mirror the backend guard
+  // (assert_can_arrange_transport): when an active facility is set it's the only
+  // one that counts; otherwise fall back to every facility the user belongs to,
+  // so a clinician who hasn't picked an active facility is still recognised as
+  // the referring/receiving side and sees the matching actions.
+  const myFacilityIds = new Set(
+    me?.active_facility_id != null
+      ? [me.active_facility_id]
+      : (me?.facilities ?? []).map((f) => f.id)
+  );
   // Which side of the transfer the current user is on. Super admins can act on both.
   const isReferringSide =
     isSuperAdmin ||
     referral.created_by === me?.id ||
-    (!!referral.referring_facility_id && referral.referring_facility_id === myFacility) ||
-    (!!referral.origin_unit_id && myUnits.includes(referral.origin_unit_id));
+    (!!referral.referring_facility_id && myFacilityIds.has(referral.referring_facility_id));
   const isReceivingSide =
     isSuperAdmin ||
-    (!!receivingFacilityId && receivingFacilityId === myFacility) ||
-    (!!referral.requested_unit_id && myUnits.includes(referral.requested_unit_id));
+    (!!receivingFacilityId && myFacilityIds.has(receivingFacilityId));
 
   // Phone coordination targets the counterparty hospital + its unit. A pure
   // receiving-side viewer calls the unit that submitted the request (origin unit);

@@ -270,15 +270,17 @@ class ReferralService:
             return
         if referral.created_by == actor.id:
             return
+        if referral.referring_facility_id is None:
+            raise ForbiddenError("Only the referring facility can arrange transport.")
         active = getattr(actor, "active_facility_id", None)
         actor_facility_ids = (
             {active} if active is not None else {f.id for f in getattr(actor, "facilities", [])}
         )
-        if referral.referring_facility_id is not None and referral.referring_facility_id in actor_facility_ids:
+        if referral.referring_facility_id in actor_facility_ids:
             return
-        if (
-            referral.origin_unit_id is not None
-            and referral.origin_unit_id in set(getattr(actor, "unit_ids", []))
+        if referral.origin_unit_id is not None and any(
+            fu.unit_id == referral.origin_unit_id
+            for fu in actor.units_for_facility(referral.referring_facility_id)
         ):
             return
         raise ForbiddenError("Only the referring facility can arrange transport.")

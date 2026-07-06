@@ -2,6 +2,7 @@ services:
   db:
     image: postgres:16-alpine
     container_name: ebuzimadb
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ebuzimauser
       POSTGRES_PASSWORD: ebuzimapass
@@ -19,6 +20,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ebuzimaredis
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -30,6 +32,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: ebuzimabackend
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+asyncpg://ebuzimauser:ebuzimapass@db:5432/ebuzimadb
       REDIS_URL: redis://redis:6379/0
@@ -42,7 +45,7 @@ services:
       OSRM_BASE_URL: http://host.docker.internal:5000
       WHISPER_MODEL_SIZE: small
       OLLAMA_BASE_URL: http://host.docker.internal:11434
-      OLLAMA_MODEL: llama3.2
+      OLLAMA_MODEL: llama3.2:1b
       MEDIA_ROOT: /app/media
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -61,6 +64,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: ebuzimafront
+    restart: unless-stopped
     ports:
       - "5173:80"
     depends_on:
@@ -69,6 +73,7 @@ services:
   nginx:
     image: nginx:alpine
     container_name: ebuzimanginx
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
@@ -88,6 +93,7 @@ services:
   certbot:
     image: certbot/certbot
     container_name: ebuzimacertbot
+    restart: unless-stopped
     volumes:
       - certbot_certs:/etc/letsencrypt
       - certbot_www:/var/www/certbot
