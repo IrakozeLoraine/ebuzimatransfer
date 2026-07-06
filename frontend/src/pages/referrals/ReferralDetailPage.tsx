@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Check, X, Clock, Ambulance } from "lucide-react";
+import { ArrowLeft, Check, X, Clock, Ambulance, ClipboardList } from "lucide-react";
 import { formatDateTime } from "@/utils/format";
 import { usePermissions } from "@/hooks/usePermissions";
 import { cn } from "@/utils/cn";
@@ -210,6 +210,7 @@ export const ReferralDetailPage = () => {
     canAcceptReferral && isReceivingSide && referral.created_by !== me?.id;
 
   const TIMELINE_COLORS: Record<string, string> = {
+    DRAFT: "bg-slate-400",
     REQUESTED: "bg-blue-500",
     UNDER_REVIEW: "bg-amber-500",
     ACCEPTED: "bg-emerald-500",
@@ -248,6 +249,25 @@ export const ReferralDetailPage = () => {
           </Button>
         )}
       </div>
+
+      {/* Call-first draft: the full MoH transfer form still needs completing. Only
+          the referring side fills it in (any time — even after transport is arranged). */}
+      {!referral.form_completed && isReferringSide && (
+        <Card className="border-amber-300 bg-amber-50/60">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+            <div>
+              <p className="text-sm font-medium text-amber-900">Transfer form not completed</p>
+              <p className="text-xs text-amber-700">
+                This referral was started from a call. Complete the full transfer form when you can.
+              </p>
+            </div>
+            <Button onClick={() => navigate(`/transfer-requests/${referral.id}/complete`)}>
+              <ClipboardList className="mr-2 h-4 w-4" />
+              Complete transfer form
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Info cards */}
       <div className="grid gap-5 lg:grid-cols-2">
@@ -369,8 +389,9 @@ export const ReferralDetailPage = () => {
       />
 
       {/* Transport — arranged by the referring clinician (their hospital's ambulance).
-          The receiving clinician can confirm arrival when no tracked transport is used. */}
-      {(referral.status === "ACCEPTED" || isInTransit) && (
+          The receiving clinician can confirm arrival when no tracked transport is used.
+          A call-first DRAFT skips the accept step and goes straight to transport. */}
+      {(referral.status === "ACCEPTED" || referral.status === "DRAFT" || isInTransit) && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-sm">
@@ -429,8 +450,9 @@ export const ReferralDetailPage = () => {
               </div>
             )}
 
-            {/* Referring clinician: assign an available ambulance when accepted */}
-            {isReferringSide && referral.status === "ACCEPTED" && !transport && (
+            {/* Referring clinician: assign an available ambulance once accepted (or
+                straight away for a call-first DRAFT). */}
+            {isReferringSide && (referral.status === "ACCEPTED" || referral.status === "DRAFT") && !transport && (
               <div className="space-y-3">
                 <p className="text-xs text-muted-foreground">
                   Assign one of your hospital's available ambulances. The driver signs into their
@@ -459,7 +481,7 @@ export const ReferralDetailPage = () => {
               </div>
             )}
 
-            {isReceivingSide && referral.status === "ACCEPTED" && (
+            {isReceivingSide && (referral.status === "ACCEPTED" || referral.status === "DRAFT") && (
               <div className="space-y-2 border-t pt-3">
                 <p className="text-xs text-muted-foreground">
                   Confirm arrival once the patient reaches your facility — the referring facility will be notified.

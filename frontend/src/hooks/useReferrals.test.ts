@@ -5,6 +5,8 @@ import {
   useReferrals,
   useReferral,
   useCreateReferral,
+  useCreateDraftReferral,
+  useCompleteReferralForm,
   useAcceptReferral,
   useQuickAcceptReferral,
   useRejectReferral,
@@ -70,6 +72,33 @@ describe("useReferrals mutations", () => {
 
     expect(mocked.createReferral).toHaveBeenCalledWith({ patient_name: "Ada" });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["referrals"] });
+  });
+
+  it("createDraftReferral invalidates the referrals list on success", async () => {
+    mocked.createDraftReferral.mockResolvedValue({ id: "r1" } as never);
+    const { wrapper, queryClient } = createQueryWrapper();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useCreateDraftReferral(), { wrapper });
+    const payload = { preferred_facility_id: "f1", requested_unit_id: "u1", requested_resource_ids: ["res1"] };
+    await result.current.mutateAsync(payload);
+
+    expect(mocked.createDraftReferral).toHaveBeenCalledWith(payload);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["referrals"] });
+  });
+
+  it("completeReferralForm sends the payload and invalidates the referral", async () => {
+    mocked.completeReferralForm.mockResolvedValue({ id: "r1" } as never);
+    const { wrapper, queryClient } = createQueryWrapper();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useCompleteReferralForm(), { wrapper });
+    const payload = { diagnosis: "sepsis", form_type: "EXTERNAL", form_data: { patient_name: "Ada" } };
+    await result.current.mutateAsync({ id: "r1", payload });
+
+    expect(mocked.completeReferralForm).toHaveBeenCalledWith("r1", payload);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["referrals"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["referral", "r1"] });
   });
 
   it("acceptReferral invalidates the list, the referral and capacity", async () => {

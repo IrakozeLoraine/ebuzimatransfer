@@ -3,6 +3,8 @@ import {
   getReferrals,
   getReferral,
   createReferral,
+  createDraftReferral,
+  completeReferralForm,
   acceptReferral,
   quickAcceptReferral,
   rejectReferral,
@@ -13,7 +15,7 @@ import {
   transcribeReferral,
 } from "@/api/referrals.api";
 import { createTransport, removeTransport } from "@/api/transport.api";
-import type { CreateReferralPayload, AcceptReferralPayload, RejectReferralPayload, ArrivalCondition } from "@/types/referral";
+import type { CreateReferralPayload, CreateDraftPayload, CompleteReferralFormPayload, AcceptReferralPayload, RejectReferralPayload, ArrivalCondition } from "@/types/referral";
 import type { CreateTransportPayload } from "@/types/transport";
 
 export const useReferrals = (params?: { status?: string }) =>
@@ -43,6 +45,28 @@ export const useCreateReferral = () => {
   return useMutation({
     mutationFn: (p: CreateReferralPayload) => createReferral(p),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["referrals"] }),
+  });
+};
+
+// Start a call-first lightweight referral (destination + resources only).
+export const useCreateDraftReferral = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (p: CreateDraftPayload) => createDraftReferral(p),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["referrals"] }),
+  });
+};
+
+// Complete (or edit) the transfer form for an existing referral.
+export const useCompleteReferralForm = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: CompleteReferralFormPayload }) =>
+      completeReferralForm(id, payload),
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: ["referrals"] });
+      qc.invalidateQueries({ queryKey: ["referral", id] });
+    },
   });
 };
 

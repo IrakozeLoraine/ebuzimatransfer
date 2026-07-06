@@ -241,7 +241,7 @@ class _JourneyScreenState extends State<JourneyScreen> {
               icon: const Icon(Icons.map_outlined),
               tooltip: 'Navigate',
               onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => MapScreen(journey: _journey!)),
+                MaterialPageRoute<void>(builder: (_) => MapScreen(journey: _journey!, config: widget.config)),
               ),
             ),
             PopupMenuButton<String>(
@@ -499,25 +499,13 @@ class _JourneyView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(
-                recording ? Icons.fiber_manual_record : Icons.monitor_heart_outlined,
-                size: 20,
-                color: recording ? AppColors.destructive : AppColors.primary,
-              ),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'Patient monitoring',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.foreground,
-                  ),
-                ),
-              ),
-            ],
+        const Text(
+          'Patient monitoring',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: AppColors.foreground,
+          ),
           ),
           const SizedBox(height: 6),
           Text(

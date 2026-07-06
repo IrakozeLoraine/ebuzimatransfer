@@ -1,4 +1,5 @@
 export const REFERRAL_STATUS_LABELS: Record<string, string> = {
+    DRAFT: "Draft",
     REQUESTED: "Requested",
     UNDER_REVIEW: "Under Review",
     ACCEPTED: "Accepted",

@@ -25,6 +25,7 @@ from app.schemas.ambulance import (
     DriverPing,
     RoutePoint,
     AmbulanceOut,
+    LocationPingOut,
 )
 from app.schemas.referral import TransportMonitoringResult
 
@@ -117,6 +118,25 @@ async def current_journey(
     if not t:
         return None
     return await _build_journey(session, t)
+
+
+@router.get("/journey/pings", response_model=list[LocationPingOut])
+async def journey_pings(
+    ambulance=Depends(get_current_ambulance),
+    session: AsyncSession = Depends(get_session),
+):
+    """The GPS trail recorded so far for this ambulance's active journey — the exact
+    reported coordinates, in order. The driver's map seeds its trail from this so it
+    persists across reopening the map and matches what the web view shows."""
+    t = await _active_transport(session, ambulance.id)
+    if not t:
+        return []
+    rows = await session.scalars(
+        select(AmbulanceLocationPing)
+        .where(AmbulanceLocationPing.referral_id == t.referral_id)
+        .order_by(AmbulanceLocationPing.recorded_at.asc())
+    )
+    return [LocationPingOut.model_validate(p) for p in rows]
 
 
 @router.get("/journeys", response_model=list[DriverJourney])

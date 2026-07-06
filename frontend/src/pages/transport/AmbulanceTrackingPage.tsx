@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -18,7 +18,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { formatDateTime } from "@/utils/format";
-import { Ambulance, Play, RotateCcw, LocateFixed, LocateOff } from "lucide-react";
+import { Ambulance, Play, RotateCcw, LocateFixed, LocateOff, ArrowLeft } from "lucide-react";
 import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 
 /** Pans the map to follow a position (used while replaying a journey). */
@@ -36,6 +36,47 @@ const formatDuration = (ms: number): string => {
   const h = Math.floor(mins / 60);
   const rem = mins % 60;
   return rem ? `${h}h ${rem}m` : `${h}h`;
+};
+
+type Pt = [number, number];
+
+// Cumulative along-path distances (metres) at each vertex, so the marker can be
+// placed by a 0→1 fraction of the whole trail (smooth motion, not vertex hops).
+const cumulativeDistances = (path: Pt[]): number[] => {
+  const cum = [0];
+  for (let i = 1; i < path.length; i++) {
+    cum.push(cum[i - 1] + L.latLng(path[i - 1]).distanceTo(L.latLng(path[i])));
+  }
+  return cum;
+};
+
+// The point a fraction ``t`` (0→1) of the way along the path, interpolated within
+// whichever segment ``t`` lands in.
+const pointAtFraction = (path: Pt[], cum: number[], t: number): Pt => {
+  if (path.length === 0) return [0, 0];
+  if (path.length === 1) return path[0];
+  const total = cum[cum.length - 1];
+  if (total === 0) return path[0];
+  const target = Math.max(0, Math.min(1, t)) * total;
+  let i = 1;
+  while (i < cum.length && cum[i] < target) i++;
+  if (i >= cum.length) return path[path.length - 1];
+  const span = cum[i] - cum[i - 1];
+  const f = span > 0 ? (target - cum[i - 1]) / span : 0;
+  const a = path[i - 1];
+  const b = path[i];
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+};
+
+// The path up to fraction ``t`` — the traveled trail drawn behind the marker.
+const sliceAtFraction = (path: Pt[], cum: number[], t: number): Pt[] => {
+  if (path.length < 2) return path;
+  const total = cum[cum.length - 1];
+  const target = Math.max(0, Math.min(1, t)) * total;
+  const out: Pt[] = [path[0]];
+  for (let i = 1; i < cum.length && cum[i] < target; i++) out.push(path[i]);
+  out.push(pointAtFraction(path, cum, t));
+  return out;
 };
 
 // Vite-bundled marker assets (Leaflet's defaults point at relative paths that
@@ -84,6 +125,7 @@ const RWANDA_CENTER: LatLngExpression = [-1.9403, 29.8739];
 
 export const AmbulanceTrackingPage = () => {
   const { id: referralId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
 
   useAmbulanceWebSocket(referralId);
 
@@ -114,54 +156,64 @@ export const AmbulanceTrackingPage = () => {
     [track?.route]
   );
 
-  // Journey replay: step the marker through the recorded pings over time.
-  const [replayIdx, setReplayIdx] = useState<number | null>(null);
-  const replayTimer = useRef<number | null>(null);
-  const isReplaying = replayIdx !== null;
+  // The trail plotted straight from the reported GPS coordinates — the exact path the
+  // phone reported, not snapped to roads, so every movement shows (even off-road). This
+  // is what we draw and animate along.
+  const trailPath = useMemo<Pt[]>(
+    () => pings.map((p) => [p.latitude, p.longitude] as Pt),
+    [pings]
+  );
+  const trailCum = useMemo(() => cumulativeDistances(trailPath), [trailPath]);
+
+  // Journey replay: glide the marker smoothly along the trail (0→1), drawing the
+  // traveled trail behind it — the way a fleet app replays a trip.
+  const [replayT, setReplayT] = useState<number | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const isReplaying = replayT !== null;
 
   const stopReplay = useCallback(() => {
-    if (replayTimer.current) {
-      clearInterval(replayTimer.current);
-      replayTimer.current = null;
-    }
-    setReplayIdx(null);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    setReplayT(null);
   }, []);
 
   const startReplay = useCallback(() => {
-    if (pings.length < 2) return;
-    setReplayIdx(0);
-    if (replayTimer.current) clearInterval(replayTimer.current);
-    replayTimer.current = window.setInterval(() => {
-      setReplayIdx((i) => {
-        if (i === null) return null;
-        if (i >= pings.length - 1) {
-          if (replayTimer.current) {
-            clearInterval(replayTimer.current);
-            replayTimer.current = null;
-          }
-          return i;
-        }
-        return i + 1;
-      });
-    }, 700);
-  }, [pings.length]);
+    if (trailPath.length < 2) return;
+    // Scale the replay length with the path's detail, clamped to a snappy window.
+    const durationMs = Math.min(20000, Math.max(6000, trailPath.length * 60));
+    const start = performance.now();
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    const tick = (nowTs: number) => {
+      const t = Math.min(1, (nowTs - start) / durationMs);
+      setReplayT(t);
+      rafRef.current = t < 1 ? requestAnimationFrame(tick) : null;
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  }, [trailPath.length]);
 
-  // Stop the timer if the component unmounts mid-replay.
+  // Stop the animation if the component unmounts mid-replay.
   useEffect(() => () => {
-    if (replayTimer.current) clearInterval(replayTimer.current);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
   }, []);
 
-  const trail: LatLngExpression[] = useMemo(
-    () => pings.map((p) => [p.latitude, p.longitude]),
-    [pings]
-  );
-
-  // What the map renders: full live trail, or progressive trail while replaying.
-  const displayTrail = isReplaying ? trail.slice(0, replayIdx + 1) : trail;
-  const marker = isReplaying ? pings[replayIdx] : track?.latest;
+  // What the map renders: the full trail, or progressively revealed while replaying.
+  const displayTrail: LatLngExpression[] = isReplaying
+    ? sliceAtFraction(trailPath, trailCum, replayT ?? 0)
+    : trailPath;
+  // Marker position: interpolated along the trail while replaying, else the last fix.
+  const markerPos: Pt | null = isReplaying
+    ? pointAtFraction(trailPath, trailCum, replayT ?? 0)
+    : track?.latest
+      ? [track.latest.latitude, track.latest.longitude]
+      : null;
   // Journey timing comes from the transport event (start = departure, actual = arrival).
   const startMs = track?.departure_time ? new Date(track.departure_time).getTime() : null;
   const actualArrivalMs = track?.arrival_time ? new Date(track.arrival_time).getTime() : null;
+  // While replaying, interpolate the "clock" between departure and arrival for the label.
+  const replayTimeMs =
+    isReplaying && startMs != null && actualArrivalMs != null
+      ? startMs + (replayT ?? 0) * (actualArrivalMs - startMs)
+      : null;
   // Tick a clock once a second while the trip is still in progress so the "so far"
   // duration stays live; once arrived we freeze on the recorded arrival time.
   const [now, setNow] = useState(() => Date.now());
@@ -177,9 +229,9 @@ export const AmbulanceTrackingPage = () => {
     const pts: LatLngExpression[] = [];
     if (track?.origin) pts.push([track.origin.latitude, track.origin.longitude]);
     if (track?.destination) pts.push([track.destination.latitude, track.destination.longitude]);
-    pts.push(...trail);
+    pts.push(...trailPath);
     return pts.length >= 2 ? (pts as LatLngBoundsExpression) : null;
-  }, [track, trail]);
+  }, [track, trailPath]);
 
   if (isLoading) {
     return <div className="p-6 text-muted-foreground">Loading map…</div>;
@@ -190,9 +242,14 @@ export const AmbulanceTrackingPage = () => {
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="flex items-center gap-2 text-xl font-semibold">
-          <Ambulance className="h-5 w-5 text-red-600" /> Ambulance tracking
-        </h1>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <h1 className="flex items-center gap-2 text-xl font-semibold">
+            <Ambulance className="h-5 w-5 text-red-600" /> Ambulance tracking
+          </h1>
+        </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
           {/* Self-tracking: follow the viewer's own device location on the map. */}
           {geoSupported && (
@@ -210,12 +267,12 @@ export const AmbulanceTrackingPage = () => {
           )}
 
           {/* Journey replay — both the referring and receiving clinician can replay */}
-          {pings.length >= 2 && (
+          {trailPath.length >= 2 && (
             isReplaying ? (
               <>
                 <span className="text-xs text-muted-foreground">
-                  Replaying {(replayIdx ?? 0) + 1}/{pings.length}
-                  {marker ? ` · ${formatDateTime(marker.recorded_at)}` : ""}
+                  Replaying {Math.round((replayT ?? 0) * 100)}%
+                  {replayTimeMs != null ? ` · ${formatDateTime(new Date(replayTimeMs).toISOString())}` : ""}
                 </span>
                 <Button variant="outline" onClick={stopReplay}>
                   <RotateCcw className="mr-2 h-4 w-4" />
@@ -298,21 +355,25 @@ export const AmbulanceTrackingPage = () => {
               )}
 
               {displayTrail.length >= 2 && (
-                <Polyline positions={displayTrail} pathOptions={{ color: "#dc2626", weight: 3 }} />
+                <Polyline
+                  positions={displayTrail}
+                  pathOptions={{ color: "#dc2626", weight: 5, opacity: 0.9, lineCap: "round", lineJoin: "round" }}
+                />
               )}
 
-              {marker && (
-                <Marker position={[marker.latitude, marker.longitude]} icon={ambulanceIcon}>
+              {markerPos && (
+                <Marker position={markerPos} icon={ambulanceIcon}>
                   <Popup>
-                    {isReplaying ? "Position at " : "Last seen "}
-                    {formatDateTime(marker.recorded_at)}
+                    {isReplaying
+                      ? `Replay · ${Math.round((replayT ?? 0) * 100)}%${replayTimeMs != null ? ` · ${formatDateTime(new Date(replayTimeMs).toISOString())}` : ""}`
+                      : track?.latest
+                        ? `Last seen ${formatDateTime(track.latest.recorded_at)}`
+                        : ""}
                   </Popup>
                 </Marker>
               )}
 
-              {isReplaying && marker && (
-                <RecenterMap position={[marker.latitude, marker.longitude]} />
-              )}
+              {isReplaying && markerPos && <RecenterMap position={markerPos} />}
 
               {/* The viewer's own live position + accuracy halo. */}
               {myPosition && (

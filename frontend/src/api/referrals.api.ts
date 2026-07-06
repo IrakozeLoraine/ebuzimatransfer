@@ -1,5 +1,5 @@
 import { api } from "./axios";
-import type { Referral, CreateReferralPayload, AcceptReferralPayload, RejectReferralPayload, ArrivalCondition, DictationResult } from "@/types/referral";
+import type { Referral, CreateReferralPayload, CreateDraftPayload, CompleteReferralFormPayload, AcceptReferralPayload, RejectReferralPayload, ArrivalCondition, DictationResult } from "@/types/referral";
 
 export const transcribeReferral = async (audio: Blob, formSpec?: unknown): Promise<DictationResult> => {
   const form = new FormData();
@@ -27,6 +27,19 @@ export const getReferral = async (id: string): Promise<Referral> => {
 
 export const createReferral = async (payload: CreateReferralPayload): Promise<Referral> => {
   const { data } = await api.post<Referral>("/referrals", payload);
+  return data;
+};
+
+export const createDraftReferral = async (payload: CreateDraftPayload): Promise<Referral> => {
+  const { data } = await api.post<Referral>("/referrals/draft", payload);
+  return data;
+};
+
+export const completeReferralForm = async (
+  id: string,
+  payload: CompleteReferralFormPayload
+): Promise<Referral> => {
+  const { data } = await api.patch<Referral>(`/referrals/${id}`, payload);
   return data;
 };
 

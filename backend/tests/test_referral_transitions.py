@@ -19,6 +19,9 @@ class TestAllowedTransitions:
     @pytest.mark.parametrize(
         "src,dst",
         [
+            (S.DRAFT, S.TRANSPORT_ARRANGED),  # call-first draft goes straight to transport
+            (S.DRAFT, S.ARRIVED),  # untracked transfer confirmed arrived
+            (S.DRAFT, S.CANCELLED),
             (S.REQUESTED, S.UNDER_REVIEW),
             (S.REQUESTED, S.ACCEPTED),
             (S.REQUESTED, S.REJECTED),
@@ -38,6 +41,8 @@ class TestAllowedTransitions:
     @pytest.mark.parametrize(
         "src,dst",
         [
+            (S.DRAFT, S.ACCEPTED),       # a draft is never formally accepted (call-coordinated)
+            (S.DRAFT, S.REQUESTED),
             (S.REQUESTED, S.EN_ROUTE),   # can't skip acceptance + transport
             (S.REQUESTED, S.ARRIVED),
             (S.ACCEPTED, S.REJECTED),    # can't reject an already-accepted request

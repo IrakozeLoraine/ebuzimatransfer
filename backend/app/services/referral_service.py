@@ -8,7 +8,7 @@ from app.core.exceptions import NotFoundError, InvalidStatusTransitionError, Val
 from app.models.referral import Referral, ReferralStatus, ReferralStatusHistory, ArrivalCondition, ALLOWED_TRANSITIONS
 from app.repositories.referral_repository import ReferralRepository
 from app.repositories.resource_repository import ResourceRepository
-from app.schemas.referral import ReferralCreate, AcceptReferralRequest, RejectReferralRequest
+from app.schemas.referral import ReferralCreate, ReferralDraftCreate, ReferralUpdate, AcceptReferralRequest, RejectReferralRequest
 from app.services.resource_service import ResourceService
 from app.services.audit_service import AuditService
 
@@ -19,6 +19,24 @@ class ReferralService:
         self.resource_service = ResourceService(session)
         self.session = session
 
+    async def _validate_requested_resources(self, resource_ids, preferred_facility_id):
+        """Each requested resource must actually exist at the destination facility and
+        have at least one unit available right now — you can't request something that
+        isn't there. De-duplicate the ids so a resource can't be listed twice."""
+        resources = []
+        seen: set[uuid.UUID] = set()
+        for resource_id in resource_ids:
+            if resource_id in seen:
+                continue
+            seen.add(resource_id)
+            resource = await self.resource_service.get(resource_id)
+            if resource.facility_id != preferred_facility_id:
+                raise ValidationError("A requested resource is not at the selected facility")
+            if resource.available < 1:
+                raise ValidationError("A requested resource is no longer available")
+            resources.append(resource)
+        return resources
+
     async def create(
         self,
         data: ReferralCreate,
@@ -26,21 +44,9 @@ class ReferralService:
         referring_facility_id: Optional[uuid.UUID] = None,
         origin_unit_id: Optional[uuid.UUID] = None,
     ) -> Referral:
-        # Each requested resource must actually exist at the destination facility and
-        # have at least one unit available right now — you can't request something
-        # that isn't there. De-duplicate the ids so a resource can't be listed twice.
-        resources = []
-        seen: set[uuid.UUID] = set()
-        for resource_id in data.requested_resource_ids:
-            if resource_id in seen:
-                continue
-            seen.add(resource_id)
-            resource = await self.resource_service.get(resource_id)
-            if resource.facility_id != data.preferred_facility_id:
-                raise ValidationError("A requested resource is not at the selected facility")
-            if resource.available < 1:
-                raise ValidationError("A requested resource is no longer available")
-            resources.append(resource)
+        resources = await self._validate_requested_resources(
+            data.requested_resource_ids, data.preferred_facility_id
+        )
 
         number = await self.repo.next_referral_number()
         payload = data.model_dump(exclude={"call_log_id", "requested_resource_ids"})
@@ -58,6 +64,66 @@ class ReferralService:
         )
         await self.repo.create(referral)
         await self._record_history(referral.id, ReferralStatus.REQUESTED, created_by)
+        return referral
+
+    async def create_draft(
+        self,
+        data: ReferralDraftCreate,
+        created_by: uuid.UUID,
+        referring_facility_id: Optional[uuid.UUID] = None,
+        origin_unit_id: Optional[uuid.UUID] = None,
+    ) -> Referral:
+        """Create a call-first lightweight referral: only the destination and requested
+        resources are set. The detailed transfer form is completed later via
+        ``complete_form``; the referral starts in DRAFT and skips the accept step."""
+        resources = await self._validate_requested_resources(
+            data.requested_resource_ids, data.preferred_facility_id
+        )
+        number = await self.repo.next_referral_number()
+        referral = Referral(
+            referral_number=number,
+            created_by=created_by,
+            referring_facility_id=referring_facility_id,
+            origin_unit_id=origin_unit_id,
+            preferred_facility_id=data.preferred_facility_id,
+            requested_unit_id=data.requested_unit_id,
+            requested_resources=resources,
+            status=ReferralStatus.DRAFT,
+            form_completed=False,
+            # Not-null columns the detailed form fills in later.
+            sex="",
+            diagnosis="",
+            reason_for_transfer="",
+            age_band="",
+            acuity_level="",
+            urgency="",
+        )
+        await self.repo.create(referral)
+        await self._record_history(referral.id, ReferralStatus.DRAFT, created_by)
+        return referral
+
+    async def complete_form(self, referral_id: uuid.UUID, data: ReferralUpdate, actor) -> Referral:
+        """Fill in (or edit) the transfer form after creation — used to complete the
+        full MoH form for a call-first lightweight referral. Only the referring side
+        may do this, and only while the referral is still active."""
+        referral = await self.repo.get_by_id(referral_id)
+        if not referral:
+            raise NotFoundError("Referral")
+        self.assert_can_arrange_transport(referral, actor)
+        if referral.status in (ReferralStatus.REJECTED, ReferralStatus.CANCELLED):
+            raise ValidationError("This transfer request can no longer be edited")
+        if data.sex is not None:
+            referral.sex = data.sex
+        if data.diagnosis is not None:
+            referral.diagnosis = data.diagnosis
+        if data.reason_for_transfer is not None:
+            referral.reason_for_transfer = data.reason_for_transfer
+        if data.form_type is not None:
+            referral.form_type = data.form_type
+        if data.form_data is not None:
+            referral.form_data = data.form_data
+        referral.form_completed = True
+        await self.session.flush()
         return referral
 
     async def list_visible(
@@ -194,6 +260,29 @@ class ReferralService:
         await self.session.flush()
         return referral
 
+    def assert_can_arrange_transport(self, referral: Referral, actor) -> None:
+        """Only the *referring* (sending) side may arrange or remove transport — the
+        receiving facility never runs the transport. The referring side is the
+        clinician who raised the request, anyone at the referring facility, or anyone
+        in the origin unit. Super admins are exempt."""
+        roles = set(getattr(actor, "effective_roles", []))
+        if "SUPER_ADMIN" in roles:
+            return
+        if referral.created_by == actor.id:
+            return
+        active = getattr(actor, "active_facility_id", None)
+        actor_facility_ids = (
+            {active} if active is not None else {f.id for f in getattr(actor, "facilities", [])}
+        )
+        if referral.referring_facility_id is not None and referral.referring_facility_id in actor_facility_ids:
+            return
+        if (
+            referral.origin_unit_id is not None
+            and referral.origin_unit_id in set(getattr(actor, "unit_ids", []))
+        ):
+            return
+        raise ForbiddenError("Only the referring facility can arrange transport.")
+
     def assert_can_record_arrival(self, referral: Referral, actor) -> None:
         """Only staff at the *receiving* facility may record the patient's arrival
         condition — never the sending clinician who created the request. Super
@@ -210,6 +299,20 @@ class ReferralService:
         )
         if receiving_facility_id is None or receiving_facility_id not in actor_facility_ids:
             raise ForbiddenError("Only staff at the receiving facility can record the arrival condition.")
+
+    async def mark_arrived(self, referral_id: uuid.UUID, actor) -> Referral:
+        """Confirm the patient arrived for a transfer that used no tracked transport.
+        Only the receiving side may confirm arrival — never the sending clinician."""
+        referral = await self.repo.get_by_id(referral_id)
+        if not referral:
+            raise NotFoundError("Referral")
+        self.assert_can_record_arrival(referral, actor)
+        if ReferralStatus.ARRIVED not in ALLOWED_TRANSITIONS.get(referral.status, []):
+            raise InvalidStatusTransitionError(referral.status, ReferralStatus.ARRIVED)
+        referral.status = ReferralStatus.ARRIVED
+        await self._record_history(referral_id, ReferralStatus.ARRIVED, actor.id)
+        await self.session.flush()
+        return referral
 
     async def set_arrival_condition(self, referral_id: uuid.UUID, condition: ArrivalCondition, actor) -> Referral:
         referral = await self.repo.get_by_id(referral_id)

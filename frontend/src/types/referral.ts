@@ -1,4 +1,5 @@
 export type ReferralStatus =
+  | "DRAFT"
   | "REQUESTED"
   | "UNDER_REVIEW"
   | "ACCEPTED"
@@ -59,6 +60,8 @@ export interface Referral {
   reason_for_transfer: string;
   form_type: string;
   form_data: Record<string, unknown> | null;
+  /** False for a call-first lightweight referral whose full MoH form isn't filled in yet. */
+  form_completed: boolean;
   transport_monitoring: TransportMonitoring | null;
   feedback_data: Record<string, unknown> | null;
   counter_referral_data: Record<string, unknown> | null;
@@ -97,6 +100,23 @@ export interface CreateReferralPayload {
   ai_summary?: string;
   /** Links a pre-form coordination call to the referral being created. */
   call_log_id?: string;
+}
+
+/** A call-first lightweight referral: only the destination + resources up front. */
+export interface CreateDraftPayload {
+  preferred_facility_id: string;
+  requested_unit_id: string;
+  requested_resource_ids: string[];
+  call_log_id?: string;
+}
+
+/** Completing (or editing) the transfer form for a referral after creation. */
+export interface CompleteReferralFormPayload {
+  sex?: string;
+  diagnosis?: string;
+  reason_for_transfer?: string;
+  form_type?: string;
+  form_data?: Record<string, unknown> | null;
 }
 
 /** Form fields extracted from a dictated transcript (all optional — reviewed by the clinician). */

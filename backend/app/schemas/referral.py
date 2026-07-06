@@ -32,6 +32,18 @@ class ReferralCreate(BaseModel):
     call_log_id: Optional[uuid.UUID] = None
 
 
+class ReferralDraftCreate(BaseModel):
+    """A call-first "lightweight" referral: only the destination and requested
+    resources are required. The detailed MoH transfer form (clinical fields and
+    ``form_data``) is filled in later via ``ReferralUpdate``. Such a referral skips
+    the in-app accept/reservation step — the phone call is the coordination — and
+    goes straight to transport."""
+    preferred_facility_id: uuid.UUID
+    requested_unit_id: uuid.UUID
+    requested_resource_ids: List[uuid.UUID] = Field(min_length=1)
+    call_log_id: Optional[uuid.UUID] = None
+
+
 class DictationFields(BaseModel):
     """Form fields extracted from a dictated transcript. Every field is optional —
     the clinician reviews and corrects before submitting."""
@@ -83,8 +95,14 @@ class TransportMonitoringResult(BaseModel):
 
 
 class ReferralUpdate(BaseModel):
+    """Completing (or editing) the transfer form for a referral after creation —
+    used to fill in the full MoH form for a call-first lightweight referral. Every
+    field is optional; only what's provided is written."""
+    sex: Optional[str] = None
     diagnosis: Optional[str] = None
     reason_for_transfer: Optional[str] = None
+    form_type: Optional[str] = None
+    form_data: Optional[dict[str, Any]] = None
 
 
 class ReferralFeedbackRequest(BaseModel):
@@ -162,6 +180,7 @@ class ReferralOut(BaseModel):
     reason_for_transfer: str
     form_type: str = "EXTERNAL"
     form_data: Optional[dict[str, Any]] = None
+    form_completed: bool = True
     transport_monitoring: Optional[dict[str, Any]] = None
     feedback_data: Optional[dict[str, Any]] = None
     counter_referral_data: Optional[dict[str, Any]] = None
@@ -195,6 +214,7 @@ class ReferralSummary(BaseModel):
     referral_number: str
     diagnosis: str
     status: ReferralStatus
+    form_completed: bool = True
     created_at: datetime
     referring_facility_id: Optional[uuid.UUID]
 

@@ -3,6 +3,7 @@ import type { ReferralStatus } from "@/types/referral";
 import { REFERRAL_STATUS_LABELS } from "@/pages/referrals/constants";
 
 const STATUS_STYLES: Record<ReferralStatus, { badge: string; dot: string; pulse: boolean }> = {
+  DRAFT:              { badge: "bg-slate-100 text-slate-600 ring-1 ring-slate-200", dot: "bg-slate-400",   pulse: false },
   REQUESTED:          { badge: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",     dot: "bg-blue-500",    pulse: true },
   UNDER_REVIEW:       { badge: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",  dot: "bg-amber-500",   pulse: true },
   ACCEPTED:           { badge: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200", dot: "bg-emerald-500", pulse: false },

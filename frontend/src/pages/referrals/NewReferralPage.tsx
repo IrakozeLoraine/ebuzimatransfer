@@ -2,7 +2,9 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useCreateReferral } from "@/hooks/useReferrals";
+import { useCreateReferral, useCreateDraftReferral } from "@/hooks/useReferrals";
+import { toast } from "@/components/ui/toaster";
+import { getApiErrorMessage } from "@/utils/apiError";
 import { useFacilities } from "@/hooks/useFacilities";
 import { useUnits } from "@/hooks/useUnits";
 import { useAvailableResources } from "@/hooks/useResources";
@@ -73,6 +75,7 @@ export const NewReferralPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { mutate: create, isPending, error } = useCreateReferral();
+  const { mutate: createDraft, isPending: draftPending } = useCreateDraftReferral();
   const { data: facilities = [] } = useFacilities();
   const { data: units = [] } = useUnits();
   const myFacilityId = useAuthStore((s) => s.user?.active_facility_id ?? null);
@@ -271,6 +274,33 @@ export const NewReferralPage = () => {
     });
   };
 
+  // Start a call-first lightweight referral: only the destination + resources are
+  // needed now (the phone call coordinates it); the full form is completed later.
+  const handleSaveDraft = () => {
+    const { facilityId, unitId, resourceIds } = preferredFacilityDetails;
+    if (!facilityId || !unitId || resourceIds.length === 0) {
+      setSubmitAttempted(true);
+      toast({
+        variant: "warning",
+        title: "Pick a destination first",
+        description: "A draft still needs a facility, unit, and at least one requested resource.",
+      });
+      return;
+    }
+    if (isOwnDepartment) return;
+    createDraft(
+      {
+        preferred_facility_id: facilityId,
+        requested_unit_id: unitId,
+        requested_resource_ids: resourceIds,
+      },
+      {
+        onSuccess: (referral) => navigate(`/transfer-requests/${referral.id}`),
+        onError: (e) => toast({ variant: "destructive", title: "Could not save draft", description: getApiErrorMessage(e) }),
+      }
+    );
+  };
+
   const preferredFacilityName = facilities.find((f) => f.id === preferredFacilityDetails.facilityId)?.name;
 
   return (
@@ -446,14 +476,26 @@ export const NewReferralPage = () => {
           </Alert>
         )}
 
-        <div className="flex gap-3 pt-1">
+        <div className="flex flex-wrap gap-3 pt-1">
           <Button type="button" variant="outline" onClick={() => navigate(-1)}>
             Cancel
           </Button>
-          <Button type="submit" disabled={isPending || isOwnDepartment} className="flex-1 sm:flex-none sm:min-w-40">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={isPending || draftPending || isOwnDepartment}
+            onClick={handleSaveDraft}
+          >
+            {draftPending ? "Saving…" : "Start from call (save as draft)"}
+          </Button>
+          <Button type="submit" disabled={isPending || draftPending || isOwnDepartment} className="flex-1 sm:flex-none sm:min-w-40">
             {isPending ? "Submitting…" : "Submit Transfer Request"}
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Coordinating by phone? Use <span className="font-medium">Start from call</span> to save a draft with just the
+          destination, arrange transport, and complete the full form afterward.
+        </p>
       </form>
     </div>
   );

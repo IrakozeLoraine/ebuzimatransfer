@@ -241,6 +241,29 @@ class DriverApi {
     throw ApiException(detail);
   }
 
+  Future<List<({double latitude, double longitude})>> journeyPings({
+    required String baseUrl,
+    required String token,
+  }) async {
+    try {
+      final resp = await _client
+          .get(_uri(baseUrl, '/driver/journey/pings'), headers: _authHeaders(token))
+          .timeout(const Duration(seconds: 20));
+      if (resp.statusCode != 200) return const [];
+      final body = resp.body.trim();
+      if (body.isEmpty || body == 'null') return const [];
+      final list = jsonDecode(body) as List<dynamic>;
+      return list
+          .map((e) => (
+                latitude: (e['latitude'] as num).toDouble(),
+                longitude: (e['longitude'] as num).toDouble(),
+              ))
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
   /// Streams a single GPS fix for the active journey. Returns true on success;
   /// failures are swallowed so a dropped fix doesn't interrupt the trip.
   Future<bool> ping({

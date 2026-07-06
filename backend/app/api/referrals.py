@@ -14,7 +14,7 @@ from app.services.notification_service import NotificationService
 from app.services.dictation_service import DictationService, audio_path, monitoring_audio_path
 from app.websocket.manager import ws_manager
 from app.models.referral import ReferralStatus
-from app.schemas.referral import ReferralCreate, ReferralOut, ReferralSummary, AcceptReferralRequest, RejectReferralRequest, ArrivalConditionRequest, ReferralFeedbackRequest, DictationResult
+from app.schemas.referral import ReferralCreate, ReferralDraftCreate, ReferralUpdate, ReferralOut, ReferralSummary, AcceptReferralRequest, RejectReferralRequest, ArrivalConditionRequest, ReferralFeedbackRequest, DictationResult
 
 # Cap dictated recordings at ~25 MB (well over a minute of speech) to bound
 # transcription time and upload size.
@@ -30,6 +30,33 @@ def _active_facility_id(user) -> Optional[uuid.UUID]:
         return active
     facilities = getattr(user, "facilities", [])
     return facilities[0].id if len(facilities) == 1 else None
+
+
+async def _link_coordination_calls(session, referral, caller_id, call_log_id) -> None:
+    """Tie coordination calls placed before the form was filled to a freshly created
+    referral, so both sides see them in its history: the explicitly passed call log,
+    plus any recent in-app calls this clinician placed to the chosen destination."""
+    if call_log_id is not None:
+        from app.models.call import CallLog
+        call = await session.get(CallLog, call_log_id)
+        if call is not None and call.referral_id is None:
+            call.referral_id = referral.id
+
+    if referral.preferred_facility_id is not None:
+        from datetime import datetime, timezone, timedelta
+        from sqlalchemy import select
+        from app.models.incall import InAppCall
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=2)
+        recent = await session.execute(
+            select(InAppCall).where(
+                InAppCall.caller_id == caller_id,
+                InAppCall.callee_facility_id == referral.preferred_facility_id,
+                InAppCall.referral_id.is_(None),
+                InAppCall.created_at >= cutoff,
+            )
+        )
+        for call in recent.scalars().all():
+            call.referral_id = referral.id
 
 
 def _accept_notification_message(referral) -> str:
@@ -77,32 +104,9 @@ async def create_referral(
         active_facility_id,
         origin_unit_id=origin_unit_id,
     )
-    # Link an earlier coordination call (placed before the form was filled) to this
-    # referral, so both sides see the call in the referral's history.
-    if payload.call_log_id is not None:
-        from app.models.call import CallLog
-        call = await session.get(CallLog, payload.call_log_id)
-        if call is not None and call.referral_id is None:
-            call.referral_id = referral.id
-
-    # Auto-link recent in-app coordination calls this clinician placed to the chosen
-    # destination (from Resource Lookup / "coordinate first") so they're traceable on
-    # the referral even though no referral existed when the call was made.
-    if referral.preferred_facility_id is not None:
-        from datetime import datetime, timezone, timedelta
-        from sqlalchemy import select
-        from app.models.incall import InAppCall
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=2)
-        recent = await session.execute(
-            select(InAppCall).where(
-                InAppCall.caller_id == current_user.id,
-                InAppCall.callee_facility_id == referral.preferred_facility_id,
-                InAppCall.referral_id.is_(None),
-                InAppCall.created_at >= cutoff,
-            )
-        )
-        for call in recent.scalars().all():
-            call.referral_id = referral.id
+    # Link earlier coordination calls (placed before the form was filled) to this
+    # referral, so both sides see them in the referral's history.
+    await _link_coordination_calls(session, referral, current_user.id, payload.call_log_id)
     await AuditService(session).log("CREATE_REFERRAL", "referral", user_id=current_user.id, entity_id=referral.id)
     notif = NotificationService(session)
     title = "New transfer request"
@@ -118,6 +122,60 @@ async def create_referral(
     await session.commit()
     await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_CREATED", "referral_id": str(referral.id)})
     return await svc.get(referral.id)
+
+
+@router.post("/draft", response_model=ReferralOut, status_code=201)
+async def create_draft_referral(
+    payload: ReferralDraftCreate,
+    current_user=Depends(require_roles("CLINICIAN", "SUPER_ADMIN")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Create a call-first lightweight referral: only the destination and requested
+    resources are given. The phone call coordinates it (no in-app accept step), so the
+    referring clinician can arrange transport straight away and complete the full MoH
+    transfer form later. The receiving side is not asked to approve, so no approval
+    notification is sent here — the transport step notifies them a patient is coming."""
+    svc = ReferralService(session)
+    active_facility_id = _active_facility_id(current_user)
+    units = current_user.units_for_facility(active_facility_id)
+    origin_unit_id = units[0].unit_id if len(units) == 1 else None
+    referral = await svc.create_draft(
+        payload,
+        current_user.id,
+        active_facility_id,
+        origin_unit_id=origin_unit_id,
+    )
+    await _link_coordination_calls(session, referral, current_user.id, payload.call_log_id)
+    await AuditService(session).log("CREATE_DRAFT_REFERRAL", "referral", user_id=current_user.id, entity_id=referral.id)
+    await session.commit()
+    await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_CREATED", "referral_id": str(referral.id)})
+    return await svc.get(referral.id)
+
+
+@router.patch("/{referral_id}", response_model=ReferralOut)
+async def complete_referral_form(
+    referral_id: uuid.UUID,
+    payload: ReferralUpdate,
+    current_user=Depends(require_roles("CLINICIAN", "SUPER_ADMIN")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Fill in (or edit) the transfer form after creation — used to complete the full
+    MoH form for a call-first lightweight referral. Only the referring side may do this.
+    The receiving side is notified the full form is now available."""
+    svc = ReferralService(session)
+    referral = await svc.complete_form(referral_id, payload, current_user)
+    await AuditService(session).log("COMPLETE_REFERRAL_FORM", "referral", user_id=current_user.id, entity_id=referral_id)
+    receiving_facility_id = referral.accepted_facility_id or referral.preferred_facility_id
+    if receiving_facility_id:
+        await NotificationService(session).notify_facility_unit(
+            receiving_facility_id, referral.requested_unit_id, "CLINICIAN",
+            "Transfer form completed",
+            f"{referral.referral_number}: the referring facility completed the transfer form.",
+            "REFERRAL_UPDATED", "referral", referral_id, exclude_user_id=current_user.id,
+        )
+    await session.commit()
+    await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_UPDATED", "referral_id": str(referral_id)})
+    return await svc.get(referral_id)
 
 
 @router.post("/transcribe", response_model=DictationResult)
@@ -265,7 +323,7 @@ async def mark_arrived(
     """Confirm a patient arrived for a transfer that used no tracked transport.
     The receiving clinician records arrival; the referring clinician is notified."""
     svc = ReferralService(session)
-    referral = await svc.change_status(referral_id, ReferralStatus.ARRIVED, current_user.id)
+    referral = await svc.mark_arrived(referral_id, current_user)
     await AuditService(session).log("MARK_ARRIVED", "referral", user_id=current_user.id, entity_id=referral_id)
     await NotificationService(session).create(
         referral.created_by, "Patient has arrived",

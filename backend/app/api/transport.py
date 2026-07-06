@@ -39,6 +39,13 @@ async def create_transport(
     request. Plate and driver are snapshotted from the ambulance, and the
     receiving hospital is notified that a patient is coming. The driver then
     drives the journey from their phone app."""
+    referral = await session.get(Referral, payload.referral_id)
+    if not referral:
+        raise NotFoundError("Referral")
+    # Only the referring (sending) side arranges transport — never the receiving facility.
+    svc = ReferralService(session)
+    svc.assert_can_arrange_transport(referral, current_user)
+
     ambulance = await session.get(Ambulance, payload.ambulance_id)
     if not ambulance or not ambulance.is_active:
         raise NotFoundError("Ambulance")
@@ -66,7 +73,6 @@ async def create_transport(
     )
     session.add(event)
 
-    svc = ReferralService(session)
     referral = await svc.change_status(payload.referral_id, ReferralStatus.TRANSPORT_ARRANGED, current_user.id)
     await _notify_receiving(
         session, referral, "Incoming patient — transport arranged",
@@ -92,10 +98,9 @@ async def remove_transport(
     referral = await session.get(Referral, referral_id)
     if not referral:
         raise NotFoundError("Referral")
-    # Referring side only (non-super clinicians act on their own facility's transfers).
-    if "SUPER_ADMIN" not in set(current_user.effective_roles):
-        if referral.referring_facility_id not in {f.id for f in current_user.facilities}:
-            raise ForbiddenError()
+    # Referring side only — the receiving facility never runs the transport.
+    svc = ReferralService(session)
+    svc.assert_can_arrange_transport(referral, current_user)
 
     event = await session.scalar(
         select(TransportEvent)
@@ -108,7 +113,6 @@ async def remove_transport(
         raise ConflictError("The journey has already started — the ambulance can't be removed.")
 
     await session.delete(event)
-    svc = ReferralService(session)
     referral = await svc.change_status(referral_id, ReferralStatus.ACCEPTED, current_user.id)
     await _notify_receiving(
         session, referral, "Transport changed",

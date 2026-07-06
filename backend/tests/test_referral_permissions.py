@@ -30,12 +30,22 @@ def make_actor(*, roles=("CLINICIAN",), id=None, active_facility_id=None, facili
     )
 
 
-def make_referral(*, created_by=None, preferred_facility_id=None, accepted_facility_id=None, requested_unit_id=None):
+def make_referral(
+    *,
+    created_by=None,
+    preferred_facility_id=None,
+    accepted_facility_id=None,
+    requested_unit_id=None,
+    referring_facility_id=None,
+    origin_unit_id=None,
+):
     return SimpleNamespace(
         created_by=created_by or uuid.uuid4(),
         preferred_facility_id=preferred_facility_id,
         accepted_facility_id=accepted_facility_id,
         requested_unit_id=requested_unit_id,
+        referring_facility_id=referring_facility_id,
+        origin_unit_id=origin_unit_id,
     )
 
 
@@ -123,3 +133,46 @@ class TestAssertCanRecordArrival:
         actor = make_actor(active_facility_id=uuid.uuid4())
         with pytest.raises(ForbiddenError):
             service.assert_can_record_arrival(referral, actor)
+
+
+class TestAssertCanArrangeTransport:
+    def test_super_admin_may_always_arrange_transport(self):
+        referral = make_referral()
+        actor = make_actor(roles=("SUPER_ADMIN",))
+        service.assert_can_arrange_transport(referral, actor)
+
+    def test_sending_clinician_may_arrange_transport(self):
+        actor = make_actor()
+        referral = make_referral(created_by=actor.id)
+        service.assert_can_arrange_transport(referral, actor)
+
+    def test_referring_facility_staff_may_arrange_transport(self):
+        facility = uuid.uuid4()
+        referral = make_referral(referring_facility_id=facility)
+        actor = make_actor(active_facility_id=facility)
+        service.assert_can_arrange_transport(referral, actor)
+
+    def test_origin_unit_staff_may_arrange_transport(self):
+        unit = uuid.uuid4()
+        referral = make_referral(origin_unit_id=unit)
+        actor = make_actor(active_facility_id=uuid.uuid4(), unit_ids=(unit,))
+        service.assert_can_arrange_transport(referral, actor)
+
+    def test_receiving_facility_cannot_arrange_transport(self):
+        # Staff at the destination (accepted/preferred) facility must not arrange
+        # transport — that's the referring side's job.
+        receiving = uuid.uuid4()
+        referral = make_referral(
+            referring_facility_id=uuid.uuid4(),
+            accepted_facility_id=receiving,
+            preferred_facility_id=receiving,
+        )
+        actor = make_actor(active_facility_id=receiving)
+        with pytest.raises(ForbiddenError):
+            service.assert_can_arrange_transport(referral, actor)
+
+    def test_unrelated_facility_cannot_arrange_transport(self):
+        referral = make_referral(referring_facility_id=uuid.uuid4())
+        actor = make_actor(active_facility_id=uuid.uuid4())
+        with pytest.raises(ForbiddenError):
+            service.assert_can_arrange_transport(referral, actor)

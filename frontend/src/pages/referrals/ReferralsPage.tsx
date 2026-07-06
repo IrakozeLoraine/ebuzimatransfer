@@ -14,8 +14,10 @@ import { cn } from "@/utils/cn";
 const clientName = (r: Referral): string =>
   String((r.form_data?.patient_name as string) || (r.form_data?.baby_name as string) || "");
 
-// Requests are grouped into three decision categories.
+// Requests are grouped into decision categories. Drafts (call-first referrals whose
+// form isn't completed yet) get their own tab until they move on to transport.
 const CATEGORIES = [
+  { key: "DRAFTS", label: "Drafts", statuses: ["DRAFT"] },
   { key: "PENDING", label: "Pending", statuses: ["REQUESTED", "UNDER_REVIEW"] },
   { key: "APPROVED", label: "Approved", statuses: ["ACCEPTED", "TRANSPORT_ARRANGED", "EN_ROUTE", "ARRIVED"] },
   { key: "REJECTED", label: "Rejected", statuses: ["REJECTED", "CANCELLED"] },

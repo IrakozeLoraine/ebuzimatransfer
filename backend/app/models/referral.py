@@ -19,6 +19,7 @@ referral_requested_resources = Table(
 
 
 class ReferralStatus(str, PyEnum):
+    DRAFT = "DRAFT"                    # call-coordinated, form not yet completed
     REQUESTED = "REQUESTED"            # pending
     UNDER_REVIEW = "UNDER_REVIEW"      # pending
     ACCEPTED = "ACCEPTED"             # approved
@@ -38,6 +39,10 @@ class ArrivalCondition(str, PyEnum):
 
 # Permitted forward transitions between statuses.
 ALLOWED_TRANSITIONS: dict[ReferralStatus, list[ReferralStatus]] = {
+    # A call-coordinated lightweight referral skips the in-app accept/reservation
+    # step — the phone call is the coordination — so it goes straight to transport
+    # (or to ARRIVED when the transfer uses no tracked transport, or is cancelled).
+    ReferralStatus.DRAFT: [ReferralStatus.TRANSPORT_ARRANGED, ReferralStatus.ARRIVED, ReferralStatus.CANCELLED],
     ReferralStatus.REQUESTED: [ReferralStatus.UNDER_REVIEW, ReferralStatus.ACCEPTED, ReferralStatus.REJECTED, ReferralStatus.CANCELLED],
     ReferralStatus.UNDER_REVIEW: [ReferralStatus.ACCEPTED, ReferralStatus.REJECTED, ReferralStatus.CANCELLED],
     # ACCEPTED can go straight to ARRIVED when the transfer uses no tracked transport
@@ -73,6 +78,11 @@ class Referral(Base, UUIDMixin, TimestampMixin):
     # specific to a given paper form lives in ``form_data`` as a flat JSON map.
     form_type: Mapped[str] = mapped_column(String(20), default="EXTERNAL", nullable=False)
     form_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    # False for a call-coordinated lightweight referral whose full MoH transfer form
+    # hasn't been filled in yet — the referring side completes it later (even after
+    # transport is arranged). True for referrals created with the full form up front.
+    form_completed: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # The Patient Monitoring Transfer Form, captured by the ambulance driver by
     # voice during transport: the recording, its transcript and summary, and the

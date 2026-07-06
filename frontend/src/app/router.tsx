@@ -99,6 +99,11 @@ const ReferralDetailPage = lazy(() =>
     default: m.ReferralDetailPage,
   }))
 );
+const CompleteReferralFormPage = lazy(() =>
+  import("@/pages/referrals/CompleteReferralFormPage").then((m) => ({
+    default: m.CompleteReferralFormPage,
+  }))
+);
 const AmbulanceTrackingPage = lazy(() =>
   import("@/pages/transport/AmbulanceTrackingPage").then((m) => ({
     default: m.AmbulanceTrackingPage,
@@ -154,6 +159,14 @@ export const router = createBrowserRouter([
             element: (
               <RoleGuard roles={["CLINICIAN", "SUPER_ADMIN"]}>
                 <NewReferralPage />
+              </RoleGuard>
+            ),
+          },
+          {
+            path: "/transfer-requests/:id/complete",
+            element: (
+              <RoleGuard roles={["CLINICIAN", "SUPER_ADMIN"]}>
+                <CompleteReferralFormPage />
               </RoleGuard>
             ),
           },

@@ -15,12 +15,13 @@ import pytest_asyncio
 from app.core.exceptions import (
     ValidationError,
     InvalidStatusTransitionError,
+    ForbiddenError,
 )
 from app.models.facility import Facility
 from app.models.referral import Referral, ReferralStatus
 from app.models.resource import Resource
 from app.models.unit import Unit
-from app.schemas.referral import ReferralCreate, AcceptReferralRequest, RejectReferralRequest
+from app.schemas.referral import ReferralCreate, ReferralDraftCreate, ReferralUpdate, AcceptReferralRequest, RejectReferralRequest
 from app.services.referral_service import ReferralService
 
 pytestmark = pytest.mark.asyncio
@@ -207,6 +208,102 @@ class TestAcceptReject:
         # No bed was held.
         await env.session.refresh(resource)
         assert resource.reserved == 0
+
+
+def build_draft_payload(env, *resource_ids):
+    return ReferralDraftCreate(
+        preferred_facility_id=env.facility.id,
+        requested_unit_id=env.unit.id,
+        requested_resource_ids=list(resource_ids),
+    )
+
+
+class TestDraft:
+    async def test_create_draft_starts_in_draft_with_form_incomplete(self, env):
+        resource = env.make_resource(quantity=1)
+        await env.session.flush()
+        service = ReferralService(env.session)
+
+        referral = await service.create_draft(
+            build_draft_payload(env, resource.id),
+            created_by=env.creator.id,
+            referring_facility_id=env.facility.id,
+        )
+
+        assert referral.status == ReferralStatus.DRAFT
+        assert referral.form_completed is False
+        # Clinical fields are deferred (defaulted empty), not required up front.
+        assert referral.diagnosis == "" and referral.sex == ""
+        # A DRAFT history row is written, and the resource is NOT reserved.
+        fetched = await service.get(referral.id)
+        assert [h.status for h in fetched.status_history] == [ReferralStatus.DRAFT]
+        await env.session.refresh(resource)
+        assert resource.reserved == 0
+
+    async def test_create_draft_validates_requested_resources(self, env):
+        resource = env.make_resource(quantity=1)
+        resource.occupied = 1  # available == 0
+        await env.session.flush()
+        service = ReferralService(env.session)
+
+        with pytest.raises(ValidationError):
+            await service.create_draft(build_draft_payload(env, resource.id), created_by=env.creator.id)
+
+    async def test_draft_can_go_straight_to_transport(self, env):
+        resource = env.make_resource(quantity=1)
+        await env.session.flush()
+        service = ReferralService(env.session)
+        referral = await service.create_draft(
+            build_draft_payload(env, resource.id), created_by=env.creator.id
+        )
+
+        # No accept step — the call coordinated it, so DRAFT → TRANSPORT_ARRANGED is allowed.
+        updated = await service.change_status(
+            referral.id, ReferralStatus.TRANSPORT_ARRANGED, env.creator.id
+        )
+        assert updated.status == ReferralStatus.TRANSPORT_ARRANGED
+
+    async def test_complete_form_fills_fields_and_marks_completed(self, env):
+        resource = env.make_resource(quantity=1)
+        await env.session.flush()
+        service = ReferralService(env.session)
+        referral = await service.create_draft(
+            build_draft_payload(env, resource.id), created_by=env.creator.id
+        )
+
+        completed = await service.complete_form(
+            referral.id,
+            ReferralUpdate(
+                sex="F",
+                diagnosis="Severe sepsis",
+                reason_for_transfer="Requires ICU care",
+                form_type="EXTERNAL",
+                form_data={"patient_name": "Ada"},
+            ),
+            super_admin_actor(env.creator.id),
+        )
+
+        assert completed.form_completed is True
+        assert completed.diagnosis == "Severe sepsis"
+        assert completed.form_data == {"patient_name": "Ada"}
+
+    async def test_complete_form_blocked_for_non_referring_side(self, env):
+        resource = env.make_resource(quantity=1)
+        await env.session.flush()
+        service = ReferralService(env.session)
+        referral = await service.create_draft(
+            build_draft_payload(env, resource.id),
+            created_by=env.creator.id,
+            referring_facility_id=env.facility.id,
+        )
+
+        # A clinician at some other facility (not the referring side) can't complete it.
+        outsider = SimpleNamespace(
+            id=uuid.uuid4(), effective_roles=["CLINICIAN"],
+            active_facility_id=uuid.uuid4(), facilities=[], unit_ids=[],
+        )
+        with pytest.raises(ForbiddenError):
+            await service.complete_form(referral.id, ReferralUpdate(diagnosis="x"), outsider)
 
 
 class TestChangeStatus:

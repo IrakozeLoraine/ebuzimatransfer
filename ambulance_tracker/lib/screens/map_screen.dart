@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
+import '../config.dart';
 import '../driver_api.dart';
 import '../theme.dart';
 
@@ -14,9 +15,10 @@ import '../theme.dart';
 /// the ambulance's current position, the sending and receiving facilities, and the
 /// driving route between them (free OpenStreetMap tiles + OSRM routing — no API key).
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key, required this.journey});
+  const MapScreen({super.key, required this.journey, required this.config});
 
   final Journey journey;
+  final Config config;
 
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -24,10 +26,14 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   final _map = MapController();
+  final _api = DriverApi();
   StreamSubscription<Position>? _posSub;
   LatLng? _me;
   List<LatLng> _route = const [];
+  final List<LatLng> _trail = [];
   bool _follow = true;
+
+  static const _distance = Distance();
 
   LatLng? get _from {
     final s = widget.journey.sending;
@@ -42,18 +48,40 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
+    _seedTrail();
     _startTracking();
     _loadRoute();
+  }
+
+  /// Seed the trail from the server's recorded fixes for this journey, so the whole
+  /// path shows straight away (persisting across reopening the map) and matches the
+  /// web view. Live GPS fixes then extend it from wherever it left off.
+  Future<void> _seedTrail() async {
+    final recorded = await _api.journeyPings(
+      baseUrl: widget.config.baseUrl,
+      token: widget.config.token,
+    );
+    if (!mounted || recorded.isEmpty) return;
+    final seeded = recorded.map((p) => LatLng(p.latitude, p.longitude)).toList();
+    setState(() {
+      // Prepend the recorded history before any live fixes captured while it loaded.
+      _trail.insertAll(0, seeded);
+    });
   }
 
   Future<void> _startTracking() async {
     try {
       _posSub = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10),
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 2),
       ).listen((pos) {
         final me = LatLng(pos.latitude, pos.longitude);
         if (!mounted) return;
-        setState(() => _me = me);
+        setState(() {
+          _me = me;
+          if (_trail.isEmpty || _distance.as(LengthUnit.Meter, _trail.last, me) >= 2) {
+            _trail.add(me);
+          }
+        });
         if (_follow) _map.move(me, _map.camera.zoom);
       });
     } catch (_) {/* permission handled elsewhere; map still shows the route */}
@@ -118,28 +146,71 @@ class _MapScreenState extends State<MapScreen> {
           ),
         ],
       ),
-      body: FlutterMap(
-        mapController: _map,
-        options: MapOptions(
-          initialCenter: center,
-          initialZoom: 13,
-          onPointerDown: (_, __) {
-            if (_follow) setState(() => _follow = false); // stop following on manual pan
-          },
-        ),
+      body: Stack(
         children: [
-          TileLayer(
-            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            userAgentPackageName: 'com.ebuzima.ambulance',
-          ),
-          if (_route.isNotEmpty)
-            PolylineLayer(
-              polylines: [Polyline(points: _route, strokeWidth: 5, color: AppColors.primary)],
+          FlutterMap(
+            mapController: _map,
+            options: MapOptions(
+              initialCenter: center,
+              initialZoom: 13,
+              onPointerDown: (_, __) {
+                if (_follow) setState(() => _follow = false); // stop following on manual pan
+              },
             ),
-          MarkerLayer(markers: markers),
-          const RichAttributionWidget(
-            attributions: [TextSourceAttribution('© OpenStreetMap contributors')],
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.ebuzima.ambulance',
+              ),
+              PolylineLayer(
+                polylines: [
+                  // Suggested driving route (faint), under the actual driven path.
+                  if (_route.isNotEmpty)
+                    Polyline(
+                      points: _route,
+                      strokeWidth: 4,
+                      color: AppColors.mutedForeground.withValues(alpha: 0.45),
+                    ),
+                  // The path actually driven — bold, on top.
+                  if (_trail.length >= 2)
+                    Polyline(points: _trail, strokeWidth: 6, color: AppColors.primary),
+                ],
+              ),
+              MarkerLayer(markers: markers),
+              const RichAttributionWidget(
+                attributions: [TextSourceAttribution('© OpenStreetMap contributors')],
+              ),
+            ],
           ),
+          Positioned(left: 12, bottom: 12, child: _legend()),
+        ],
+      ),
+    );
+  }
+
+  Widget _legend() {
+    Widget row(Color color, String label) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 18, height: 3, color: color),
+            const SizedBox(width: 6),
+            Text(label, style: const TextStyle(fontSize: 12, color: AppColors.foreground)),
+          ],
+        );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.background.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 6)],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          row(AppColors.primary, 'Your path'),
+          const SizedBox(height: 4),
+          row(AppColors.mutedForeground.withValues(alpha: 0.45), 'Suggested route'),
         ],
       ),
     );
