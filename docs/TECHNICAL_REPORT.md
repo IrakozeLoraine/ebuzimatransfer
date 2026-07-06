@@ -7,7 +7,7 @@
 | **Live application** | https://ebuzimatransfer.duckdns.org |
 | **Repository** | https://github.com/IrakozeLoraine/ebuzimatransfer |
 | **Driver app (APK)** | [Download from GitHub Releases](https://github.com/IrakozeLoraine/ebuzimatransfer/releases/latest) |
-| **Demo video** |  |
+| **Demo video** | [eBuzimaTransfer Video Demo](https://youtu.be/CJ1A5rahCnI) |
 | **Author** | Loraine Mukezwa Irakoze |
 
 ---

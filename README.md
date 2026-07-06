@@ -9,9 +9,9 @@ tracks the assigned ambulance live on a map from pickup to arrival.
 | | |
 | --- | --- |
 | **Live app** | **https://ebuzimatransfer.duckdns.org** |
-| **Demo video (5 min)** |  |
+| **Demo video (5 min)** | [eBuzimaTransfer Video Demo](https://youtu.be/CJ1A5rahCnI) |
 | **Driver app (APK)** | [Download from GitHub Releases](https://github.com/IrakozeLoraine/ebuzimatransfer/releases/latest) |
-| **Technical report** | [TECHNICAL_REPORT.md](TECHNICAL_REPORT.md) |
+| **Technical report** | [TECHNICAL_REPORT.md](docs/TECHNICAL_REPORT.md) |
 
 ## Architecture
 
