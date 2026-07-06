@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Mic, Square, Loader2, RotateCcw, Sparkles, AlertCircle } from "lucide-react";
+import { Mic, Square, Loader2, RotateCcw, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useTranscribeReferral } from "@/hooks/useReferrals";
@@ -114,9 +114,6 @@ export const DictationPanel = ({ onResult, formSpec, disabled }: Props) => {
     <Card className="border-primary/30 bg-primary/5">
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-white">
-            <Sparkles className="h-4 w-4" />
-          </div>
           <div className="flex-1">
             <p className="text-sm font-semibold text-foreground">Dictate the referral</p>
             <p className="text-xs text-muted-foreground">

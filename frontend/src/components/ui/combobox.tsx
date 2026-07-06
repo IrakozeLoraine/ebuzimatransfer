@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronsUpDown, Search } from "lucide-react";
 import { cn } from "@/utils/cn";
 
@@ -30,7 +31,16 @@ export const Combobox = ({
 }: ComboboxProps) => {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
+  // Viewport-relative position for the portaled dropdown, so it floats above the
+  // rest of the form instead of being clipped/covered by later cards.
+  const [pos, setPos] = React.useState<{ top: number; left: number; width: number; openUp: boolean }>({
+    top: 0,
+    left: 0,
+    width: 0,
+    openUp: false,
+  });
   const rootRef = React.useRef<HTMLDivElement>(null);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   const selected = options.find((o) => o.value === value);
@@ -41,11 +51,41 @@ export const Combobox = ({
     return options.filter((o) => o.label.toLowerCase().includes(q));
   }, [options, query]);
 
-  // Close on outside click.
+  // Measure the trigger and decide whether to drop down or flip up (when there's
+  // not enough room below). Recomputed on open and on scroll/resize.
+  const DROPDOWN_MAX = 320; // ~ search box + max-h-60 list
+  const updatePosition = React.useCallback(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUp = spaceBelow < DROPDOWN_MAX && rect.top > spaceBelow;
+    setPos({
+      top: openUp ? rect.top : rect.bottom,
+      left: rect.left,
+      width: rect.width,
+      openUp,
+    });
+  }, []);
+
+  React.useLayoutEffect(() => {
+    if (!open) return;
+    updatePosition();
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [open, updatePosition]);
+
+  // Close on outside click (the dropdown is portaled, so check it too).
   React.useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target) || dropdownRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -83,8 +123,20 @@ export const Combobox = ({
         <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
       </button>
 
-      {open && (
-        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border bg-white dark:bg-white/5 shadow-md">
+      {open && createPortal(
+        <div
+          ref={dropdownRef}
+          style={{
+            position: "fixed",
+            left: pos.left,
+            width: pos.width,
+            ...(pos.openUp ? { bottom: window.innerHeight - pos.top } : { top: pos.top }),
+          }}
+          className={cn(
+            "z-50 overflow-hidden rounded-md border bg-white dark:bg-white/5 shadow-md",
+            pos.openUp ? "mb-1" : "mt-1"
+          )}
+        >
           <div className="flex items-center gap-2 border-b px-3">
             <Search className="h-4 w-4 shrink-0 opacity-50" />
             <input
@@ -119,7 +171,8 @@ export const Combobox = ({
               ))
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

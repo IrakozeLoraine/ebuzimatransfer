@@ -8,7 +8,7 @@ import { useUnits } from "@/hooks/useUnits";
 import { useAuthStore } from "@/store/auth.store";
 import { toast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/utils/apiError";
-import { Zap, Truck, Volume2, Sparkles } from "lucide-react";
+import { Zap, Truck, Volume2 } from "lucide-react";
 import { StatusBadge } from "@/components/atoms/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -329,7 +329,7 @@ export const ReferralDetailPage = () => {
         <Card className="border-primary/30 bg-primary/5">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-sm">
-              <Sparkles className="h-4 w-4 text-primary" /> Voice Referral
+              Voice Referral
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
