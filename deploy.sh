@@ -13,8 +13,7 @@ log "Disk before: $(disk_free)"
 
 # 1. Remove dangling images left behind by previous rebuilds.
 log "Reclaiming disk before build..."
-docker builder prune -af >/dev/null
-docker image prune -af >/dev/null
+docker image prune -f >/dev/null
 
 # 2. Build the images.
 log "Building images..."
@@ -25,8 +24,8 @@ log "Starting services..."
 $COMPOSE up -d
 
 # 4. Clean up after the build so the build cache doesn't grow unbounded.
-log "Cleaning build cache and dangling images..."
-docker builder prune -af >/dev/null
+log "Trimming build cache and dangling images..."
+docker builder prune -f --keep-storage 3g >/dev/null
 docker image prune -f >/dev/null
 
 log "Disk after:  $(disk_free)"
