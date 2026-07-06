@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useReferral, useCompleteReferralForm } from "@/hooks/useReferrals";
+import type { Referral } from "@/types/referral";
 import { toast } from "@/components/ui/toaster";
 import { getApiErrorMessage } from "@/utils/apiError";
 import { ArrowLeft, ClipboardList } from "lucide-react";
@@ -29,44 +30,9 @@ type Values = Record<string, unknown>;
 
 export const CompleteReferralFormPage = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { data: referral, isLoading } = useReferral(id!);
-  const { mutate: complete, isPending } = useCompleteReferralForm();
 
-  // Prefill the form from the referral: the three core fields plus everything in
-  // form_data, flattened into one map for the dynamic renderer.
-  const [values, setValues] = useState<Values | null>(null);
-  const [formType, setFormType] = useState<FormType | null>(null);
-  const [submitAttempted, setSubmitAttempted] = useState(false);
-
-  // Seed local state once the referral loads.
-  useEffect(() => {
-    if (!referral || values !== null) return;
-    setValues({
-      sex: referral.sex ?? "",
-      diagnosis: referral.diagnosis ?? "",
-      reason_for_transfer: referral.reason_for_transfer ?? "",
-      ...(referral.form_data ?? {}),
-    });
-    setFormType((referral.form_type || "EXTERNAL") as FormType);
-  }, [referral, values]);
-
-  const activeType = (formType || "EXTERNAL") as FormType;
-  const requiredFields = useMemo(
-    () => getFormDef(activeType).sections.flatMap((s) => s.fields).filter((f) => f.required),
-    [activeType]
-  );
-  const errors = useMemo(() => {
-    const out: Record<string, string> = {};
-    if (!submitAttempted || !values) return out;
-    for (const f of requiredFields) {
-      const v = values[f.name];
-      if (v == null || v === "") out[f.name] = "Required";
-    }
-    return out;
-  }, [submitAttempted, requiredFields, values]);
-
-  if (isLoading || !values || !referral) {
+  if (isLoading || !referral) {
     return (
       <div className="max-w-2xl space-y-6">
         <div className="h-8 w-48 rounded-lg shimmer" />
@@ -75,8 +41,44 @@ export const CompleteReferralFormPage = () => {
     );
   }
 
+  // Remount (and re-seed) the form when a different referral loads.
+  return <CompleteReferralForm key={referral.id} referral={referral} />;
+};
+
+const CompleteReferralForm = ({ referral }: { referral: Referral }) => {
+  const navigate = useNavigate();
+  const { mutate: complete, isPending } = useCompleteReferralForm();
+
+  // Prefill the form from the referral: the three core fields plus everything in
+  // form_data, flattened into one map for the dynamic renderer.
+  const [values, setValues] = useState<Values>(() => ({
+    sex: referral.sex ?? "",
+    diagnosis: referral.diagnosis ?? "",
+    reason_for_transfer: referral.reason_for_transfer ?? "",
+    ...(referral.form_data ?? {}),
+  }));
+  const [formType, setFormType] = useState<FormType>(
+    (referral.form_type || "EXTERNAL") as FormType
+  );
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+
+  const activeType = formType;
+  const requiredFields = useMemo(
+    () => getFormDef(activeType).sections.flatMap((s) => s.fields).filter((f) => f.required),
+    [activeType]
+  );
+  const errors = useMemo(() => {
+    const out: Record<string, string> = {};
+    if (!submitAttempted) return out;
+    for (const f of requiredFields) {
+      const v = values[f.name];
+      if (v == null || v === "") out[f.name] = "Required";
+    }
+    return out;
+  }, [submitAttempted, requiredFields, values]);
+
   const handleChange = (name: string, value: unknown) =>
-    setValues((prev) => ({ ...(prev ?? {}), [name]: value }));
+    setValues((prev) => ({ ...prev, [name]: value }));
 
   const handleSubmit = () => {
     setSubmitAttempted(true);
