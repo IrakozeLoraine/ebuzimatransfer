@@ -62,7 +62,7 @@ export interface Referral {
   form_data: Record<string, unknown> | null;
   /** False for a call-first lightweight referral whose full MoH form isn't filled in yet. */
   form_completed: boolean;
-  transport_monitoring: TransportMonitoring | null;
+  transport_monitorings: TransportMonitoring[];
   feedback_data: Record<string, unknown> | null;
   counter_referral_data: Record<string, unknown> | null;
   audio_url: string | null;

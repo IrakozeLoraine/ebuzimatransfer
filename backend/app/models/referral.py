@@ -84,11 +84,12 @@ class Referral(Base, UUIDMixin, TimestampMixin):
     # transport is arranged). True for referrals created with the full form up front.
     form_completed: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    # The Patient Monitoring Transfer Form, captured by the ambulance driver by
-    # voice during transport: the recording, its transcript and summary, and the
-    # extracted vital-signs / problem log. Shown read-only to both clinics and
-    # admins on the referral detail. Null until the driver records monitoring.
-    transport_monitoring: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Every Patient Monitoring Transfer Form the ambulance driver records by voice
+    # during transport, oldest first — each holds the recording, its transcript and
+    # summary, and the extracted vital-signs / problem log. Recordings are appended
+    # (never overwritten) so both clinics and the driver can replay each one. Null
+    # until the driver records the first monitoring.
+    transport_monitorings: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     # Filled at the receiving facility per case: the Referral Feedback (outcome of
     # the transferred patient) and the Counter-Referral (recommendations / refer-back).

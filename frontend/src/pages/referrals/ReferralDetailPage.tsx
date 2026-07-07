@@ -346,7 +346,7 @@ export const ReferralDetailPage = () => {
 
       {/* Patient Monitoring Transfer Form — recorded by the ambulance crew by voice
           during transport, shown read-only to both clinics and admins. */}
-      <TransportMonitoringCard monitoring={referral.transport_monitoring} />
+      <TransportMonitoringCard monitorings={referral.transport_monitorings} />
 
       {/* Voice referral — the referring clinician's recording, an AI summary, and the
           full transcript, so the receiving clinic can listen to the original handover. */}

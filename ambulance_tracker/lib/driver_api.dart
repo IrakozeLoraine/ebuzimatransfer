@@ -73,22 +73,35 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
-/// Outcome of uploading a voice-recorded Patient Monitoring Transfer Form.
+/// A voice-recorded Patient Monitoring Transfer Form — the outcome of uploading a
+/// recording, and also each past recording kept on the journey for replay.
 class MonitoringResult {
   MonitoringResult({
     required this.summary,
     required this.vitalsCount,
     required this.problemsCount,
+    this.audioUrl,
+    this.recordedAt,
   });
 
   final String summary;
   final int vitalsCount;
   final int problemsCount;
 
+  /// Relative URL of the kept recording (e.g. ``/api/v1/referrals/monitoring-audio/…``);
+  /// resolve it against the server with [DriverApi.mediaUrl] before playing.
+  final String? audioUrl;
+  final DateTime? recordedAt;
+
+  static DateTime? _parseTime(dynamic v) =>
+      v is String && v.isNotEmpty ? DateTime.tryParse(v)?.toLocal() : null;
+
   static MonitoringResult fromJson(Map<String, dynamic> j) => MonitoringResult(
         summary: j['summary'] as String? ?? '',
         vitalsCount: (j['vital_signs'] as List<dynamic>?)?.length ?? 0,
         problemsCount: (j['problems'] as List<dynamic>?)?.length ?? 0,
+        audioUrl: j['audio_url'] as String?,
+        recordedAt: _parseTime(j['recorded_at']),
       );
 }
 
@@ -108,6 +121,20 @@ class DriverApi {
       base = '$base/api/v1';
     }
     return Uri.parse('$base$path');
+  }
+
+  /// Resolves a server-relative media path (like a monitoring ``audio_url``) into an
+  /// absolute URL against the same host as [baseUrl], so it can be streamed/played.
+  String mediaUrl(String baseUrl, String path) {
+    if (path.startsWith('http')) return path;
+    var base = baseUrl.trim();
+    while (base.endsWith('/')) {
+      base = base.substring(0, base.length - 1);
+    }
+    if (base.endsWith('/api/v1')) {
+      base = base.substring(0, base.length - '/api/v1'.length);
+    }
+    return '$base$path';
   }
 
   Map<String, String> _authHeaders(String token) => {
@@ -239,6 +266,23 @@ class DriverApi {
       }
     } catch (_) {}
     throw ApiException(detail);
+  }
+
+  /// Every monitoring recorded on the active journey, oldest first, so the driver
+  /// can review and replay each one just like the clinics do on the web.
+  Future<List<MonitoringResult>> monitorings({
+    required String baseUrl,
+    required String token,
+  }) async {
+    final resp = await _client
+        .get(_uri(baseUrl, '/driver/journey/monitorings'), headers: _authHeaders(token))
+        .timeout(const Duration(seconds: 20));
+    if (resp.statusCode == 401) throw ApiException('Session expired. Sign in again.');
+    if (resp.statusCode != 200) throw ApiException('Could not load monitorings (${resp.statusCode}).');
+    final body = resp.body.trim();
+    if (body.isEmpty || body == 'null') return const [];
+    final list = jsonDecode(body) as List<dynamic>;
+    return list.map((e) => MonitoringResult.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   Future<List<({double latitude, double longitude})>> journeyPings({

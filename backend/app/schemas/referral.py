@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from typing import Optional, List, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from app.models.referral import ReferralStatus, ArrivalCondition
 
 
@@ -181,7 +181,7 @@ class ReferralOut(BaseModel):
     form_type: str = "EXTERNAL"
     form_data: Optional[dict[str, Any]] = None
     form_completed: bool = True
-    transport_monitoring: Optional[dict[str, Any]] = None
+    transport_monitorings: List[TransportMonitoringResult] = []
     feedback_data: Optional[dict[str, Any]] = None
     counter_referral_data: Optional[dict[str, Any]] = None
     audio_url: Optional[str] = None
@@ -205,6 +205,12 @@ class ReferralOut(BaseModel):
     updated_at: datetime
     status_history: List[StatusHistoryOut] = []
     transport_events: List[TransportEventRef] = []
+
+    @field_validator("transport_monitorings", mode="before")
+    @classmethod
+    def _monitorings_default(cls, v: Any) -> Any:
+        # The column is null until the first recording; treat that as an empty list.
+        return v or []
 
     model_config = {"from_attributes": True}
 

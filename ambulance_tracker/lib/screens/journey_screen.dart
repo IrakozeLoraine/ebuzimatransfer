@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -46,6 +47,12 @@ class _JourneyScreenState extends State<JourneyScreen> {
   bool _recording = false;
   bool _monitoringBusy = false;
 
+  // Past monitorings recorded on this journey, kept so the driver can replay each
+  // one (the clinics see the same list on the web). Oldest first, as the API returns.
+  final _player = AudioPlayer();
+  List<MonitoringResult> _monitorings = const [];
+  int? _playingIndex;
+
   // In-app voice calls with the clinics (driver app side).
   late final CallController _call;
 
@@ -53,6 +60,10 @@ class _JourneyScreenState extends State<JourneyScreen> {
   void initState() {
     super.initState();
     _call = CallController(baseUrl: widget.config.baseUrl, token: widget.config.token)..connect();
+    // Clear the "now playing" highlight once a recording finishes on its own.
+    _player.onPlayerComplete.listen((_) {
+      if (mounted) setState(() => _playingIndex = null);
+    });
     _refresh();
     // Re-check for a newly assigned (or advanced) journey periodically.
     _pollTimer = Timer.periodic(const Duration(seconds: 12), (_) => _refresh(quiet: true));
@@ -63,6 +74,7 @@ class _JourneyScreenState extends State<JourneyScreen> {
     _pollTimer?.cancel();
     _gpsTimer?.cancel();
     _recorder.dispose();
+    _player.dispose();
     _call.dispose();
     WakelockPlus.disable();
     super.dispose();
@@ -121,6 +133,7 @@ class _JourneyScreenState extends State<JourneyScreen> {
       _snack(
         'Monitoring saved — ${result.vitalsCount} vital reading(s), ${result.problemsCount} problem(s).',
       );
+      await _loadMonitorings();
     } on ApiException catch (e) {
       if (e.message.contains('Session expired')) {
         await _signOut();
@@ -131,6 +144,35 @@ class _JourneyScreenState extends State<JourneyScreen> {
       _snack('Could not upload the recording. Try again.');
     } finally {
       if (mounted) setState(() => _monitoringBusy = false);
+    }
+  }
+
+  /// Fetch every monitoring recorded on this journey so the driver can replay them.
+  Future<void> _loadMonitorings() async {
+    try {
+      final list = await _api.monitorings(baseUrl: widget.config.baseUrl, token: widget.config.token);
+      if (mounted) setState(() => _monitorings = list);
+    } catch (_) {
+      // A failed refresh is non-fatal — the list simply stays as it was.
+    }
+  }
+
+  /// Play the recording at [index], or stop it if it is already playing.
+  Future<void> _togglePlay(int index) async {
+    final url = _monitorings[index].audioUrl;
+    if (url == null) return;
+    try {
+      if (_playingIndex == index) {
+        await _player.stop();
+        if (mounted) setState(() => _playingIndex = null);
+        return;
+      }
+      await _player.stop();
+      await _player.play(UrlSource(_api.mediaUrl(widget.config.baseUrl, url)));
+      if (mounted) setState(() => _playingIndex = index);
+    } catch (_) {
+      if (mounted) setState(() => _playingIndex = null);
+      _snack('Could not play the recording.');
     }
   }
 
@@ -145,6 +187,11 @@ class _JourneyScreenState extends State<JourneyScreen> {
         _loading = false;
       });
       _syncGpsStreaming();
+      if (j == null) {
+        setState(() => _monitorings = const []);
+      } else {
+        _loadMonitorings();
+      }
     } on ApiException catch (e) {
       if (!mounted) return;
       // An expired/invalid token sends the driver back to sign-in.
@@ -304,6 +351,9 @@ class _JourneyScreenState extends State<JourneyScreen> {
       lastFixAt: _lastFixAt,
       recording: _recording,
       monitoringBusy: _monitoringBusy,
+      monitorings: _monitorings,
+      playingIndex: _playingIndex,
+      onPlayMonitoring: _togglePlay,
       onStart: () => _advance(() => _api.start(widget.config.baseUrl, widget.config.token)),
       onPicked: () => _advance(() => _api.picked(widget.config.baseUrl, widget.config.token)),
       onArrived: () => _advance(() => _api.arrived(widget.config.baseUrl, widget.config.token)),
@@ -354,6 +404,9 @@ class _JourneyView extends StatelessWidget {
     required this.lastFixAt,
     required this.recording,
     required this.monitoringBusy,
+    required this.monitorings,
+    required this.playingIndex,
+    required this.onPlayMonitoring,
     required this.onStart,
     required this.onPicked,
     required this.onArrived,
@@ -365,6 +418,9 @@ class _JourneyView extends StatelessWidget {
   final DateTime? lastFixAt;
   final bool recording;
   final bool monitoringBusy;
+  final List<MonitoringResult> monitorings;
+  final int? playingIndex;
+  final void Function(int index) onPlayMonitoring;
   final VoidCallback onStart;
   final VoidCallback onPicked;
   final VoidCallback onArrived;
@@ -540,6 +596,26 @@ class _JourneyView extends StatelessWidget {
               ),
             ),
           ),
+          if (monitorings.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text(
+              'Recorded so far (${monitorings.length})',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.mutedForeground,
+              ),
+            ),
+            const SizedBox(height: 6),
+            // Newest first, but keep each recording's real index for playback.
+            for (var i = monitorings.length - 1; i >= 0; i--)
+              _MonitoringTile(
+                number: i + 1,
+                monitoring: monitorings[i],
+                playing: playingIndex == i,
+                onPlay: () => onPlayMonitoring(i),
+              ),
+          ],
         ],
       ),
     );
@@ -554,7 +630,7 @@ class _JourneyView extends StatelessWidget {
       case 'PATIENT_ONBOARD':
         return 'Tap when you reach the receiving hospital.';
       default:
-        return 'This journey is complete. You can sign out.';
+        return 'This journey is complete.';
     }
   }
 
@@ -562,6 +638,83 @@ class _JourneyView extends StatelessWidget {
     final secs = DateTime.now().difference(t).inSeconds;
     if (secs < 60) return '${secs}s ago';
     return '${secs ~/ 60}m ago';
+  }
+}
+
+/// One recorded monitoring in the driver's list, with a play/stop button to replay
+/// the kept audio and a one-line summary of what was logged.
+class _MonitoringTile extends StatelessWidget {
+  const _MonitoringTile({
+    required this.number,
+    required this.monitoring,
+    required this.playing,
+    required this.onPlay,
+  });
+
+  final int number;
+  final MonitoringResult monitoring;
+  final bool playing;
+  final VoidCallback onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasAudio = monitoring.audioUrl != null;
+    final subtitle = monitoring.summary.isNotEmpty
+        ? monitoring.summary
+        : '${monitoring.vitalsCount} vital reading(s), ${monitoring.problemsCount} problem(s)';
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.muted,
+        borderRadius: BorderRadius.circular(kRadius),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  monitoring.recordedAt != null
+                      ? 'Recording $number • ${_time(monitoring.recordedAt!)}'
+                      : 'Recording $number',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.foreground,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            onPressed: hasAudio ? onPlay : null,
+            tooltip: playing ? 'Stop' : 'Play recording',
+            icon: Icon(
+              playing ? Icons.stop_circle : Icons.play_circle_fill,
+              size: 34,
+              color: hasAudio ? AppColors.primary : AppColors.border,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _time(DateTime t) {
+    final h = t.hour.toString().padLeft(2, '0');
+    final m = t.minute.toString().padLeft(2, '0');
+    return '$h:$m';
   }
 }
 

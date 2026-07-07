@@ -258,7 +258,10 @@ async def record_monitoring(
     result.recorded_at = _now()
 
     referral = await session.get(Referral, t.referral_id)
-    referral.transport_monitoring = result.model_dump(mode="json")
+    # Append — never overwrite — so every recording is kept for both sides to replay.
+    history = list(referral.transport_monitorings or [])
+    history.append(result.model_dump(mode="json"))
+    referral.transport_monitorings = history
 
     # Let both sides know fresh monitoring is available to review.
     await _notify_receiving(
@@ -277,6 +280,20 @@ async def record_monitoring(
         "referrals", {"event": "REFERRAL_MONITORING", "referral_id": str(t.referral_id)}
     )
     return result
+
+
+@router.get("/journey/monitorings", response_model=list[TransportMonitoringResult])
+async def journey_monitorings(
+    ambulance=Depends(get_current_ambulance),
+    session: AsyncSession = Depends(get_session),
+):
+    """Every monitoring the driver has recorded on the active journey, oldest first,
+    so the driver app can list and replay them just like the clinics do on the web."""
+    t = await _active_transport(session, ambulance.id)
+    if not t:
+        return []
+    referral = await session.get(Referral, t.referral_id)
+    return [TransportMonitoringResult(**m) for m in (referral.transport_monitorings or [])]
 
 
 @router.post("/journey/ping", status_code=201)
