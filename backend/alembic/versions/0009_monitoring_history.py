@@ -6,14 +6,14 @@ during a transport (oldest first). Any existing single record is wrapped into a
 one-element array so no monitoring is lost. Written with IF (NOT) EXISTS so it is
 safe to re-run.
 
-Revision ID: 0005_monitoring_history
-Revises: 0004_feedback
+Revision ID: 0009_monitoring_history
+Revises: 0008_referral_draft
 Create Date: 2026-07-07
 """
 from alembic import op
 
-revision = "0005_monitoring_history"
-down_revision = "0004_feedback"
+revision = "0009_monitoring_history"
+down_revision = "0008_referral_draft"
 branch_labels = None
 depends_on = None
 
