@@ -1,7 +1,7 @@
 {
-  "name": "eBuzimaTransfer – ICU/HDU Referral Platform",
+  "name": "eBuzimaTransfer – Referral Platform",
   "short_name": "eBuzima",
-  "description": "Real-time ICU/HDU referral management platform for Rwanda's healthcare network",
+  "description": "Real-time referral management platform for Rwanda's healthcare network",
   "id": "/",
   "start_url": "/",
   "scope": "/",

@@ -21,7 +21,7 @@ import {
 const SLIDES = [
   {
     icon: <Bed className="h-8 w-8 text-white" />,
-    title: "Real-time ICU & HDU Capacity",
+    title: "Real-time Clinical Units Capacity",
     description:
       "See live resource availability across every referral hospital in Rwanda — no phone calls, no delays.",
   },
