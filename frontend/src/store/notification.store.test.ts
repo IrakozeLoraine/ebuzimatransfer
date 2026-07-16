@@ -54,6 +54,19 @@ describe("notification.store", () => {
     expect(useNotificationStore.getState().unreadCount).toBe(0);
   });
 
+  it("markRead leaves the non-matching notifications untouched", () => {
+    useNotificationStore.getState().setNotifications([
+      makeNotification("1", false),
+      makeNotification("2", false),
+    ]);
+    useNotificationStore.getState().markRead("2");
+
+    const [first, second] = useNotificationStore.getState().notifications;
+    expect(first.is_read).toBe(false);
+    expect(second.is_read).toBe(true);
+    expect(useNotificationStore.getState().unreadCount).toBe(1);
+  });
+
   it("markAllRead flags everything and zeroes the count", () => {
     useNotificationStore.getState().setNotifications([
       makeNotification("1", false),

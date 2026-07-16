@@ -13,6 +13,7 @@ We seed the environment before ``app.core.config`` is imported so that
 """
 import os
 import uuid
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
@@ -150,3 +151,41 @@ async def user_factory(db_session):
         return user, facility
 
     return _create
+
+
+@pytest_asyncio.fixture
+async def make_auth(user_factory):
+    """Create a persisted user with the given roles and return everything a test
+    needs to make authenticated API calls as them: the user, their facility, and
+    a ready-to-use ``Authorization`` header carrying a valid access token scoped
+    to that facility.
+    """
+    from app.core.security import create_access_token
+
+    counter = {"n": 0}
+
+    async def _make(
+        *,
+        roles: tuple[str, ...] = ("SUPER_ADMIN",),
+        medical_id: str | None = None,
+        facility_name: str = "Auth Hospital",
+        facility_type: str = "NRH_UTH",
+        **kwargs,
+    ):
+        counter["n"] += 1
+        mid = medical_id or f"MED-AUTH-{counter['n']}"
+        user, facility = await user_factory(
+            roles=roles,
+            medical_id=mid,
+            facility_name=f"{facility_name} {counter['n']}",
+            facility_type=facility_type,
+            **kwargs,
+        )
+        token = create_access_token(str(user.id), list(roles), str(facility.id))
+        return SimpleNamespace(
+            user=user,
+            facility=facility,
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    return _make

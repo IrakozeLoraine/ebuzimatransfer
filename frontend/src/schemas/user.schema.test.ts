@@ -44,6 +44,12 @@ describe("createAssignSchema", () => {
     ).toBe(true);
     expect(createAssignSchema.safeParse({ medical_id: "MD123", first_name: "Ada", last_name: "Uwase", roles: [] }).success).toBe(false);
   });
+
+  it("accepts a valid optional email but rejects a malformed one", () => {
+    const base = { medical_id: "MD123", first_name: "Ada", last_name: "Uwase", roles: ["CLINICIAN"] };
+    expect(createAssignSchema.safeParse({ ...base, email: "ada@chuk.rw" }).success).toBe(true);
+    expect(createAssignSchema.safeParse({ ...base, email: "nope" }).success).toBe(false);
+  });
 });
 
 describe("editUserSchema", () => {

@@ -129,6 +129,15 @@ describe("useSwitchFacility", () => {
     expect(useAuthStore.getState().accessToken).toBe("a2");
     expect(invalidate).toHaveBeenCalledWith();
   });
+
+  it("surfaces a toast when switching facility fails", async () => {
+    mocked.switchFacility.mockRejectedValue(new Error("nope"));
+    const { wrapper } = createQueryWrapper();
+
+    const { result } = renderHook(() => useSwitchFacility(), { wrapper });
+    await expect(result.current.mutateAsync("f2")).rejects.toThrow();
+    await waitFor(() => expect(result.current.isError).toBe(true));
+  });
 });
 
 describe("useUpdateProfile", () => {
@@ -142,6 +151,15 @@ describe("useUpdateProfile", () => {
 
     expect(useAuthStore.getState().user?.first_name).toBe("Grace");
   });
+
+  it("reports an error toast when the update fails", async () => {
+    mocked.updateProfile.mockRejectedValue(new Error("nope"));
+    const { wrapper } = createQueryWrapper();
+
+    const { result } = renderHook(() => useUpdateProfile(), { wrapper });
+    await expect(result.current.mutateAsync({ first_name: "Grace" } as never)).rejects.toThrow();
+    await waitFor(() => expect(result.current.isError).toBe(true));
+  });
 });
 
 describe("useChangePassword", () => {
@@ -153,6 +171,17 @@ describe("useChangePassword", () => {
     await result.current.mutateAsync({ currentPassword: "old", newPassword: "new" });
 
     expect(mocked.changePassword).toHaveBeenCalledWith("old", "new");
+  });
+
+  it("reports an error toast when the change fails", async () => {
+    mocked.changePassword.mockRejectedValue(new Error("nope"));
+    const { wrapper } = createQueryWrapper();
+
+    const { result } = renderHook(() => useChangePassword(), { wrapper });
+    await expect(
+      result.current.mutateAsync({ currentPassword: "old", newPassword: "new" }),
+    ).rejects.toThrow();
+    await waitFor(() => expect(result.current.isError).toBe(true));
   });
 });
 

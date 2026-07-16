@@ -247,12 +247,12 @@ HTTP is redirected to HTTPS. To use a different domain, change it in
 There are three groups of tests: backend unit tests for the domain logic,
 backend integration tests that run the FastAPI app against a real PostgreSQL
 database, and frontend tests for the utilities, form schemas, store and
-components. The testing approach and results are written up in
-[TECHNICAL_REPORT.md](TECHNICAL_REPORT.md#4-testing).
+components.
 
 ```bash
 # Backend (the integration tests need Postgres; they skip if it isn't reachable)
-cd backend && pytest -q          # 46 passed, 10 skipped locally
+cd backend
+python3 -m venv .venv && source .venv/bin/activate && pytest -q          # 46 passed, 10 skipped locally
 
 # Frontend (Vitest + Testing Library)
 cd frontend && npm run test      # 64 tests

@@ -31,6 +31,22 @@ describe("getApiErrorMessage", () => {
     );
   });
 
+  it("uses the bare msg when a validation entry has no loc", () => {
+    const err = axiosErrorWithDetail([{ msg: "generic failure" }]);
+    expect(getApiErrorMessage(err)).toBe("generic failure");
+  });
+
+  it("falls back when a validation array yields no usable messages", () => {
+    const err = axiosErrorWithDetail([{ loc: ["body"] }]);
+    expect(getApiErrorMessage(err, "custom fallback")).toBe("custom fallback");
+  });
+
+  it("uses the fallback when an AxiosError has no message or detail", () => {
+    const err = new AxiosError("");
+    err.message = "";
+    expect(getApiErrorMessage(err, "final fallback")).toBe("final fallback");
+  });
+
   it("reads a nested detail.message object", () => {
     const err = axiosErrorWithDetail({ message: "Rate limited" });
     expect(getApiErrorMessage(err)).toBe("Rate limited");

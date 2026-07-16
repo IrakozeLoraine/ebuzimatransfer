@@ -18,14 +18,14 @@ class ReportService:
         stmt = (
             select(
                 Facility.name.label("facility"),
-                Unit.type.label("unit_type"),
+                Unit.name.label("unit_type"),
                 func.coalesce(func.sum(Resource.quantity), 0).label("total_resources"),
                 func.coalesce(func.sum(Resource.occupied), 0).label("occupied_resources"),
             )
             .join(Unit, Resource.unit_id == Unit.id)
             .join(Facility, Resource.facility_id == Facility.id)
             .where(Facility.is_active == True)
-            .group_by(Facility.name, Unit.type)
+            .group_by(Facility.name, Unit.name)
         )
         result = await self.session.execute(stmt)
         rows = []
