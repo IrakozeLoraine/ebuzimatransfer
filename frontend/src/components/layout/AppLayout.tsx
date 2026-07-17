@@ -3,17 +3,20 @@ import { Sidebar } from "./Sidebar";
 import { MobileSidebar } from "./MobileSidebar";
 import { Header } from "./Header";
 import { ContextPicker } from "./ContextPicker";
-import { useNotificationsWebSocket } from "@/hooks/useWebSocket";
+import {
+  useNotificationsWebSocket,
+  useReferralsWebSocket,
+  useCapacityWebSocket,
+} from "@/hooks/useWebSocket";
 import { useWorkContext } from "@/hooks/useWorkContext";
 import { useAuthStore } from "@/store/auth.store";
 import { CallProvider } from "@/components/call/CallProvider";
 
 export const AppLayout = () => {
-  // Live notification delivery over the per-user websocket channel.
   useNotificationsWebSocket();
+  useReferralsWebSocket();
+  useCapacityWebSocket();
 
-  // Prompt a multi-facility / multi-unit user to pick where they're working before
-  // showing the app; they can change it later from the header.
   const contextConfirmed = useAuthStore((s) => s.contextConfirmed);
   const { needsSelection } = useWorkContext();
   if (needsSelection && !contextConfirmed) {
