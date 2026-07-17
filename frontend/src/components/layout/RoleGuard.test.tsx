@@ -14,6 +14,7 @@ const makeUser = (roles: string[]): UserMe => ({
   phone: null,
   location: null,
   unit_ids: [],
+  active_unit_id: null,
   roles,
   active_facility_id: null,
   facilities: [],

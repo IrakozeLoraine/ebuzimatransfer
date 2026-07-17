@@ -37,7 +37,11 @@ const unitsInBucket = (r: Resource, status: ResourceStatus): number =>
 export const ResourcesPage = () => {
   const { isSuperAdmin, isFacilityAdmin, isAdmin, canManageResources, canAssignResources, canUpdateResourceStatus } = usePermissions();
   const myFacilityId = useAuthStore((s) => s.user?.active_facility_id ?? null);
-  const myUnitIds = useAuthStore((s) => s.user?.unit_ids ?? []);
+  const activeUnitId = useAuthStore((s) => s.user?.active_unit_id ?? null);
+  const allUnitIds = useAuthStore((s) => s.user?.unit_ids ?? []);
+  // Scope the clinician's view to the unit they're currently working in (falling back
+  // to every unit they belong to when no single active unit is set).
+  const myUnitIds = activeUnitId ? [activeUnitId] : allUnitIds;
 
   const [searchParams] = useSearchParams();
   const initialStatus = searchParams.get("status");

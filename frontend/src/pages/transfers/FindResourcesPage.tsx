@@ -16,11 +16,17 @@ import type { Resource } from "@/types/resource";
 export const FindResourcesPage = () => {
   const navigate = useNavigate();
   const { canCreateReferral } = usePermissions();
-  // You can't transfer a patient into your own department, so resources in the
-  // unit(s) the clinician works in at their own facility are excluded. Other units
-  // at their facility — and any unit elsewhere — remain visible.
+  // You can't transfer a patient into your own department, so resources in the unit
+  // the clinician is currently working in at their own facility are excluded. Other
+  // units at their facility — and any unit elsewhere — remain visible. Falls back to
+  // every unit they belong to when no single active unit is set.
   const myFacilityId = useAuthStore((s) => s.user?.active_facility_id ?? null);
-  const myUnitIds = useAuthStore((s) => s.user?.unit_ids ?? []);
+  const activeUnitId = useAuthStore((s) => s.user?.active_unit_id ?? null);
+  const allUnitIds = useAuthStore((s) => s.user?.unit_ids ?? []);
+  const myUnitIds = useMemo(
+    () => (activeUnitId ? [activeUnitId] : allUnitIds),
+    [activeUnitId, allUnitIds]
+  );
   const { data: units = [] } = useUnits();
   const [unitId, setUnitId] = useState<string>("");
   const [search, setSearch] = useState("");

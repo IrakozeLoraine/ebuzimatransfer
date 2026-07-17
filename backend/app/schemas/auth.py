@@ -12,6 +12,13 @@ class SwitchFacilityRequest(BaseModel):
     facility_id: uuid.UUID
 
 
+class SwitchContextRequest(BaseModel):
+    """Set the active facility and (optionally) the active clinical unit. Omitting
+    ``unit_id`` resets the unit to the facility's unambiguous default."""
+    facility_id: uuid.UUID
+    unit_id: Optional[uuid.UUID] = None
+
+
 class TokenResponse(BaseModel):
     access_token: Optional[str] = None
     refresh_token: Optional[str] = None

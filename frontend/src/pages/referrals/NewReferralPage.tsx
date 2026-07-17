@@ -79,7 +79,11 @@ export const NewReferralPage = () => {
   const { data: facilities = [] } = useFacilities();
   const { data: units = [] } = useUnits();
   const myFacilityId = useAuthStore((s) => s.user?.active_facility_id ?? null);
-  const myUnitIds = useAuthStore((s) => s.user?.unit_ids ?? []);
+  const activeUnitId = useAuthStore((s) => s.user?.active_unit_id ?? null);
+  const allUnitIds = useAuthStore((s) => s.user?.unit_ids ?? []);
+  // The unit(s) counted as "the requester's own" — the single active unit when set,
+  // otherwise every unit they belong to at their facility.
+  const myUnitIds = activeUnitId ? [activeUnitId] : allUnitIds;
   const myName = useAuthStore((s) => (s.user ? `${s.user.first_name} ${s.user.last_name}`.trim() : ""));
   const [preferredFacilityDetails, setPreferredFacilityDetails] = useState<{
     facilityId: string;

@@ -7,8 +7,12 @@ interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
   isAuthenticated: boolean;
+  /** Whether the user has confirmed which facility/unit they're working in this
+   *  session. Reset on each fresh login so an ambiguous user is prompted to pick. */
+  contextConfirmed: boolean;
   setTokens: (access: string, refresh: string) => void;
   setUser: (user: UserMe) => void;
+  setContextConfirmed: (confirmed: boolean) => void;
   logout: () => void;
   hasRole: (role: string) => boolean;
 }
@@ -20,6 +24,7 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       isAuthenticated: false,
+      contextConfirmed: false,
 
       setTokens: (access, refresh) => {
         localStorage.setItem("access_token", access);
@@ -29,10 +34,18 @@ export const useAuthStore = create<AuthState>()(
 
       setUser: (user) => set({ user }),
 
+      setContextConfirmed: (confirmed) => set({ contextConfirmed: confirmed }),
+
       logout: () => {
         localStorage.removeItem("access_token");
         localStorage.removeItem("refresh_token");
-        set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
+        set({
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+          isAuthenticated: false,
+          contextConfirmed: false,
+        });
       },
 
       hasRole: (role) => get().user?.roles.includes(role) ?? false,
@@ -44,6 +57,7 @@ export const useAuthStore = create<AuthState>()(
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
         user: state.user,
+        contextConfirmed: state.contextConfirmed,
       }),
     }
   )

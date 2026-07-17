@@ -223,6 +223,7 @@ class UserMe(BaseModel):
     phone: Optional[str] = None
     location: Optional[str] = None
     unit_ids: List[uuid.UUID] = []
+    active_unit_id: Optional[uuid.UUID] = None
     roles: List[str]
     active_facility_id: Optional[uuid.UUID] = None
     facilities: List[FacilityRef] = []
@@ -246,6 +247,7 @@ class UserMe(BaseModel):
             phone=user.phone,
             location=user.location,
             unit_ids=[fu.unit_id for fu in user.units_for_facility(active_facility_id)],
+            active_unit_id=getattr(user, "active_unit_id", None),
             roles=roles,
             active_facility_id=active_facility_id,
             facilities=[FacilityRef(id=f.id, name=f.name) for f in user.facilities],

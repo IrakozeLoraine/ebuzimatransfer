@@ -1,5 +1,6 @@
 import { useAuthStore } from "@/store/auth.store";
-import { useLogout, useSwitchFacility } from "@/hooks/useAuth";
+import { useLogout, useSwitchContext } from "@/hooks/useAuth";
+import { useWorkContext } from "@/hooks/useWorkContext";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -7,7 +8,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Check, ChevronsUpDown, LogOut, Menu, Settings } from "lucide-react";
+import { Check, ChevronsUpDown, LayoutGrid, LogOut, Menu, Settings } from "lucide-react";
 import { Link } from "react-router-dom";
 import { NotificationBell } from "./NotificationBell";
 import { FacilityLocationButton } from "./FacilityLocationButton";
@@ -17,11 +18,11 @@ import { useUiStore } from "@/store/ui.store";
 export const Header = () => {
     const user = useAuthStore((s) => s.user);
     const { mutate: doLogout } = useLogout();
-    const { mutate: doSwitch, isPending: switching } = useSwitchFacility();
+    const { mutate: doSwitch, isPending: switching } = useSwitchContext();
     const openMobileNav = useUiStore((s) => s.setMobileNavOpen);
 
-    const facilities = user?.facilities ?? [];
-    const activeFacility = facilities.find((f) => f.id === user?.active_facility_id);
+    const { facilities, activeFacilityId, activeFacility, activeUnitId, activeUnit, unitsForActiveFacility } =
+        useWorkContext();
 
     return (
         <header
@@ -64,12 +65,12 @@ export const Header = () => {
                             <DropdownMenuItem
                                 key={f.id}
                                 className="flex items-center gap-2"
-                                onClick={() => f.id !== user?.active_facility_id && doSwitch(f.id)}
+                                onClick={() => f.id !== activeFacilityId && doSwitch({ facilityId: f.id })}
                             >
                                 <Check
                                     className={[
                                         "h-4 w-4",
-                                        f.id === user?.active_facility_id ? "opacity-100" : "opacity-0",
+                                        f.id === activeFacilityId ? "opacity-100" : "opacity-0",
                                     ].join(" ")}
                                 />
                                 <span className="truncate">{f.name}</span>
@@ -79,6 +80,50 @@ export const Header = () => {
                 </DropdownMenu>
             ) : (
                 <div />
+            )}
+
+            {/* Unit switcher — shown when the clinician works in more than one unit at
+                their active facility, so they can change which one they're in. */}
+            {unitsForActiveFacility.length > 1 && (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <button
+                            type="button"
+                            disabled={switching}
+                            className={[
+                                "flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium md:px-3",
+                                "transition-all duration-200 hover:bg-muted outline-none disabled:opacity-60",
+                            ].join(" ")}
+                        >
+                            <LayoutGrid className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            <span className="text-foreground max-w-[32vw] truncate md:max-w-[12rem]">
+                                {activeUnit?.name ?? "Select unit"}
+                            </span>
+                            <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-64">
+                        {unitsForActiveFacility.map((u) => (
+                            <DropdownMenuItem
+                                key={u.id}
+                                className="flex items-center gap-2"
+                                onClick={() =>
+                                    u.id !== activeUnitId &&
+                                    activeFacilityId &&
+                                    doSwitch({ facilityId: activeFacilityId, unitId: u.id })
+                                }
+                            >
+                                <Check
+                                    className={[
+                                        "h-4 w-4",
+                                        u.id === activeUnitId ? "opacity-100" : "opacity-0",
+                                    ].join(" ")}
+                                />
+                                <span className="truncate">{u.name}</span>
+                            </DropdownMenuItem>
+                        ))}
+                    </DropdownMenuContent>
+                </DropdownMenu>
             )}
             </div>
 

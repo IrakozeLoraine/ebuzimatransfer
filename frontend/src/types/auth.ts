@@ -43,6 +43,8 @@ export interface UserMe {
   location: string | null;
   /** Clinical units the user works in at their active facility. */
   unit_ids: string[];
+  /** The single clinical unit the user is currently working in (null if none/unpicked). */
+  active_unit_id: string | null;
   /** Roles effective in the active facility (global grants + active-facility grants). */
   roles: string[];
   active_facility_id: string | null;

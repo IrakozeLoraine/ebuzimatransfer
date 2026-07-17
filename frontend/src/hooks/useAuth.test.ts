@@ -7,6 +7,7 @@ import {
   useSetPassword,
   useLogout,
   useSwitchFacility,
+  useSwitchContext,
   useUpdateProfile,
   useChangePassword,
   useCurrentUser,
@@ -33,6 +34,7 @@ const makeUser = (roles: string[], overrides: Partial<UserMe> = {}): UserMe => (
   phone: null,
   location: null,
   unit_ids: [],
+  active_unit_id: null,
   roles,
   active_facility_id: null,
   facilities: [],
@@ -137,6 +139,36 @@ describe("useSwitchFacility", () => {
     const { result } = renderHook(() => useSwitchFacility(), { wrapper });
     await expect(result.current.mutateAsync("f2")).rejects.toThrow();
     await waitFor(() => expect(result.current.isError).toBe(true));
+  });
+});
+
+describe("useSwitchContext", () => {
+  it("swaps tokens, marks the context confirmed and refetches all data", async () => {
+    mocked.switchContext.mockResolvedValue({ access_token: "a2", refresh_token: "r2" } as never);
+    mocked.getMe.mockResolvedValue(
+      makeUser(["CLINICIAN"], { active_facility_id: "f2", active_unit_id: "u9" }),
+    );
+    const { wrapper, queryClient } = createQueryWrapper();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useSwitchContext(), { wrapper });
+    await result.current.mutateAsync({ facilityId: "f2", unitId: "u9" });
+
+    expect(mocked.switchContext).toHaveBeenCalledWith("f2", "u9");
+    expect(useAuthStore.getState().accessToken).toBe("a2");
+    expect(useAuthStore.getState().contextConfirmed).toBe(true);
+    expect(invalidate).toHaveBeenCalledWith();
+  });
+
+  it("passes a null unit when none is chosen", async () => {
+    mocked.switchContext.mockResolvedValue({ access_token: "a2", refresh_token: "r2" } as never);
+    mocked.getMe.mockResolvedValue(makeUser(["CLINICIAN"]));
+    const { wrapper } = createQueryWrapper();
+
+    const { result } = renderHook(() => useSwitchContext(), { wrapper });
+    await result.current.mutateAsync({ facilityId: "f2" });
+
+    expect(mocked.switchContext).toHaveBeenCalledWith("f2", null);
   });
 });
 

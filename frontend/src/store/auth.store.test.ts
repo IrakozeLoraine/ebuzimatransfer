@@ -11,6 +11,7 @@ const makeUser = (roles: string[]): UserMe => ({
   phone: null,
   location: null,
   unit_ids: [],
+  active_unit_id: null,
   roles,
   active_facility_id: null,
   facilities: [],
@@ -64,5 +65,17 @@ describe("auth.store", () => {
 
   it("hasRole returns false when there is no user", () => {
     expect(useAuthStore.getState().hasRole("CLINICIAN")).toBe(false);
+  });
+
+  it("setContextConfirmed toggles the working-context flag", () => {
+    expect(useAuthStore.getState().contextConfirmed).toBe(false);
+    useAuthStore.getState().setContextConfirmed(true);
+    expect(useAuthStore.getState().contextConfirmed).toBe(true);
+  });
+
+  it("logout resets contextConfirmed so the next login re-prompts", () => {
+    useAuthStore.getState().setContextConfirmed(true);
+    useAuthStore.getState().logout();
+    expect(useAuthStore.getState().contextConfirmed).toBe(false);
   });
 });

@@ -39,13 +39,17 @@ def _create_token(data: Dict[str, Any], expires_delta: timedelta) -> str:
 
 
 def create_access_token(
-    sub: str, roles: list[str], active_facility_id: str | None = None
+    sub: str,
+    roles: list[str],
+    active_facility_id: str | None = None,
+    active_unit_id: str | None = None,
 ) -> str:
     return _create_token(
         {
             "sub": sub,
             "roles": roles,
             "active_facility_id": active_facility_id,
+            "active_unit_id": active_unit_id,
             "type": "access",
         },
         timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),

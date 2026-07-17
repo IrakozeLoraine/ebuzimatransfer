@@ -21,6 +21,17 @@ export const switchFacility = async (facility_id: string): Promise<TokenResponse
   return data;
 };
 
+export const switchContext = async (
+  facility_id: string,
+  unit_id?: string | null
+): Promise<TokenResponse> => {
+  const { data } = await api.post<TokenResponse>("/auth/switch-context", {
+    facility_id,
+    unit_id: unit_id ?? null,
+  });
+  return data;
+};
+
 export const logout = async (): Promise<void> => {
   await api.post("/auth/logout");
 };

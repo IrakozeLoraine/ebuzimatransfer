@@ -7,6 +7,7 @@ import {
   getMe,
   logout as apiLogout,
   switchFacility as apiSwitchFacility,
+  switchContext as apiSwitchContext,
   updateProfile as apiUpdateProfile,
   changePassword as apiChangePassword,
 } from "@/api/auth.api";
@@ -15,11 +16,14 @@ import { getApiErrorMessage } from "@/utils/apiError";
 import type { LoginRequest, SetPasswordRequest, UpdateProfilePayload } from "@/types/auth";
 
 export const useCompleteAuth = () => {
-  const { setTokens, setUser } = useAuthStore();
+  const { setTokens, setUser, setContextConfirmed } = useAuthStore();
   const navigate = useNavigate();
 
   return async (access_token: string, refresh_token: string) => {
     setTokens(access_token, refresh_token);
+    // A fresh sign-in hasn't picked a working context yet — the app's ContextPicker
+    // prompts when the facility/unit choice is ambiguous.
+    setContextConfirmed(false);
     const user = await getMe();
     setUser(user);
     const isAdmin = user.roles.some((r) => r === "SUPER_ADMIN" || r === "FACILITY_ADMIN");
@@ -83,6 +87,35 @@ export const useSwitchFacility = () => {
       toast({
         variant: "destructive",
         title: "Failed to switch facility",
+        description: getApiErrorMessage(error),
+      });
+    },
+  });
+};
+
+export const useSwitchContext = () => {
+  const { setTokens, setUser, setContextConfirmed } = useAuthStore();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ facilityId, unitId }: { facilityId: string; unitId?: string | null }) => {
+      const tokens = await apiSwitchContext(facilityId, unitId ?? null);
+      if (tokens.access_token && tokens.refresh_token) {
+        setTokens(tokens.access_token, tokens.refresh_token);
+      }
+      const user = await getMe();
+      setUser(user);
+      setContextConfirmed(true);
+      return user;
+    },
+    onSuccess: () => {
+      // Data is facility/unit-scoped — refetch everything for the new context.
+      qc.invalidateQueries();
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to switch",
         description: getApiErrorMessage(error),
       });
     },
