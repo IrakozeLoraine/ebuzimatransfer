@@ -252,10 +252,12 @@ components.
 ```bash
 # Backend (the integration tests need Postgres; they skip if it isn't reachable)
 cd backend
-python3 -m venv .venv && source .venv/bin/activate && pytest -q          # 46 passed, 10 skipped locally
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+pytest                           # 397 passed, 1 skipped locally
 
 # Frontend (Vitest + Testing Library)
-cd frontend && npm run test      # 64 tests
+cd frontend && npm run test      # 239 tests across 36 files
 cd frontend && npm run test:coverage
 ```
 

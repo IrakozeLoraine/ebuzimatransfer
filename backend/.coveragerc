@@ -1,0 +1,13 @@
+[run]
+branch = True
+source = app
+
+[report]
+skip_covered = False
+exclude_also =
+    if TYPE_CHECKING:
+    raise NotImplementedError
+    @(abc\.)?abstractmethod
+
+[html]
+directory = htmlcov
