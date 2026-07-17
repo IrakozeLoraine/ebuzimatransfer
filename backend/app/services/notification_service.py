@@ -8,6 +8,13 @@ from app.models.user import User, UserFacilityRole, UserFacilityUnit, Role
 from app.websocket.manager import ws_manager
 
 
+def _is_super_admin(user: User) -> bool:
+    """System admins manage the platform, not patient flow, so they're excluded from
+    operational referral/transport notifications even if they also hold a clinician
+    grant somewhere."""
+    return any(fr.role.name == "SUPER_ADMIN" for fr in user.facility_roles)
+
+
 class NotificationService:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -87,6 +94,8 @@ class NotificationService:
             stmt = stmt.where(UserFacilityRole.facility_id == facility_id)
         result = await self.session.execute(stmt.distinct())
         for user in result.scalars().all():
+            if _is_super_admin(user):
+                continue
             await self.create(user.id, title, message, event_type, entity_type, entity_id)
 
     async def notify_facility_unit(
@@ -123,5 +132,7 @@ class NotificationService:
         result = await self.session.execute(stmt.distinct())
         for user in result.scalars().all():
             if exclude_user_id and user.id == exclude_user_id:
+                continue
+            if _is_super_admin(user):
                 continue
             await self.create(user.id, title, message, event_type, entity_type, entity_id)

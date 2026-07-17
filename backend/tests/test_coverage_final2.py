@@ -106,6 +106,29 @@ class TestNotificationFanout:
         await db_session.commit()
         assert await svc.list_for_user(member.user.id) == []
 
+    async def test_notify_role_excludes_super_admins(self, db_session, make_auth):
+        # A user who is both a clinician and a system admin must not receive
+        # operational referral notifications; a plain clinician still does.
+        both = await make_auth(roles=("CLINICIAN", "SUPER_ADMIN"))
+        plain = await make_auth(roles=("CLINICIAN",))
+        svc = NotificationService(db_session)
+        await svc.notify_role("CLINICIAN", "New request", "body")
+        await db_session.commit()
+        assert await svc.list_for_user(both.user.id) == []
+        assert any(n.title == "New request" for n in await svc.list_for_user(plain.user.id))
+
+    async def test_notify_facility_unit_excludes_super_admins(self, db_session, make_auth):
+        unit = Unit(name="ICU", tier="DISTRICT")
+        db_session.add(unit)
+        await db_session.flush()
+        admin = await make_auth(roles=("CLINICIAN", "SUPER_ADMIN"))
+        db_session.add(UserFacilityUnit(user_id=admin.user.id, facility_id=admin.facility.id, unit_id=unit.id))
+        await db_session.commit()
+        svc = NotificationService(db_session)
+        await svc.notify_facility_unit(admin.facility.id, unit.id, "CLINICIAN", "T", "M")
+        await db_session.commit()
+        assert await svc.list_for_user(admin.user.id) == []
+
 
 class TestTrackingEta:
     async def test_track_eta_from_latest_ping(self, client, db_session, make_auth, monkeypatch):
