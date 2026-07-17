@@ -42,9 +42,16 @@ class ReportService:
         return rows
 
     async def export_excel(self) -> bytes:
-        import pandas as pd
+        from openpyxl import Workbook
+
         occupancy = await self.occupancy_report()
+        fields = list(OccupancyReportRow.model_fields)
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Occupancy"
+        ws.append(fields)
+        for row in occupancy:
+            ws.append([getattr(row, f) for f in fields])
         buf = io.BytesIO()
-        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-            pd.DataFrame([r.model_dump() for r in occupancy]).to_excel(writer, sheet_name="Occupancy", index=False)
+        wb.save(buf)
         return buf.getvalue()
