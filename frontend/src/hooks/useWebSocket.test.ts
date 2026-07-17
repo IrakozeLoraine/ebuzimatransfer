@@ -9,7 +9,7 @@ import {
 } from "./useWebSocket";
 import { useAuthStore } from "@/store/auth.store";
 import { useNotificationStore } from "@/store/notification.store";
-import type { User } from "@/types/auth";
+import type { User } from "@/types/user";
 
 class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
