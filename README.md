@@ -170,9 +170,9 @@ device without building it yourself, download the prebuilt APK from the
 ```bash
 cd ambulance_tracker
 flutter pub get
-flutter run            # on a connected device/emulator
-flutter analyze        # lint
-flutter test           # tests
+flutter run                # on a connected device/emulator
+flutter analyze            # lint
+flutter test --coverage    # tests
 ```
 
 ---

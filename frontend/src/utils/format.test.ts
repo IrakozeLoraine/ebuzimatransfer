@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatDate, formatDateTime, timeAgo } from "./format";
+import { formatDate, formatDateTime, formatFormDateValue, timeAgo } from "./format";
 
 describe("formatDate", () => {
   it("formats an ISO date as 'dd MMM yyyy'", () => {
@@ -14,6 +14,24 @@ describe("formatDateTime", () => {
     const out = formatDateTime("2026-07-03T14:30:00");
     expect(out).toContain("Jul 2026");
     expect(out).toMatch(/\d{2}:\d{2}$/);
+  });
+});
+
+describe("formatFormDateValue", () => {
+  it("drops the T separator from a datetime-local value", () => {
+    expect(formatFormDateValue("2026-07-16T11:47", "datetime")).toBe("16 Jul 2026, 11:47");
+  });
+
+  it("keeps a date-only value on its stated day", () => {
+    expect(formatFormDateValue("2026-07-16", "date")).toBe("16 Jul 2026");
+  });
+
+  it("normalises a time-only value", () => {
+    expect(formatFormDateValue("09:05", "time")).toBe("09:05");
+  });
+
+  it("falls back to the raw value when unparseable", () => {
+    expect(formatFormDateValue("sometime tuesday", "datetime")).toBe("sometime tuesday");
   });
 });
 

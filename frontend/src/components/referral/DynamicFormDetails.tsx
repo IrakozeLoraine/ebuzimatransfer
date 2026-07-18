@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ADDRESS_KEYS, getFormDef, type FieldDef, type FormSection } from "@/config/transferForms";
+import { formatFormDateValue } from "@/utils/format";
 
 type FormData = Record<string, unknown>;
 type TableRow = Record<string, string>;
@@ -37,6 +38,8 @@ export const DynamicFormDetails = ({ formType, formData, sections, title }: Prop
     if (f.type === "checkbox") return v === true ? "Yes" : "No";
     if (f.type === "checkboxGroup" && Array.isArray(v)) return (v as string[]).join(", ");
     if (f.type === "table") return renderTable(f);
+    if ((f.type === "date" || f.type === "time" || f.type === "datetime") && typeof v === "string" && v !== "")
+      return formatFormDateValue(v, f.type);
     const text = f.optionLabels?.[String(v)] ?? String(v ?? "");
     return f.suffix ? `${text} ${f.suffix}` : text;
   };

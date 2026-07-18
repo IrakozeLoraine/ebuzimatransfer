@@ -189,3 +189,8 @@ async def make_auth(user_factory):
         )
 
     return _make
+
+def pytest_collection_modifyitems(config, items):
+    for item in items:
+        is_integration = item.path.name.startswith("test_integration_")
+        item.add_marker("integration" if is_integration else "unit")

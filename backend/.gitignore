@@ -84,3 +84,5 @@ Thumbs.db
 # Static / media (if generated)
 staticfiles/
 media/
+
+loadtest_results/

@@ -89,4 +89,43 @@ describe("useWorkContext", () => {
     expect(result.current.unitsForFacility("f2")).toHaveLength(2);
     expect(result.current.unitsForFacility(null)).toEqual([]);
   });
+
+  it("yields an empty context when nobody is signed in", () => {
+    setUser(null);
+    const { result } = renderHook(() => useWorkContext());
+
+    expect(result.current.facilities).toEqual([]);
+    expect(result.current.activeFacilityId).toBeNull();
+    expect(result.current.activeFacility).toBeNull();
+    expect(result.current.activeUnitId).toBeNull();
+    expect(result.current.activeUnit).toBeNull();
+    expect(result.current.needsSelection).toBe(false);
+  });
+
+  it("resolves no active facility when the active id is not one the user belongs to", () => {
+    setUser(
+      baseUser({
+        active_facility_id: "f-gone",
+        facilities: [F1],
+        facility_roles: [{ facility: F1, roles: ["CLINICIAN"], units: [ICU] }],
+      }),
+    );
+    const { result } = renderHook(() => useWorkContext());
+
+    expect(result.current.activeFacility).toBeNull();
+    expect(result.current.unitsForActiveFacility).toEqual([]);
+  });
+
+  it("exposes no units for a facility the user holds no roles at", () => {
+    setUser(
+      baseUser({
+        active_facility_id: "f1",
+        facilities: [F1],
+        facility_roles: [{ facility: F1, roles: ["CLINICIAN"], units: [ICU] }],
+      }),
+    );
+    const { result } = renderHook(() => useWorkContext());
+
+    expect(result.current.unitsForFacility("f2")).toEqual([]);
+  });
 });
