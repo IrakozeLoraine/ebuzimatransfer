@@ -33,7 +33,9 @@ Compose behind an Nginx reverse proxy.
 - **Redis** backs the WebSocket pub/sub so broadcasts reach clients across
   multiple Uvicorn workers.
 - **OSRM** (a self-hosted routing server loaded with Rwanda OSM data) provides
-  road distance/duration for ambulance ETAs.
+  road distance/duration for ambulance ETAs. Its routing graph is built on the
+  host by [`osrm-prepare.sh`](osrm-prepare.sh) rather than shipped in the repo;
+  the backend degrades to a straight-line ETA whenever it is unavailable.
 
 ## Quick start (Docker)
 
@@ -47,7 +49,22 @@ git clone https://github.com/IrakozeLoraine/ebuzimatransfer.git
 cd ebuzimatransfer
 ```
 
-**2. Start the stack**
+**2. Build the routing data**
+
+```bash
+./osrm-prepare.sh                  # add --stop-ollama if the box is memory-tight
+```
+
+`osrm-data/` downloads a Rwanda OpenStreetMap extract and builds it, which
+takes several minutes and peaks around 700MB of RAM. See
+[`osrm-data/README.md`](osrm-data/README.md) for what it produces and how to
+refresh it later.
+
+You can skip this to get the rest of the stack up: the backend falls back to a
+straight-line ETA when OSRM is unreachable, so referrals still work — the `osrm`
+container will just restart-loop and distances will be less accurate.
+
+**3. Start the stack**
 
 ```bash
 docker compose up --build          # add -d to run it in the background
@@ -57,7 +74,7 @@ On the first boot the backend automatically applies the database migrations
 (`alembic upgrade head`) and seeds the roles and a single super-admin account
 (`seeds.py`).
 
-**3. Open the app**
+**4. Open the app**
 
 | What            | URL                              |
 | --------------- | -------------------------------- |
@@ -68,7 +85,7 @@ On the first boot the backend automatically applies the database migrations
 Confirm it's up by opening the health check — it should return
 `{"status":"ok"}`.
 
-**4. Log in and build your data**
+**5. Log in and build your data**
 
 Log in with the seeded super admin. **Sign in with the Medical ID:**
 

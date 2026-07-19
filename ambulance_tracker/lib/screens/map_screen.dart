@@ -1,10 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
 import '../config.dart';
@@ -88,27 +86,24 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   /// Fetch the driving route. Origin is the ambulance (or the sending facility until a
-  /// GPS fix), destination is the receiving facility. Falls back to a straight line.
+  /// GPS fix); the destination comes from the journey, server-side. Falls back to a
+  /// straight line.
   Future<void> _loadRoute() async {
     final origin = _me ?? _from;
     final dest = _to;
-    if (origin == null || dest == null) return;
-    try {
-      final url = Uri.parse(
-        'https://router.project-osrm.org/route/v1/driving/'
-        '${origin.longitude},${origin.latitude};${dest.longitude},${dest.latitude}'
-        '?overview=full&geometries=geojson',
-      );
-      final resp = await http.get(url).timeout(const Duration(seconds: 12));
-      if (resp.statusCode == 200) {
-        final routes = (jsonDecode(resp.body)['routes'] as List?) ?? const [];
-        final coords = routes.isNotEmpty ? (routes[0]['geometry']['coordinates'] as List) : const [];
-        final pts = coords.map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble())).toList();
-        if (mounted && pts.isNotEmpty) setState(() => _route = pts);
-        return;
-      }
-    } catch (_) {/* fall through to straight line */}
-    if (mounted) setState(() => _route = [origin, dest]);
+    if (origin == null) return;
+    final pts = await _api.journeyRoute(
+      baseUrl: widget.config.baseUrl,
+      token: widget.config.token,
+      lat: origin.latitude,
+      lng: origin.longitude,
+    );
+    if (!mounted) return;
+    if (pts.isNotEmpty) {
+      setState(() => _route = pts.map((p) => LatLng(p[0], p[1])).toList());
+    } else if (dest != null) {
+      setState(() => _route = [origin, dest]);
+    }
   }
 
   @override

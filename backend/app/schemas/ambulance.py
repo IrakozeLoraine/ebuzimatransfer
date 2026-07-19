@@ -121,3 +121,14 @@ class AmbulanceTrack(BaseModel):
     departure_time: Optional[datetime] = None         # start of the journey
     estimated_arrival_time: Optional[datetime] = None  # ETA via road routing
     arrival_time: Optional[datetime] = None           # actual arrival
+
+
+class DriverRoute(BaseModel):
+    """Road route from the ambulance's current position to its destination, for the
+    driver app's map. The phone cannot reach OSRM directly — it is bound to loopback
+    on the host — so the backend routes on its behalf."""
+    # Ordered [lat, lng] points. Two points means the straight-line fallback.
+    route: List[Tuple[float, float]] = []
+    duration_s: float
+    distance_m: float
+    destination: Optional[RoutePoint] = None

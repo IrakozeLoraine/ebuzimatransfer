@@ -142,6 +142,72 @@ jobs:
       - name: Test
         run: flutter test
 
+  infra:
+    name: Infra (scripts + OSRM wiring)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # shellcheck is preinstalled on ubuntu-latest runners.
+      - name: Lint shell scripts
+        run: shellcheck deploy.sh osrm-prepare.sh
+
+      - name: Validate compose file
+        run: docker compose config --quiet
+
+      - name: Check OSRM data is documented, not committed
+        run: |
+          set -euo pipefail
+          test -f osrm-data/README.md \
+            || { echo "::error::osrm-data/README.md is missing"; exit 1; }
+          stray=$(git ls-files osrm-data | grep -v '^osrm-data/README.md$' || true)
+          if [ -n "$stray" ]; then
+            echo "::error::Generated OSRM data has been committed:"
+            echo "$stray"
+            exit 1
+          fi
+
+      - name: Smoke-test the OSRM pipeline and service command
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/osrm
+          # A minimal extract: two nodes joined by one residential way.
+          cat > /tmp/osrm/tiny.osm <<'OSM'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <osm version="0.6" generator="ci">
+            <node id="1" lat="-1.9441" lon="30.0588" version="1"/>
+            <node id="2" lat="-1.9450" lon="30.0600" version="1"/>
+            <way id="1" version="1">
+              <nd ref="1"/><nd ref="2"/>
+              <tag k="highway" v="residential"/>
+            </way>
+          </osm>
+          OSM
+          # Take the image from the compose file so this cannot drift from prod.
+          image=$(docker compose config --format json | python3 -c \
+            'import json,sys; print(json.load(sys.stdin)["services"]["osrm"]["image"])')
+          echo "Using $image"
+          run() { docker run --rm -v /tmp/osrm:/data "$image" "$@"; }
+          run osrm-extract -p /opt/car.lua /data/tiny.osm
+          run osrm-partition /data/tiny.osrm
+          run osrm-customize /data/tiny.osrm
+          docker run --rm -d --name ci-osrm -p 5000:5000 -v /tmp/osrm:/data \
+            "$image" osrm-routed --algorithm mld /data/tiny.osrm
+          ok=0
+          for _ in $(seq 30); do
+            if curl -sf -o /tmp/osrm/route.json \
+              "http://localhost:5000/route/v1/driving/30.0588,-1.9441;30.0600,-1.9450?overview=false"; then
+              ok=1; break
+            fi
+            sleep 1
+          done
+          docker logs ci-osrm || true
+          docker rm -f ci-osrm >/dev/null
+          [ "$ok" = 1 ] || { echo "::error::osrm-routed never served a route"; exit 1; }
+          grep -q '"code":"Ok"' /tmp/osrm/route.json \
+            || { echo "::error::Unexpected OSRM response:"; cat /tmp/osrm/route.json; exit 1; }
+          echo "OSRM served a route using the compose file's command and algorithm."
+
   # ---------------------------------------------------------------------------
   # Docker — make sure the production images actually build.
   # ---------------------------------------------------------------------------

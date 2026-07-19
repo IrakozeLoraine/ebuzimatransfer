@@ -172,6 +172,20 @@ def write_csv(results: list[Propagation], path: Path) -> None:
             writer.writerow([r.index, f"{r.delay_ms:.2f}"])
 
 
+def read_csv(path: Path) -> list[Propagation]:
+    """Load a previous run's CSV so the figure can be plotted away from the
+    server — the production image has no matplotlib, so collection and
+    plotting are separate steps."""
+    with path.open(newline="") as fh:
+        return [
+            Propagation(
+                index=int(row["update_number"]),
+                delay_ms=float(row["propagation_delay_ms"]),
+            )
+            for row in csv.DictReader(fh)
+        ]
+
+
 def write_figure(results: list[Propagation], path: Path) -> None:
     import matplotlib
 
@@ -218,8 +232,14 @@ def main() -> None:
         "--ws-url",
         help="Defaults to the base URL with http:// swapped for ws://",
     )
-    parser.add_argument("--medical-id", required=True)
-    parser.add_argument("--password", required=True)
+    parser.add_argument("--medical-id")
+    parser.add_argument("--password")
+    parser.add_argument(
+        "--plot-only",
+        type=Path,
+        metavar="CSV",
+        help="Plot a previous run's propagation.csv instead of measuring",
+    )
     parser.add_argument("--updates", type=int, default=50)
     parser.add_argument(
         "--gap-seconds",
@@ -245,6 +265,15 @@ def main() -> None:
         "http://", "ws://"
     )
     args.out_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.plot_only:
+        png_path = args.out_dir / "propagation_delay.png"
+        write_figure(read_csv(args.plot_only), png_path)
+        print(f"Wrote {png_path}")
+        return
+
+    if not args.medical_id or not args.password:
+        parser.error("--medical-id and --password are required unless --plot-only is used")
 
     results = asyncio.run(
         measure(

@@ -194,6 +194,30 @@ class DriverApi {
     return Journey.fromJson(jsonDecode(body) as Map<String, dynamic>);
   }
 
+  /// The road route from [lat],[lng] to the active journey's destination, as ordered
+  /// [lat, lng] pairs. Routed by the backend against the self-hosted OSRM. 
+  /// Returns an empty list on any failure so the caller
+  /// can fall back to a straight line.
+  Future<List<List<double>>> journeyRoute({
+    required String baseUrl,
+    required String token,
+    required double lat,
+    required double lng,
+  }) async {
+    try {
+      final resp = await _client
+          .get(_uri(baseUrl, '/driver/journey/route?lat=$lat&lng=$lng'), headers: _authHeaders(token))
+          .timeout(const Duration(seconds: 20));
+      if (resp.statusCode != 200) return const [];
+      final pts = (jsonDecode(resp.body)['route'] as List?) ?? const [];
+      return pts
+          .map<List<double>>((p) => [(p[0] as num).toDouble(), (p[1] as num).toDouble()])
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
   /// This ambulance's completed journeys, most recent first.
   Future<List<Journey>> journeys({required String baseUrl, required String token}) async {
     final resp = await _client

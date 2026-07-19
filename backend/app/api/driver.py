@@ -17,12 +17,14 @@ from app.services.referral_service import ReferralService
 from app.services.notification_service import NotificationService
 from app.services.audit_service import AuditService
 from app.services.dictation_service import DictationService
+from app.services.routing import road_route
 from app.websocket.manager import ws_manager
 from app.schemas.ambulance import (
     DriverLogin,
     DriverToken,
     DriverJourney,
     DriverPing,
+    DriverRoute,
     RoutePoint,
     AmbulanceOut,
     LocationPingOut,
@@ -137,6 +139,40 @@ async def journey_pings(
         .order_by(AmbulanceLocationPing.recorded_at.asc())
     )
     return [LocationPingOut.model_validate(p) for p in rows]
+
+
+@router.get("/journey/route", response_model=DriverRoute)
+async def journey_route(
+    lat: float,
+    lng: float,
+    ambulance=Depends(get_current_ambulance),
+    session: AsyncSession = Depends(get_session),
+):
+    """Road route from the ambulance's reported position to its destination.
+
+    The destination is taken from the active journey rather than the query string, so
+    the phone cannot route to somewhere the referral was never sent. Mirrors the web
+    view's overlay, and degrades to a straight line exactly as road_route() does."""
+    t = await _active_transport(session, ambulance.id)
+    if not t:
+        raise NotFoundError("No active journey")
+
+    referral = await session.get(Referral, t.referral_id)
+    dest_id = referral.accepted_facility_id or referral.preferred_facility_id
+    destination = await session.get(Facility, dest_id) if dest_id else None
+    dest_pt = _route_point(destination)
+    # Facilities may have no coordinates recorded yet, in which case there is nothing
+    # to route to and the map should show the trail alone.
+    if not dest_pt:
+        raise NotFoundError("Destination facility has no coordinates")
+
+    route = await road_route(lat, lng, dest_pt.latitude, dest_pt.longitude)
+    return DriverRoute(
+        route=route.geometry,
+        duration_s=route.duration_s,
+        distance_m=route.distance_m,
+        destination=dest_pt,
+    )
 
 
 @router.get("/journeys", response_model=list[DriverJourney])

@@ -1,0 +1,34 @@
+# Root-level ignores. Each sub-project (backend/, frontend/, ambulance_tracker/)
+# keeps its own .gitignore for language-specific artifacts.
+
+# ---------------------------------------------------------------------------
+# OSRM routing data
+# ---------------------------------------------------------------------------
+/osrm-data/*
+!/osrm-data/README.md
+# Partial downloads left behind by an interrupted mirror fetch.
+*.osm.pbf.part
+
+# ---------------------------------------------------------------------------
+# Secrets and local configuration — only the .example files are tracked.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+!*.env.example
+
+# ---------------------------------------------------------------------------
+# Runtime data written by the running stack (uploads, voice notes, DB volumes).
+# ---------------------------------------------------------------------------
+media/
+postgres-data/
+redis-data/
+
+# ---------------------------------------------------------------------------
+# Editor / OS noise
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
