@@ -9,18 +9,18 @@ log() { printf '\n\033[1;34m==>\033[0m %s\n' "$1"; }
 
 disk_free() { df -h / | awk 'NR==2 {print $4 " free (" $5 " used)"}'; }
 
-if [[ ! -s "osrm-data/rwanda-latest.osrm" ]]; then
-  cat >&2 <<'EOF'
-No OSRM routing graph in osrm-data/ — ambulance ETAs and route geometry
-would fail once the stack is up.
+GRAPH="osrm-data/rwanda-latest.osrm"
 
-Build it first (several minutes, ~700MB peak RAM):
+if [[ ! -s "$GRAPH" ]]; then
+  log "No OSRM routing graph — building it (several minutes, ~700MB peak RAM)..."
+  ./osrm-prepare.sh
 
-  ./osrm-prepare.sh              # add --stop-ollama if memory is tight
-
-Then re-run this script. See osrm-data/README.md for details.
-EOF
-  exit 1
+  if [[ ! -s "$GRAPH" ]]; then
+    echo "osrm-prepare.sh succeeded but $GRAPH is still missing." >&2
+    echo "The guard is likely checking the wrong filename. osrm-data/ holds:" >&2
+    ls -la osrm-data/ >&2
+    exit 1
+  fi
 fi
 
 log "Disk before: $(disk_free)"
