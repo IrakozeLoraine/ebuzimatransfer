@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Paths below are repo-root-relative (osrm-data/, docker-compose.yml).
+cd "$SCRIPT_DIR/.."
 
 COMPOSE="docker compose"
 
@@ -13,7 +15,7 @@ GRAPH="osrm-data/rwanda-latest.osrm"
 
 if [[ ! -s "$GRAPH" ]]; then
   log "No OSRM routing graph — building it (several minutes, ~700MB peak RAM)..."
-  ./osrm-prepare.sh
+  "$SCRIPT_DIR/osrm-prepare.sh"
 
   if [[ ! -s "$GRAPH" ]]; then
     echo "osrm-prepare.sh succeeded but $GRAPH is still missing." >&2
@@ -25,21 +27,24 @@ fi
 
 log "Disk before: $(disk_free)"
 
-# 1. Remove dangling images left behind by previous rebuilds.
-log "Reclaiming disk before build..."
+# 1. Remove dangling images left behind by previous deploys.
+log "Reclaiming disk..."
 docker image prune -f >/dev/null
 
-# 2. Build the images.
-log "Building images..."
-$COMPOSE build
+# 2. Fetch the images CI published to GHCR.
+#    Only backend and frontend: db, redis, osrm, nginx and certbot come from
+#    Docker Hub, which this host reaches unreliably. Those images are already
+#    cached locally and pulling them again risks a TLS timeout for no gain.
+#    Set IMAGE_TAG=<git-sha> to roll back to a specific build.
+log "Pulling images (tag: ${IMAGE_TAG:-latest})..."
+$COMPOSE pull backend frontend
 
 # 3. Start / restart the stack.
 log "Starting services..."
 $COMPOSE up -d
 
-# 4. Clean up after the build so the build cache doesn't grow unbounded.
-log "Trimming build cache and dangling images..."
-docker builder prune -f --keep-storage 3g >/dev/null
+# 4. Drop the images the new ones just replaced.
+log "Trimming replaced images..."
 docker image prune -f >/dev/null
 
 log "Disk after:  $(disk_free)"

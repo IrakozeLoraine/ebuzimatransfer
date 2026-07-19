@@ -34,7 +34,7 @@ Compose behind an Nginx reverse proxy.
   multiple Uvicorn workers.
 - **OSRM** (a self-hosted routing server loaded with Rwanda OSM data) provides
   road distance/duration for ambulance ETAs. Its routing graph is built on the
-  host by [`osrm-prepare.sh`](osrm-prepare.sh) rather than shipped in the repo;
+  host by [`osrm-prepare.sh`](scripts/osrm-prepare.sh) rather than shipped in the repo;
   the backend degrades to a straight-line ETA whenever it is unavailable.
 
 ## Quick start (Docker)
@@ -52,7 +52,7 @@ cd ebuzimatransfer
 **2. Build the routing data**
 
 ```bash
-./osrm-prepare.sh                  # add --stop-ollama if the box is memory-tight
+./scripts/osrm-prepare.sh                  # add --stop-ollama if the box is memory-tight
 ```
 
 `osrm-data/` downloads a Rwanda OpenStreetMap extract and builds it, which
@@ -207,13 +207,23 @@ Runs on every push and pull request to `main`. Jobs run in parallel:
 | **Backend**      | Installs deps, compiles all modules, applies Alembic migrations against a real Postgres service, and verifies the app imports. |
 | **Frontend**     | `npm ci`, ESLint, and a full type-check + Vite build.                     |
 | **Mobile**       | `flutter pub get`, `flutter analyze`, `flutter test`.                      |
-| **Docker build** | Builds the production backend and frontend images to catch Dockerfile breakage. |
+| **Docker build** | Builds the production backend and frontend images, and publishes them to GHCR on `main`. |
 
 ### CD — [`deploy.yml`](.github/workflows/deploy.yml)
 
 Runs after CI succeeds on `main` (or manually via *Run workflow*). It SSHes into
-the production host, fast-forwards the checkout, and runs [`deploy.sh`](deploy.sh)
-(rebuild images → `docker compose up -d` → prune build cache).
+the production host, fast-forwards the checkout, and runs [`deploy.sh`](scripts/deploy.sh)
+(pull images from GHCR → `docker compose up -d` → prune replaced images).
+
+The production host does **not** build images — its link to Docker Hub is slow
+and drops TLS handshakes, so CI builds them and the host pulls finished layers
+from `ghcr.io/irakozeloraine/ebuzimatransfer-{backend,frontend}`. The packages
+are public, so no registry login is needed on the server. To roll back, deploy
+with a pinned tag:
+
+```bash
+IMAGE_TAG=<git-sha> ./scripts/deploy.sh
+```
 
 Deployment is **skipped automatically** until the following repository secrets
 are set (Settings → Secrets and variables → Actions):
@@ -233,7 +243,7 @@ are set (Settings → Secrets and variables → Actions):
 On a server with Docker installed and this repo checked out:
 
 ```bash
-./deploy.sh
+./scripts/deploy.sh
 ```
 
 ### HTTPS (Let's Encrypt)
@@ -289,6 +299,6 @@ ebuzimatransfer/
 ├── ambulance_tracker/   Flutter GPS tracker app
 ├── nginx/               Reverse-proxy config and TLS certs
 ├── docker-compose.yml   Full-stack orchestration
-├── deploy.sh            Build + (re)start the stack on a host
+├── scripts/             Deploy, OSRM data prep, and measurement scripts
 └── .github/workflows/   CI and CD pipelines
 ```

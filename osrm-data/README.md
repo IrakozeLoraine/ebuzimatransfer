@@ -9,7 +9,7 @@ checkout**; everything in it is generated, so nothing but this file is tracked.
 From the repository root, on the host that will run the stack:
 
 ```bash
-./osrm-prepare.sh              # add --stop-ollama if the box is memory-tight
+./scripts/osrm-prepare.sh              # add --stop-ollama if the box is memory-tight
 ```
 
 That downloads a Rwanda OpenStreetMap extract and runs the three OSRM build
@@ -33,6 +33,6 @@ still go stale — the mirrors rebuild their extracts daily.
 
 ## Refreshing
 
-Delete `rwanda-latest.osm.pbf` and re-run `./osrm-prepare.sh` to pull current map
+Delete `rwanda-latest.osm.pbf` and re-run `./scripts/osrm-prepare.sh` to pull current map
 data, then `docker compose restart osrm`. The container mounts this directory
 read-only, so the rebuild must happen on the host.

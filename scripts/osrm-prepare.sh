@@ -3,7 +3,8 @@
 # .osrm.* files that osrm-routed needs to serve routes.
 set -euo pipefail
 
-cd "$(dirname "$0")"
+# DATA_DIR below is repo-root-relative.
+cd "$(dirname "$0")/.."
 
 REGION_URLS=(
   "https://download.openstreetmap.fr/extracts/africa/rwanda-latest.osm.pbf"

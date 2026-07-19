@@ -35,18 +35,36 @@ jobs:
       - name: Deploy over SSH
         if: steps.config.outputs.configured == 'true'
         uses: appleboy/ssh-action@v1
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
-          # The backend image installs heavy ML deps (faster-whisper, av, torch)
-          # over a slow link, so the build can run well past the action's default
-          # 10m command timeout. Give it room.
           command_timeout: 60m
+          envs: POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_DB,SECRET_KEY,ALLOWED_ORIGINS,DEPLOY_PATH
           # DEPLOY_PATH is the checkout of this repo on the server.
           script: |
             set -euo pipefail
-            cd "${{ secrets.DEPLOY_PATH }}"
+            cd "$DEPLOY_PATH"
             git pull --ff-only origin main
-            ./deploy.sh
+
+            # Rewrite .env from the repository secrets. Written with a
+            # restrictive umask because it holds the DB password and JWT key.
+            umask 077
+            cat > .env <<ENV
+            POSTGRES_USER=$POSTGRES_USER
+            POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+            POSTGRES_DB=$POSTGRES_DB
+            SECRET_KEY=$SECRET_KEY
+            ALLOWED_ORIGINS=$ALLOWED_ORIGINS
+            ENVIRONMENT=production
+            ENV
+
+            ./scripts/deploy.sh

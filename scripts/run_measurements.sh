@@ -2,15 +2,16 @@
 #
 # Collects the performance measurements for the eBuzimaTransfer research paper.
 #
-#   ./run_measurements.sh smoke   # short run: confirms the box survives
-#   ./run_measurements.sh full    # Generates Figures
-#   ./run_measurements.sh ws      # Mutates real occupancy data
-#   ./run_measurements.sh all     # smoke -> full -> ws
-#   ./run_measurements.sh facts   # server specs + DB row counts for methodology
+#   ./scripts/run_measurements.sh smoke   # short run: confirms the box survives
+#   ./scripts/run_measurements.sh full    # Generates Figures
+#   ./scripts/run_measurements.sh ws      # Mutates real occupancy data
+#   ./scripts/run_measurements.sh all     # smoke -> full -> ws
+#   ./scripts/run_measurements.sh facts   # server specs + DB row counts for methodology
 
 set -euo pipefail
 
-cd "$(dirname "$0")"
+# docker compose calls below need the repo root, where the compose file lives.
+cd "$(dirname "$0")/.."
 
 MEDICAL_ID="${EBUZIMA_MEDICAL_ID:-SA-0001}"
 OUT_DIR=/app/loadtest_results
@@ -148,9 +149,9 @@ facts() {
     | grep -v 'cmdline' || true
 
   note "Database row counts at test time"
-  docker compose exec -T db psql -U ebuzimauser -d ebuzimadb -c "
-    SELECT relname AS table, n_live_tup AS rows
-    FROM pg_stat_user_tables ORDER BY n_live_tup DESC LIMIT 20;"
+  docker compose exec -T db sh -c \
+    'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT relname, n_live_tup \
+     FROM pg_stat_user_tables ORDER BY n_live_tup DESC LIMIT 20;"'
 
   note "Neighbours sharing this host"
   echo "OSRM and Ollama run on the host and contend for the same 2 cores."
