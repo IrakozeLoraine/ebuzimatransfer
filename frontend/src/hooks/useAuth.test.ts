@@ -14,6 +14,7 @@ import {
 } from "./useAuth";
 import { useAuthStore } from "@/store/auth.store";
 import * as authApi from "@/api/auth.api";
+import { toast } from "@/components/ui/toaster";
 import type { UserMe } from "@/types/auth";
 
 // react-router's useNavigate needs a Router; mock it so hooks can be exercised
@@ -24,6 +25,7 @@ vi.mock("@/api/auth.api");
 vi.mock("@/components/ui/toaster", () => ({ toast: vi.fn() }));
 
 const mocked = vi.mocked(authApi);
+const mockToast = vi.mocked(toast);
 
 const makeUser = (roles: string[], overrides: Partial<UserMe> = {}): UserMe => ({
   id: "u1",
@@ -132,6 +134,17 @@ describe("useSwitchFacility", () => {
     expect(invalidate).toHaveBeenCalledWith();
   });
 
+  it("uses a generic label when the new active facility isn't in the user's list", async () => {
+    mocked.switchFacility.mockResolvedValue({ access_token: "a2", refresh_token: "r2" } as never);
+    mocked.getMe.mockResolvedValue(makeUser(["CLINICIAN"], { active_facility_id: "f2", facilities: [] }));
+    const { wrapper } = createQueryWrapper();
+
+    const { result } = renderHook(() => useSwitchFacility(), { wrapper });
+    await result.current.mutateAsync("f2");
+
+    expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ title: "Switched to facility" }));
+  });
+
   it("surfaces a toast when switching facility fails", async () => {
     mocked.switchFacility.mockRejectedValue(new Error("nope"));
     const { wrapper } = createQueryWrapper();
@@ -169,6 +182,20 @@ describe("useSwitchContext", () => {
     await result.current.mutateAsync({ facilityId: "f2" });
 
     expect(mocked.switchContext).toHaveBeenCalledWith("f2", null);
+  });
+
+  it("surfaces a toast when switching context fails", async () => {
+    mocked.switchContext.mockRejectedValue(new Error("nope"));
+    const { wrapper } = createQueryWrapper();
+
+    const { result } = renderHook(() => useSwitchContext(), { wrapper });
+    await expect(result.current.mutateAsync({ facilityId: "f2" })).rejects.toThrow();
+
+    await waitFor(() =>
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: "destructive", title: "Failed to switch" }),
+      ),
+    );
   });
 });
 

@@ -33,6 +33,10 @@ describe("formatFormDateValue", () => {
   it("falls back to the raw value when unparseable", () => {
     expect(formatFormDateValue("sometime tuesday", "datetime")).toBe("sometime tuesday");
   });
+
+  it("falls back to the raw value when a time is unparseable", () => {
+    expect(formatFormDateValue("half past nine", "time")).toBe("half past nine");
+  });
 });
 
 describe("timeAgo", () => {

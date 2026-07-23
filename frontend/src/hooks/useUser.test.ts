@@ -153,6 +153,48 @@ describe("useUser mutations", () => {
     expect(onSuccess).toHaveBeenCalled();
   });
 
+  it("createAndAssignUser falls back to the facility picked on the form", async () => {
+    mocked.createAndAssignUser.mockResolvedValue({ id: "u1" } as never);
+    const { wrapper } = createQueryWrapper();
+
+    const { result } = renderHook(
+      () => useCreateAndAssignUser({ onSuccess: vi.fn(), fixedFacility: null }),
+      { wrapper },
+    );
+    await result.current.mutateAsync({
+      medical_id: "MD1",
+      first_name: "Ada",
+      last_name: "Uwase",
+      email: "",
+      phone: "",
+      facility_id: "f4",
+      roles: ["CLINICIAN"],
+      unit_ids: [],
+    } as never);
+
+    // Blank optional fields are dropped rather than sent as empty strings.
+    expect(mocked.createAndAssignUser).toHaveBeenCalledWith(
+      expect.objectContaining({ facility_id: "f4", email: undefined, phone: undefined }),
+    );
+  });
+
+  it("createAndAssignUser toasts when the API rejects", async () => {
+    mocked.createAndAssignUser.mockRejectedValue(new Error("nope"));
+    const { wrapper } = createQueryWrapper();
+
+    const { result } = renderHook(
+      () => useCreateAndAssignUser({ onSuccess: vi.fn(), fixedFacility: null }),
+      { wrapper },
+    );
+    await expect(
+      result.current.mutateAsync({ medical_id: "MD1", roles: [], unit_ids: [] } as never),
+    ).rejects.toThrow();
+
+    await waitFor(() =>
+      expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })),
+    );
+  });
+
   it("deactivateUser deactivates by id and calls back", async () => {
     mocked.deactivateUser.mockResolvedValue(undefined as never);
     const onSuccess = vi.fn();
