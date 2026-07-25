@@ -4,7 +4,6 @@ import type {
   CreatePhoneLinePayload,
   PhoneLineImportResult,
   CallLog,
-  LogCallPayload,
 } from "@/types/call";
 
 export const getPhoneLines = async (facilityId: string, activeOnly = true): Promise<PhoneLine[]> => {
@@ -33,11 +32,6 @@ export const importPhoneLines = async (
     params: { facility_id: facilityId },
     headers: { "Content-Type": "multipart/form-data" },
   });
-  return data;
-};
-
-export const logCall = async (payload: LogCallPayload): Promise<CallLog> => {
-  const { data } = await api.post<CallLog>("/calls/log", payload);
   return data;
 };
 

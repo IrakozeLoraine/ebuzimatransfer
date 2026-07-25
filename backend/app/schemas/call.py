@@ -41,15 +41,6 @@ class PhoneLineImportResult(BaseModel):
     errors: list[PhoneLineImportError] = []
 
 
-class CallLogCreate(BaseModel):
-    to_number: str
-    to_facility_id: Optional[uuid.UUID] = None
-    from_line_id: Optional[uuid.UUID] = None
-    referral_id: Optional[uuid.UUID] = None
-    purpose: Optional[str] = None
-    notes: Optional[str] = None
-
-
 class CallLogOut(BaseModel):
     id: uuid.UUID
     referral_id: Optional[uuid.UUID]

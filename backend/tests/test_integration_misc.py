@@ -17,7 +17,7 @@ pytestmark = pytest.mark.asyncio
 class TestNotifications:
     API = "/api/v1/notifications"
 
-    async def test_list_and_unread_count_and_mark_read(self, client, make_auth, db_session):
+    async def test_list_and_unread_filter_and_mark_read(self, client, make_auth, db_session):
         user = await make_auth(roles=("CLINICIAN",))
         svc = NotificationService(db_session)
         n1 = await svc.create(user.user.id, "Hi", "there", "NEW_REFERRAL", "referral", uuid.uuid4())
@@ -28,19 +28,16 @@ class TestNotifications:
         assert listed.status_code == 200
         assert len(listed.json()) == 2
 
-        count = await client.get(f"{self.API}/unread-count", headers=user.headers)
-        assert count.json()["count"] == 2
-
         unread = await client.get(f"{self.API}?unread_only=true", headers=user.headers)
         assert len(unread.json()) == 2
 
         marked = await client.patch(f"{self.API}/{n1.id}/read", headers=user.headers)
         assert marked.status_code == 200
-        assert (await client.get(f"{self.API}/unread-count", headers=user.headers)).json()["count"] == 1
+        assert len((await client.get(f"{self.API}?unread_only=true", headers=user.headers)).json()) == 1
 
         all_read = await client.patch(f"{self.API}/mark-all-read", headers=user.headers)
         assert all_read.status_code == 200
-        assert (await client.get(f"{self.API}/unread-count", headers=user.headers)).json()["count"] == 0
+        assert len((await client.get(f"{self.API}?unread_only=true", headers=user.headers)).json()) == 0
 
     async def test_notify_role_reaches_users_holding_it(self, client, make_auth, db_session):
         target = await make_auth(roles=("FACILITY_ADMIN",))

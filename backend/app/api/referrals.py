@@ -236,28 +236,6 @@ async def get_referral(
     return await ReferralService(session).get(referral_id)
 
 
-@router.post("/{referral_id}/accept", response_model=ReferralOut)
-async def accept_referral(
-    referral_id: uuid.UUID,
-    payload: AcceptReferralRequest,
-    current_user=Depends(require_roles("CLINICIAN", "FACILITY_ADMIN", "SUPER_ADMIN")),
-    session: AsyncSession = Depends(get_session),
-):
-    svc = ReferralService(session)
-    await svc.accept(referral_id, payload, current_user)
-    full = await svc.get(referral_id)
-    await AuditService(session).log("ACCEPT_REFERRAL", "referral", user_id=current_user.id, entity_id=referral_id)
-    await NotificationService(session).create(
-        full.created_by, "Transfer request approved",
-        _accept_notification_message(full),
-        "REFERRAL_ACCEPTED", "referral", referral_id,
-    )
-    await session.commit()
-    await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_ACCEPTED", "referral_id": str(referral_id)})
-    await ws_manager.broadcast_to_channel("capacity", {"event": "RESOURCE_UPDATED"})
-    return full
-
-
 @router.post("/{referral_id}/quick-accept", response_model=ReferralOut)
 async def quick_accept_referral(
     referral_id: uuid.UUID,
@@ -298,20 +276,6 @@ async def reject_referral(
     await session.commit()
     await ws_manager.broadcast_to_channel("referrals", {"event": "REFERRAL_REJECTED", "referral_id": str(referral_id)})
     return await svc.get(referral_id)
-
-
-@router.patch("/{referral_id}/status")
-async def update_status(
-    referral_id: uuid.UUID,
-    status: ReferralStatus = Query(...),
-    current_user=Depends(require_roles("CLINICIAN", "FACILITY_ADMIN", "SUPER_ADMIN")),
-    session: AsyncSession = Depends(get_session),
-):
-    svc = ReferralService(session)
-    referral = await svc.change_status(referral_id, status, current_user.id)
-    await session.commit()
-    await ws_manager.broadcast_to_channel("referrals", {"event": f"REFERRAL_{status.value}", "referral_id": str(referral_id)})
-    return {"success": True, "status": status.value}
 
 
 @router.post("/{referral_id}/mark-arrived", response_model=ReferralOut)

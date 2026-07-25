@@ -92,8 +92,8 @@ export const SidebarNav = ({ onNavigate }: Props) => {
           <img alt="eBuzimaTransfer" width="36" height="36" src={logo} />
         </div>
         <div className="flex flex-col min-w-0">
-          <span className="text-[10px] font-medium text-muted-foreground leading-tight">Ministry of Health</span>
           <span className="text-sm font-bold text-primary leading-tight truncate">E-Buzima Transfer</span>
+          <span className="text-[10px] font-medium text-muted-foreground leading-tight">Inter-hospital Referral Platform</span>
         </div>
       </div>
 

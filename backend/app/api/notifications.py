@@ -19,15 +19,6 @@ async def list_notifications(
     return await NotificationService(session).list_for_user(current_user.id, unread_only=unread_only)
 
 
-@router.get("/unread-count")
-async def unread_count(
-    current_user=Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    items = await NotificationService(session).list_for_user(current_user.id, unread_only=True)
-    return {"count": len(items)}
-
-
 @router.patch("/{notification_id}/read")
 async def mark_read(
     notification_id: uuid.UUID,

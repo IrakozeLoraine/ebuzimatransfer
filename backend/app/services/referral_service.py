@@ -50,10 +50,6 @@ class ReferralService:
 
         number = await self.repo.next_referral_number()
         payload = data.model_dump(exclude={"call_log_id", "requested_resource_ids"})
-        # Fields dropped from the forms but kept as non-null DB columns.
-        payload["age_band"] = payload.get("age_band") or ""
-        payload["acuity_level"] = payload.get("acuity_level") or ""
-        payload["urgency"] = payload.get("urgency") or ""
         referral = Referral(
             referral_number=number,
             created_by=created_by,
@@ -94,9 +90,6 @@ class ReferralService:
             sex="",
             diagnosis="",
             reason_for_transfer="",
-            age_band="",
-            acuity_level="",
-            urgency="",
         )
         await self.repo.create(referral)
         await self._record_history(referral.id, ReferralStatus.DRAFT, created_by)

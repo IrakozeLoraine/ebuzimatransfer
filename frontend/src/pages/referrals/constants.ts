@@ -9,9 +9,3 @@ export const REFERRAL_STATUS_LABELS: Record<string, string> = {
     REJECTED: "Rejected",
     CANCELLED: "Cancelled",
 };
-
-export const URGENCY_LABELS: Record<string, string> = {
-    IMMEDIATE: "Immediate",
-    URGENT: "Urgent",
-    NON_URGENT: "Non-Urgent",
-};

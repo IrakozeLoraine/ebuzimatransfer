@@ -8,7 +8,6 @@ import {
   removeResourceUnits,
   importResources,
   getResourceUsage,
-  reserveResource,
   getAvailableResources,
 } from "@/api/resources.api";
 import { getCapacity } from "@/api/reports.api";
@@ -93,12 +92,3 @@ export const useAvailableResources = (unitId: string | null) =>
     queryKey: ["resources-available", unitId],
     queryFn: () => getAvailableResources(unitId ?? undefined),
   });
-
-export const useReserveResource = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, plannedAdmissionTime }: { id: string; plannedAdmissionTime?: string }) =>
-      reserveResource(id, plannedAdmissionTime),
-    onSuccess: () => invalidateResourceData(qc),
-  });
-};

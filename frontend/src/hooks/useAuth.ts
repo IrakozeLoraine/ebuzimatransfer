@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/auth.store";
 import {
@@ -6,7 +6,6 @@ import {
   setPassword as apiSetPassword,
   getMe,
   logout as apiLogout,
-  switchFacility as apiSwitchFacility,
   switchContext as apiSwitchContext,
   updateProfile as apiUpdateProfile,
   changePassword as apiChangePassword,
@@ -63,36 +62,6 @@ export const useLogout = () => {
   });
 };
 
-export const useSwitchFacility = () => {
-  const { setTokens, setUser } = useAuthStore();
-  const qc = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (facilityId: string) => {
-      const tokens = await apiSwitchFacility(facilityId);
-      if (tokens.access_token && tokens.refresh_token) {
-        setTokens(tokens.access_token, tokens.refresh_token);
-      }
-      const user = await getMe();
-      setUser(user);
-      return user;
-    },
-    onSuccess: (user) => {
-      // Data is facility-scoped — refetch everything for the new active facility.
-      qc.invalidateQueries();
-      const active = user.facilities.find((f) => f.id === user.active_facility_id);
-      toast({ variant: "success", title: `Switched to ${active?.name ?? "facility"}` });
-    },
-    onError: (error) => {
-      toast({
-        variant: "destructive",
-        title: "Failed to switch facility",
-        description: getApiErrorMessage(error),
-      });
-    },
-  });
-};
-
 export const useSwitchContext = () => {
   const { setTokens, setUser, setContextConfirmed } = useAuthStore();
   const qc = useQueryClient();
@@ -143,17 +112,3 @@ export const useChangePassword = () =>
     onError: (error) =>
       toast({ variant: "destructive", title: "Could not change password", description: getApiErrorMessage(error) }),
   });
-
-export const useCurrentUser = () => {
-  const { isAuthenticated, setUser } = useAuthStore();
-  return useQuery({
-    queryKey: ["me"],
-    queryFn: async () => {
-      const user = await getMe();
-      setUser(user);
-      return user;
-    },
-    enabled: isAuthenticated,
-    staleTime: 5 * 60 * 1000,
-  });
-};

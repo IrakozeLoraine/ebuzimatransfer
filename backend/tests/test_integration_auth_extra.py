@@ -1,8 +1,6 @@
 """Integration tests for the auth flows not covered by the login happy-path:
-refresh, switch-facility, change-password, logout and self-service profile edit.
+refresh, change-password, logout and self-service profile edit.
 """
-import uuid
-
 import pytest
 
 from app.core.security import create_refresh_token
@@ -23,27 +21,6 @@ class TestRefresh:
     async def test_refresh_rejects_garbage(self, client):
         resp = await client.post(f"{API}/refresh", json={"refresh_token": "not-a-token"})
         assert resp.status_code == 401
-
-
-class TestSwitchFacility:
-    async def test_switch_to_own_facility(self, client, make_auth):
-        auth = await make_auth(roles=("CLINICIAN",))
-        resp = await client.post(
-            f"{API}/switch-facility",
-            headers=auth.headers,
-            json={"facility_id": str(auth.facility.id)},
-        )
-        assert resp.status_code == 200
-        assert resp.json()["access_token"]
-
-    async def test_switch_to_foreign_facility_forbidden(self, client, make_auth):
-        auth = await make_auth(roles=("CLINICIAN",))
-        resp = await client.post(
-            f"{API}/switch-facility",
-            headers=auth.headers,
-            json={"facility_id": str(uuid.uuid4())},
-        )
-        assert resp.status_code == 403
 
 
 class TestChangePassword:

@@ -9,6 +9,8 @@ import pytest_asyncio
 
 from app.models.unit import Unit
 from app.models.resource import Resource
+from app.services.resource_service import ResourceService
+from app.core.exceptions import ResourceReservedError
 
 pytestmark = pytest.mark.asyncio
 
@@ -134,7 +136,8 @@ class TestListGet:
     async def test_usage_lists_reservations(self, client, make_auth, unit, db_session):
         admin = await make_auth(roles=("CLINICIAN",))
         r = await _make_resource(db_session, admin.facility.id, unit.id)
-        await client.post(f"{API}/{r.id}/reserve", headers=admin.headers, json={})
+        await ResourceService(db_session).reserve(r.id, reserved_by=admin.user.id)
+        await db_session.commit()
         resp = await client.get(f"{API}/{r.id}/usage", headers=admin.headers)
         assert resp.status_code == 200
         assert len(resp.json()["reservations"]) == 1
@@ -191,18 +194,19 @@ class TestUnitsCounts:
 
 
 class TestReserve:
-    async def test_reserve_available_resource(self, client, make_auth, unit, db_session):
+    async def test_reserve_available_resource(self, make_auth, unit, db_session):
         admin = await make_auth(roles=("CLINICIAN",))
         r = await _make_resource(db_session, admin.facility.id, unit.id, quantity=1)
-        resp = await client.post(f"{API}/{r.id}/reserve", headers=admin.headers, json={})
-        assert resp.status_code == 200
-        assert resp.json()["reserved"] == 1
+        await ResourceService(db_session).reserve(r.id, reserved_by=admin.user.id)
+        await db_session.commit()
+        refreshed = await db_session.get(Resource, r.id)
+        assert refreshed.reserved == 1
 
-    async def test_reserve_unavailable_resource_conflicts(self, client, make_auth, unit, db_session):
+    async def test_reserve_unavailable_resource_conflicts(self, make_auth, unit, db_session):
         admin = await make_auth(roles=("CLINICIAN",))
         r = await _make_resource(db_session, admin.facility.id, unit.id, quantity=1, occupied=1)
-        resp = await client.post(f"{API}/{r.id}/reserve", headers=admin.headers, json={})
-        assert resp.status_code == 409
+        with pytest.raises(ResourceReservedError):
+            await ResourceService(db_session).reserve(r.id, reserved_by=admin.user.id)
 
 
 class TestAssign:

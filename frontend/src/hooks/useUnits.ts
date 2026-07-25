@@ -18,10 +18,6 @@ export const useUnits = (
     enabled: options.enabled ?? true,
   });
 
-/** Backwards-compatible alias for callers that just want the full catalog. */
-export const useGetAllUnits = ({ enabled = true }: { enabled?: boolean }) =>
-  useUnits({}, { enabled });
-
 export const useCreateUnit = () => {
   const qc = useQueryClient();
   return useMutation({

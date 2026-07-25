@@ -11,10 +11,3 @@ export const resourceSchema = z.object({
 });
 
 export type ResourceFormValues = z.infer<typeof resourceSchema>;
-
-export const assignResourceSchema = z.object({
-  facility_id: z.string().uuid().optional().or(z.literal("")),
-  unit_id: z.string().uuid().optional().or(z.literal("")),
-});
-
-export type AssignResourceFormValues = z.infer<typeof assignResourceSchema>;

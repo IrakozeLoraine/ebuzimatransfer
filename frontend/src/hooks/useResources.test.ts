@@ -12,7 +12,6 @@ import {
   useImportResources,
   useResourceUsage,
   useAvailableResources,
-  useReserveResource,
 } from "./useResources";
 import * as resourcesApi from "@/api/resources.api";
 import * as reportsApi from "@/api/reports.api";
@@ -136,15 +135,5 @@ describe("useResources mutations", () => {
     await result.current.mutateAsync(file);
 
     expect(mocked.importResources).toHaveBeenCalledWith(file);
-  });
-
-  it("reserveResource forwards the id and planned admission time", async () => {
-    mocked.reserveResource.mockResolvedValue(undefined as never);
-    const { wrapper } = createQueryWrapper();
-
-    const { result } = renderHook(() => useReserveResource(), { wrapper });
-    await result.current.mutateAsync({ id: "r1", plannedAdmissionTime: "2026-01-01T10:00:00Z" });
-
-    expect(mocked.reserveResource).toHaveBeenCalledWith("r1", "2026-01-01T10:00:00Z");
   });
 });

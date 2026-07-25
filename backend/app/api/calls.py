@@ -17,7 +17,6 @@ from app.schemas.call import (
     PhoneLineOut,
     PhoneLineImportError,
     PhoneLineImportResult,
-    CallLogCreate,
     CallLogOut,
 )
 
@@ -232,27 +231,6 @@ def _call_out(row: CallLog) -> CallLogOut:
         from_line_label=row.from_line.label if row.from_line else None,
         created_at=row.created_at,
     )
-
-
-@router.post("/log", response_model=CallLogOut, status_code=201)
-async def log_call(
-    payload: CallLogCreate,
-    current_user=Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    """Record that the user placed a coordination call (from an institutional
-    line) to confirm resource availability."""
-    call = CallLog(placed_by=current_user.id, **payload.model_dump())
-    session.add(call)
-    await session.flush()
-    await AuditService(session).log("LOG_CALL", "call_log", user_id=current_user.id, entity_id=call.id)
-    await session.commit()
-    # Reload with relationships for the response.
-    from sqlalchemy.orm import selectinload
-    result = await session.execute(
-        select(CallLog).where(CallLog.id == call.id).options(selectinload(CallLog.caller), selectinload(CallLog.from_line))
-    )
-    return _call_out(result.scalar_one())
 
 
 @router.get("/log", response_model=List[CallLogOut])

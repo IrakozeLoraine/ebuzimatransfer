@@ -4,10 +4,9 @@ import {
   createPhoneLine,
   deletePhoneLine,
   importPhoneLines,
-  logCall,
   getCalls,
 } from "@/api/calls.api";
-import type { CreatePhoneLinePayload, LogCallPayload } from "@/types/call";
+import type { CreatePhoneLinePayload } from "@/types/call";
 
 export const usePhoneLines = (facilityId: string | undefined, activeOnly = true) =>
   useQuery({
@@ -46,11 +45,3 @@ export const useCalls = (referralId?: string) =>
     queryFn: () => getCalls(referralId),
     enabled: !!referralId,
   });
-
-export const useLogCall = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (payload: LogCallPayload) => logCall(payload),
-    onSuccess: (_, payload) => qc.invalidateQueries({ queryKey: ["calls", payload.referral_id] }),
-  });
-};

@@ -7,7 +7,6 @@ import {
   useDeletePhoneLine,
   useImportPhoneLines,
   useCalls,
-  useLogCall,
 } from "./useCalls";
 import * as callsApi from "@/api/calls.api";
 
@@ -80,17 +79,5 @@ describe("useCalls mutations", () => {
     await result.current.mutateAsync(file);
 
     expect(mocked.importPhoneLines).toHaveBeenCalledWith("f1", file);
-  });
-
-  it("logCall invalidates the referral's call log", async () => {
-    mocked.logCall.mockResolvedValue({ id: "c1" } as never);
-    const { wrapper, queryClient } = createQueryWrapper();
-    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
-
-    const { result } = renderHook(() => useLogCall(), { wrapper });
-    await result.current.mutateAsync({ referral_id: "r1", outcome: "ANSWERED" } as never);
-
-    expect(mocked.logCall).toHaveBeenCalledWith({ referral_id: "r1", outcome: "ANSWERED" });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["calls", "r1"] });
   });
 });

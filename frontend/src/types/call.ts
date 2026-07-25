@@ -46,11 +46,3 @@ export interface CallLog {
   created_at: string;
 }
 
-export interface LogCallPayload {
-  to_number: string;
-  to_facility_id?: string;
-  from_line_id?: string;
-  referral_id?: string;
-  purpose?: string;
-  notes?: string;
-}

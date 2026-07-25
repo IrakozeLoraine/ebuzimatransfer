@@ -8,7 +8,7 @@ import pytest
 
 from app.models.unit import Unit
 from app.models.user import UserFacilityUnit
-from app.models.call import FacilityPhoneLine, PhoneLineType
+from app.models.call import FacilityPhoneLine, PhoneLineType, CallLog
 
 pytestmark = pytest.mark.asyncio
 
@@ -121,19 +121,17 @@ class TestPhoneLines:
 
 
 class TestCallLog:
-    async def test_log_and_list_calls(self, client, make_auth):
+    async def test_list_calls(self, client, make_auth, db_session):
         user = await make_auth(roles=("CLINICIAN",))
-        logged = await client.post(
-            f"{CALLS}/log",
-            headers=user.headers,
-            json={"to_number": "0788999888", "purpose": "Confirm ICU bed"},
+        db_session.add(
+            CallLog(placed_by=user.user.id, to_number="0788999888", purpose="Confirm ICU bed")
         )
-        assert logged.status_code == 201
-        assert logged.json()["to_number"] == "0788999888"
+        await db_session.commit()
 
         listed = await client.get(f"{CALLS}/log", headers=user.headers)
         assert listed.status_code == 200
         assert len(listed.json()) == 1
+        assert listed.json()[0]["to_number"] == "0788999888"
 
 
 class TestInAppCalls:

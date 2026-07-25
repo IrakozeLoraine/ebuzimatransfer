@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resourceSchema, assignResourceSchema } from "./resource.schema";
+import { resourceSchema } from "./resource.schema";
 
 const UUID = "123e4567-e89b-12d3-a456-426614174000";
 
@@ -28,15 +28,5 @@ describe("resourceSchema", () => {
 
   it("rejects a quantity below 1", () => {
     expect(resourceSchema.safeParse({ resource_name: "Ventilator", quantity: 0 }).success).toBe(false);
-  });
-});
-
-describe("assignResourceSchema", () => {
-  it("accepts empty strings or valid uuids", () => {
-    expect(assignResourceSchema.safeParse({ facility_id: "", unit_id: UUID }).success).toBe(true);
-  });
-
-  it("rejects a non-uuid facility id", () => {
-    expect(assignResourceSchema.safeParse({ facility_id: "nope" }).success).toBe(false);
   });
 });

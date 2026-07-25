@@ -5,17 +5,15 @@ import {
   createReferral,
   createDraftReferral,
   completeReferralForm,
-  acceptReferral,
   quickAcceptReferral,
   rejectReferral,
-  updateReferralStatus,
   recordArrivalCondition,
   markReferralArrived,
   saveReferralFeedback,
   transcribeReferral,
 } from "@/api/referrals.api";
 import { createTransport, removeTransport } from "@/api/transport.api";
-import type { CreateReferralPayload, CreateDraftPayload, CompleteReferralFormPayload, AcceptReferralPayload, RejectReferralPayload, ArrivalCondition } from "@/types/referral";
+import type { CreateReferralPayload, CreateDraftPayload, CompleteReferralFormPayload, RejectReferralPayload, ArrivalCondition } from "@/types/referral";
 import type { CreateTransportPayload } from "@/types/transport";
 
 export const useReferrals = (params?: { status?: string }) =>
@@ -70,19 +68,6 @@ export const useCompleteReferralForm = () => {
   });
 };
 
-export const useAcceptReferral = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: AcceptReferralPayload }) =>
-      acceptReferral(id, payload),
-    onSuccess: (_, { id }) => {
-      qc.invalidateQueries({ queryKey: ["referrals"] });
-      qc.invalidateQueries({ queryKey: ["referral", id] });
-      qc.invalidateQueries({ queryKey: ["capacity"] });
-    },
-  });
-};
-
 export const useQuickAcceptReferral = () => {
   const qc = useQueryClient();
   return useMutation({
@@ -100,18 +85,6 @@ export const useRejectReferral = () => {
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: RejectReferralPayload }) =>
       rejectReferral(id, payload),
-    onSuccess: (_, { id }) => {
-      qc.invalidateQueries({ queryKey: ["referrals"] });
-      qc.invalidateQueries({ queryKey: ["referral", id] });
-    },
-  });
-};
-
-export const useUpdateReferralStatus = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      updateReferralStatus(id, status),
     onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: ["referrals"] });
       qc.invalidateQueries({ queryKey: ["referral", id] });

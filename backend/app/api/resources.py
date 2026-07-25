@@ -17,7 +17,6 @@ from app.schemas.resource import (
     ResourceOut,
     ResourceUsageOut,
     ResourceImportResult,
-    ResourceReserveRequest,
 )
 
 router = APIRouter()
@@ -267,32 +266,6 @@ async def remove_resource_units(
         "capacity", {"event": "RESOURCE_UPDATED", "resource_id": str(resource_id)}
     )
     return result
-
-
-@router.post("/{resource_id}/reserve", response_model=ResourceOut)
-async def reserve_resource(
-    resource_id: uuid.UUID,
-    payload: ResourceReserveRequest,
-    current_user=Depends(require_roles(SUPER_ADMIN, FACILITY_ADMIN, "CLINICIAN")),
-    session: AsyncSession = Depends(get_session),
-):
-    """Initiate a transfer request by reserving an available resource (typically
-    at another facility) for the requester's patient."""
-    svc = ResourceService(session)
-    await svc.reserve(
-        resource_id,
-        reserved_by=current_user.id,
-        planned_admission_time=payload.planned_admission_time,
-    )
-    await AuditService(session).log(
-        "RESERVE_RESOURCE", "resource", user_id=current_user.id, entity_id=resource_id
-    )
-    await session.commit()
-    await ws_manager.broadcast_to_channel(
-        "capacity", {"event": "RESOURCE_RESERVED", "resource_id": str(resource_id)}
-    )
-    resource = await svc.get(resource_id)
-    return ResourceOut.model_validate(resource)
 
 
 @router.patch("/{resource_id}/counts", response_model=ResourceOut)

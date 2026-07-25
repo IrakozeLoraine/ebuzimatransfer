@@ -136,10 +136,6 @@ export interface DictationResult {
   form_data?: Record<string, unknown>;
 }
 
-export interface AcceptReferralPayload {
-  planned_admission_time?: string;
-}
-
 export interface RejectReferralPayload {
   reason: string;
   comment?: string;

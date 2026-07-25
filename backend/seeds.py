@@ -141,12 +141,7 @@ async def already_seeded(session: AsyncSession) -> bool:
 
 
 async def ensure_schema(reset: bool) -> None:
-    """Build the schema directly from the models.
-
-    The drop reflects the *live* database rather than the current models, so tables
-    from a renamed/removed model (e.g. an old ``ambulance_devices``) are dropped too —
-    otherwise their foreign keys would block dropping the tables they point at.
-    """
+    """Build the schema directly from the models."""
     import app.models  # noqa: F401 — register every table on Base.metadata
     from app.db.base import Base
     from app.db.session import engine

@@ -64,13 +64,3 @@ export const getAvailableResources = async (unitId?: string): Promise<Resource[]
   });
   return data;
 };
-
-export const reserveResource = async (
-  id: string,
-  plannedAdmissionTime?: string
-): Promise<Resource> => {
-  const { data } = await api.post<Resource>(`/resources/${id}/reserve`, {
-    planned_admission_time: plannedAdmissionTime ?? null,
-  });
-  return data;
-};

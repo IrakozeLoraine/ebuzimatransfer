@@ -119,13 +119,6 @@ class TestDraftAndForm:
 
 
 class TestAcceptReject:
-    async def test_accept_referral(self, client, env):
-        body = await _create(client, env)
-        admin, _, _ = env
-        resp = await client.post(f"{API}/{body['id']}/accept", headers=admin.headers, json={})
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "ACCEPTED"
-
     async def test_quick_accept_referral(self, client, env):
         body = await _create(client, env)
         admin, _, _ = env
@@ -144,22 +137,13 @@ class TestAcceptReject:
         assert resp.status_code == 200
         assert resp.json()["status"] == "REJECTED"
 
-    async def test_update_status_query(self, client, env):
-        body = await _create(client, env)
-        admin, _, _ = env
-        resp = await client.patch(
-            f"{API}/{body['id']}/status?status=UNDER_REVIEW", headers=admin.headers
-        )
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "UNDER_REVIEW"
-
 
 class TestArrival:
     async def test_mark_arrived_condition_and_feedback(self, client, env):
         body = await _create(client, env)
         admin, _, _ = env
         rid = body["id"]
-        await client.post(f"{API}/{rid}/accept", headers=admin.headers, json={})
+        await client.post(f"{API}/{rid}/quick-accept", headers=admin.headers)
 
         arrived = await client.post(f"{API}/{rid}/mark-arrived", headers=admin.headers)
         assert arrived.status_code == 200

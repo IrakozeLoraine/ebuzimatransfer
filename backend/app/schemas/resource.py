@@ -93,12 +93,6 @@ class ResourceReservationCreate(BaseModel):
     planned_admission_time: Optional[str] = None
 
 
-class ResourceReserveRequest(BaseModel):
-    """Initiate a transfer request: reserve an available resource at another
-    facility for one of the requester's patients."""
-    planned_admission_time: Optional[datetime] = None
-
-
 class ReservationOut(BaseModel):
     id: uuid.UUID
     reserved_by: uuid.UUID

@@ -62,15 +62,9 @@ class Referral(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "referrals"
 
     referral_number: Mapped[str] = mapped_column(String(30), unique=True, nullable=False, index=True)
-    age_band: Mapped[str] = mapped_column(String(20), nullable=False)
     sex: Mapped[str] = mapped_column(String(10), nullable=False)
     diagnosis: Mapped[str] = mapped_column(String(500), nullable=False)
-    comorbidities: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    acuity_level: Mapped[str] = mapped_column(String(20), nullable=False)
-    urgency: Mapped[str] = mapped_column(String(20), nullable=False)
     reason_for_transfer: Mapped[str] = mapped_column(String(1000), nullable=False)
-    ventilator_needed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    high_flow_oxygen_needed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Which Rwanda MoH transfer-form variant this request was filled with — drives
     # the form-specific fields shown to both sides. The core columns above stay the

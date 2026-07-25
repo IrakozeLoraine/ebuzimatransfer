@@ -126,11 +126,6 @@ class AuthService:
 
         return self._issue_tokens(user, facility_id, unit_id)
 
-    async def switch_facility(self, user_id: str, facility_id: uuid.UUID) -> TokenResponse:
-        """Backwards-compatible facility-only switch; resets the active unit to the
-        facility's default. Prefer :meth:`switch_context`."""
-        return await self.switch_context(user_id, facility_id, None)
-
     async def change_password(self, user_id: str, current: str, new: str) -> None:
         user = await self.repo.get_by_id(uuid.UUID(user_id))
         if not user or not verify_password(current, user.password_hash):

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { createQueryWrapper } from "@/test/queryWrapper";
-import { useUnits, useGetAllUnits, useCreateUnit, useUpdateUnit, useDeleteUnit, useImportUnits } from "./useUnits";
+import { useUnits, useCreateUnit, useUpdateUnit, useDeleteUnit, useImportUnits } from "./useUnits";
 import * as unitsApi from "@/api/units.api";
 
 vi.mock("@/api/units.api");
@@ -22,7 +22,7 @@ describe("useUnits", () => {
 
   it("does not fetch when disabled", () => {
     const { wrapper } = createQueryWrapper();
-    renderHook(() => useGetAllUnits({ enabled: false }), { wrapper });
+    renderHook(() => useUnits({}, { enabled: false }), { wrapper });
     expect(mocked.getUnits).not.toHaveBeenCalled();
   });
 });

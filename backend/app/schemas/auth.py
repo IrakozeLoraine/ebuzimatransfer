@@ -8,10 +8,6 @@ class LoginRequest(BaseModel):
     password: Optional[str] = None
 
 
-class SwitchFacilityRequest(BaseModel):
-    facility_id: uuid.UUID
-
-
 class SwitchContextRequest(BaseModel):
     """Set the active facility and (optionally) the active clinical unit. Omitting
     ``unit_id`` resets the unit to the facility's unambiguous default."""

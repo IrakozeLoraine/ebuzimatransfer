@@ -6,11 +6,9 @@ import {
   useLogin,
   useSetPassword,
   useLogout,
-  useSwitchFacility,
   useSwitchContext,
   useUpdateProfile,
   useChangePassword,
-  useCurrentUser,
 } from "./useAuth";
 import { useAuthStore } from "@/store/auth.store";
 import * as authApi from "@/api/auth.api";
@@ -117,44 +115,6 @@ describe("useLogout", () => {
   });
 });
 
-describe("useSwitchFacility", () => {
-  it("swaps tokens, reloads the user and refetches all data", async () => {
-    mocked.switchFacility.mockResolvedValue({ access_token: "a2", refresh_token: "r2" } as never);
-    mocked.getMe.mockResolvedValue(
-      makeUser(["CLINICIAN"], { active_facility_id: "f2", facilities: [{ id: "f2", name: "CHUK" }] as never }),
-    );
-    const { wrapper, queryClient } = createQueryWrapper();
-    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
-
-    const { result } = renderHook(() => useSwitchFacility(), { wrapper });
-    await result.current.mutateAsync("f2");
-
-    expect(mocked.switchFacility).toHaveBeenCalledWith("f2");
-    expect(useAuthStore.getState().accessToken).toBe("a2");
-    expect(invalidate).toHaveBeenCalledWith();
-  });
-
-  it("uses a generic label when the new active facility isn't in the user's list", async () => {
-    mocked.switchFacility.mockResolvedValue({ access_token: "a2", refresh_token: "r2" } as never);
-    mocked.getMe.mockResolvedValue(makeUser(["CLINICIAN"], { active_facility_id: "f2", facilities: [] }));
-    const { wrapper } = createQueryWrapper();
-
-    const { result } = renderHook(() => useSwitchFacility(), { wrapper });
-    await result.current.mutateAsync("f2");
-
-    expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ title: "Switched to facility" }));
-  });
-
-  it("surfaces a toast when switching facility fails", async () => {
-    mocked.switchFacility.mockRejectedValue(new Error("nope"));
-    const { wrapper } = createQueryWrapper();
-
-    const { result } = renderHook(() => useSwitchFacility(), { wrapper });
-    await expect(result.current.mutateAsync("f2")).rejects.toThrow();
-    await waitFor(() => expect(result.current.isError).toBe(true));
-  });
-});
-
 describe("useSwitchContext", () => {
   it("swaps tokens, marks the context confirmed and refetches all data", async () => {
     mocked.switchContext.mockResolvedValue({ access_token: "a2", refresh_token: "r2" } as never);
@@ -241,26 +201,5 @@ describe("useChangePassword", () => {
       result.current.mutateAsync({ currentPassword: "old", newPassword: "new" }),
     ).rejects.toThrow();
     await waitFor(() => expect(result.current.isError).toBe(true));
-  });
-});
-
-describe("useCurrentUser", () => {
-  it("does not fetch when unauthenticated", () => {
-    const { wrapper } = createQueryWrapper();
-
-    renderHook(() => useCurrentUser(), { wrapper });
-
-    expect(mocked.getMe).not.toHaveBeenCalled();
-  });
-
-  it("fetches and stores the user when authenticated", async () => {
-    useAuthStore.getState().setTokens("access-1", "refresh-1");
-    mocked.getMe.mockResolvedValue(makeUser(["CLINICIAN"]));
-    const { wrapper } = createQueryWrapper();
-
-    const { result } = renderHook(() => useCurrentUser(), { wrapper });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(useAuthStore.getState().user?.roles).toEqual(["CLINICIAN"]);
   });
 });

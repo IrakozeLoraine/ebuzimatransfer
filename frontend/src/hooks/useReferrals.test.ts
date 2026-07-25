@@ -7,10 +7,8 @@ import {
   useCreateReferral,
   useCreateDraftReferral,
   useCompleteReferralForm,
-  useAcceptReferral,
   useQuickAcceptReferral,
   useRejectReferral,
-  useUpdateReferralStatus,
   useRecordArrivalCondition,
   useArrangeTransport,
   useRemoveTransport,
@@ -101,20 +99,6 @@ describe("useReferrals mutations", () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["referral", "r1"] });
   });
 
-  it("acceptReferral invalidates the list, the referral and capacity", async () => {
-    mocked.acceptReferral.mockResolvedValue({ id: "r1" } as never);
-    const { wrapper, queryClient } = createQueryWrapper();
-    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
-
-    const { result } = renderHook(() => useAcceptReferral(), { wrapper });
-    await result.current.mutateAsync({ id: "r1", payload: { unit_id: "u1" } as never });
-
-    expect(mocked.acceptReferral).toHaveBeenCalledWith("r1", { unit_id: "u1" });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["referrals"] });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["referral", "r1"] });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["capacity"] });
-  });
-
   it("quickAcceptReferral accepts by id and invalidates capacity", async () => {
     mocked.quickAcceptReferral.mockResolvedValue({ id: "r1" } as never);
     const { wrapper, queryClient } = createQueryWrapper();
@@ -137,16 +121,6 @@ describe("useReferrals mutations", () => {
 
     expect(mocked.rejectReferral).toHaveBeenCalledWith("r1", { reason: "no beds" });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["referral", "r1"] });
-  });
-
-  it("updateReferralStatus forwards the new status", async () => {
-    mocked.updateReferralStatus.mockResolvedValue(undefined as never);
-    const { wrapper } = createQueryWrapper();
-
-    const { result } = renderHook(() => useUpdateReferralStatus(), { wrapper });
-    await result.current.mutateAsync({ id: "r1", status: "IN_TRANSIT" });
-
-    expect(mocked.updateReferralStatus).toHaveBeenCalledWith("r1", "IN_TRANSIT");
   });
 
   it("recordArrivalCondition forwards the condition", async () => {

@@ -16,11 +16,6 @@ export const refreshToken = async (token: string): Promise<TokenResponse> => {
   return data;
 };
 
-export const switchFacility = async (facility_id: string): Promise<TokenResponse> => {
-  const { data } = await api.post<TokenResponse>("/auth/switch-facility", { facility_id });
-  return data;
-};
-
 export const switchContext = async (
   facility_id: string,
   unit_id?: string | null

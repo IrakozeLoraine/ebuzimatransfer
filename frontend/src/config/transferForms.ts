@@ -102,7 +102,7 @@ export const CORE_FIELD_NAMES = [
 
 // Core patient-identity fields (shown within each form's own identification section).
 // sex backs a top-level column; name + DOB are the paper-form identity captured in
-// form_data. Client name is required. (Age band was dropped — DOB is captured instead.)
+// form_data. Client name is required. (DOB is captured instead.)
 const PATIENT_CORE: FieldDef[] = [
   t("patient_name", "Client name", { required: true }),
   date("date_of_birth", "Date of birth (DOB)"),
