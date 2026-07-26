@@ -426,11 +426,11 @@ export function LegalPage() {
               </p>
               <p>
                 Location data is collected only while a transfer is active, is
-                visible to transport coordinators and the facilities involved in
-                that transfer rather than to all staff, and is deleted 30 days
-                after the transfer completes. It is not used to assess a driver's
-                performance or conduct. Drivers are told what the application
-                records before they are enrolled.
+                recorded against that transfer rather than against the driver,
+                and is deleted 30 days after the transfer completes. There is no
+                view of a driver's or a vehicle's movements across transfers. It
+                is not used to assess a driver's performance or conduct. Drivers
+                are told what the application records before they are enrolled.
               </p>
             </Clause>
 
