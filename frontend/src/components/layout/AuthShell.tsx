@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { Bed, Activity, Truck } from "lucide-react";
 import logo from "@/assets/ebuzimaTransfer.svg";
 
@@ -34,8 +35,8 @@ const HeroPanel = ({ slide, setSlide }: { slide: number; setSlide: (i: number) =
         <img alt="eBuzimaTransfer" loading="lazy" width="60" height="60" decoding="async" src={logo} />
       </div>
       <div className="flex flex-col">
-        <span className="text-sm font-medium sm:text-base">Ministry of Health</span>
         <span className="text-lg font-semibold sm:text-xl">E-Buzima Transfer</span>
+        <span className="text-sm font-medium sm:text-base">Inter-hospital Referral Platform</span>
       </div>
     </div>
 
@@ -73,7 +74,7 @@ const HeroPanel = ({ slide, setSlide }: { slide: number; setSlide: (i: number) =
     </div>
 
     <p className="relative text-xs text-white/40">
-      Ministry of Health — Rwanda © {new Date().getFullYear()}
+      E-Buzima Transfer © {new Date().getFullYear()} — independent project, not affiliated with any government body
     </p>
   </div>
 );
@@ -84,8 +85,8 @@ const MobileLogo = () => (
       <img alt="eBuzimaTransfer" loading="lazy" width="60" height="60" decoding="async" src={logo} />
     </div>
     <div className="flex flex-col">
-      <span className="text-sm font-medium">Ministry of Health</span>
       <span className="text-lg font-semibold">E-Buzima Transfer</span>
+      <span className="text-sm font-medium">Inter-hospital Referral Platform</span>
     </div>
   </div>
 );
@@ -110,6 +111,23 @@ export const AuthShell = ({ children }: { children: ReactNode }) => {
         <div className="w-full max-w-sm animate-fade-in">
           <MobileLogo />
           {children}
+          <p className="mt-8 text-center text-xs text-muted-foreground">
+            By continuing you agree to our{" "}
+            <Link
+              to="/terms"
+              className="font-medium text-primary underline underline-offset-2"
+            >
+              Terms
+            </Link>{" "}
+            and{" "}
+            <Link
+              to="/privacy"
+              className="font-medium text-primary underline underline-offset-2"
+            >
+              Privacy Policy
+            </Link>
+            .
+          </p>
         </div>
       </div>
     </div>

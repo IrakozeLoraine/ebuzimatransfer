@@ -13,6 +13,9 @@ const NotFoundPage = lazy(() =>
 const LoginPage = lazy(() =>
   import("@/pages/login/LoginPage").then((m) => ({ default: m.LoginPage }))
 );
+const LegalPage = lazy(() =>
+  import("@/pages/legal/LegalPage").then((m) => ({ default: m.LegalPage }))
+);
 const DashboardPage = lazy(() =>
   import("@/pages/dashboard/DashboardPage").then((m) => ({
     default: m.DashboardPage,
@@ -116,6 +119,11 @@ const withSuspense = (element: React.ReactNode) => (
 
 export const router = createBrowserRouter([
   { path: "/login", element: withSuspense(<LoginPage />), errorElement: <RouteError /> },
+  // Public legal pages — reachable without authentication so patients,
+  // clinicians, and regulators can read data-handling terms before signing in.
+  { path: "/privacy", element: withSuspense(<LegalPage />), errorElement: <RouteError /> },
+  { path: "/terms", element: withSuspense(<LegalPage />), errorElement: <RouteError /> },
+  { path: "/legal", element: withSuspense(<LegalPage />), errorElement: <RouteError /> },
   {
     element: <ProtectedRoute />,
     errorElement: <RouteError />,
