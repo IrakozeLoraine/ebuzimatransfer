@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_session
 from app.core.permissions import get_current_user
+from app.core.rate_limit import limiter
 from app.services.auth_service import AuthService
 from app.services.audit_service import AuditService
 from app.services.user_service import UserService
@@ -13,11 +14,16 @@ router = APIRouter()
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit("10/minute")
 async def login(
     payload: LoginRequest,
     request: Request,
+    response: Response,
     session: AsyncSession = Depends(get_session),
 ):
+    """Sign in. Capped at 10 attempts a minute per caller so a stolen medical
+    ID cannot be paired with a guessed password at speed. ``response`` is unused
+    here — the limiter writes the ``X-RateLimit-*`` headers onto it."""
     service = AuthService(session)
     tokens = await service.login(payload)
     if not tokens.requires_password_reset:

@@ -139,3 +139,47 @@ async def test_set_password_completes_first_login(client, user_factory):
     )
     assert relogin.status_code == 200
     assert relogin.json()["access_token"]
+
+
+async def test_login_is_rate_limited_per_caller(client, user_factory):
+    """The limiter is off for the suite (see conftest); switch it on for this
+    one test to prove the cap on ``/login`` actually holds."""
+    from app.core.rate_limit import limiter
+
+    await user_factory(medical_id="MED-7", password="Correct-horse")
+
+    limiter.enabled = True
+    # Fresh addresses so counts left by any earlier run can't affect the result.
+    caller = {"X-Real-IP": "198.51.100.7"}
+    try:
+        codes = [
+            (
+                await client.post(
+                    f"{API}/login",
+                    json={"medical_id": "MED-7", "password": "wrong"},
+                    headers=caller,
+                )
+            ).status_code
+            for _ in range(11)
+        ]
+
+        # Ten attempts are answered (401 — bad password), the eleventh is blocked.
+        assert codes[:10] == [401] * 10
+        assert codes[10] == 429
+
+        blocked = await client.post(
+            f"{API}/login", json={"medical_id": "MED-7"}, headers=caller
+        )
+        assert blocked.status_code == 429
+        assert blocked.json()["detail"]["error_code"] == "RATE_LIMITED"
+        assert blocked.headers["Retry-After"]
+
+        # A different caller is unaffected — one IP cannot lock out a hospital.
+        other = await client.post(
+            f"{API}/login",
+            json={"medical_id": "MED-7", "password": "Correct-horse"},
+            headers={"X-Real-IP": "198.51.100.8"},
+        )
+        assert other.status_code == 200
+    finally:
+        limiter.enabled = False
